@@ -77,17 +77,25 @@ CRON_SECRET=<new random secret>
 **Goal:** reproduce the prod schema (structure only — **no data**) in `zxxeuyixqnbwmnlvjkbr`,
 **minus** the 8 Monday mirror tables (and Monday-only functions).
 
-**Blocker (as of 2026-09-04):** writing schema to the new project needs one of:
-1. **A Supabase personal access token for the new project's account** (Dashboard → Account →
-   Access Tokens). *Preferred.* Then replay the repo's **165 migration files**
-   (`supabase/migrations/*.sql`) onto the new project via the Management API
-   (`POST /v1/projects/zxxeuyixqnbwmnlvjkbr/database/query`), then `DROP` the Monday tables +
-   Monday-only functions, then `NOTIFY pgrst, 'reload schema'`.
-2. **The new project's DB password** (Dashboard → Settings → Database) + a Postgres client
-   (`pg_dump`/`psql` — not currently installed here, or use `npx supabase`).
+**Status: DONE (2026-09-04).** Method used (no `pg_dump` needed — none installed): with a
+Supabase personal access token for the new project's account, the repo's **164 migration
+files** were replayed onto the new project via the Management API
+(`POST /v1/projects/zxxeuyixqnbwmnlvjkbr/database/query`). 4 migrations failed on **schema
+drift** — 15 columns + 3 functions that prod added *live* and never wrote to a migration
+(`created_by_is_shadow`, `created_by_email`, twitch `brand`/`s_tag`/`is_new_lead_candidate`,
+etc.). Those columns were pulled from prod (`format_type` + `pg_get_expr`) and applied, then the
+4 migrations re-ran clean. Result: **38 tables, 90 functions, full parity with prod** (0 missing
+cols/fns). Then the 8 Monday tables were dropped (below) and prod config cleared.
 
-The prod Management-API token **cannot** reach the new project (different account → 403). The
-anon/service-role keys cannot run DDL.
+> **Drift note for the SaaS migrations:** the from-files build needs those 15 live-only columns
+> to exist. If you ever rebuild from scratch, add them before migrations `20260528220000`,
+> `20260528230000`, `20260628000000`, `20260805150000`, or fold them into a new migration.
+
+**Still TODO (code refactor, not DB):** remove the Monday-only *functions*
+(`search_website_on_monday`, `mark_monday_duplicates_for_job`, `rematch_monday_*`,
+`inherit_monday_data_for_lead`, …) and edit the Monday step out of `complete_scrape_job`. The
+tables are already gone; these functions are now dead code (plpgsql is late-binding, so they
+didn't break anything, but they'll error if called).
 
 **Monday drop list** (run after migrations apply):
 ```sql

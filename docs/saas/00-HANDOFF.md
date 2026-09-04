@@ -43,10 +43,15 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   Chris's identity set (`git config user.name/email`), so new commits continue as Chris.
 - ✅ New Supabase project provisioned: ref **`zxxeuyixqnbwmnlvjkbr`**
   (URL `https://zxxeuyixqnbwmnlvjkbr.supabase.co`).
-- ⏳ **Schema clone into the new project: PENDING** — blocked on a Supabase access token (or
-  DB password) for the new project's account. Plan is documented in
-  `03-ENV-AND-ISOLATION.md` → "Cloning the schema".
-- ⬜ Not started: `.env.local`, local run, org/tenancy model, RLS, removing Monday, outreach.
+- ✅ **Schema cloned into the new project** (2026-09-04): 164 migrations applied + 15 drifted
+  columns / 3 functions reconciled from prod → **38 tables, 90 functions**. **No data copied**
+  (leads/scrape all empty). The **8 Monday mirror tables were dropped**. Prod-specific config
+  (`gologin_profiles`, `system_settings`) was cleared for isolation; harmless vertical
+  reference data kept (`operator_domains_denylist`, `rooster_brands`, `batch_counter`).
+  `.env.local` written (gitignored) with the new project's keys. Details in
+  `03-ENV-AND-ISOLATION.md`.
+- ⬜ Not started: local run, org/tenancy model + RLS, removing Monday *functions* + the Monday
+  step in `complete_scrape_job`, repointing hardcoded prod refs, outreach.
 
 ## The plan in one screen
 
