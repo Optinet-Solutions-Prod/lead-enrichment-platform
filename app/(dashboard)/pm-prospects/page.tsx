@@ -193,7 +193,7 @@ export default async function PmProspectsPage({
         <AdvancedFilters columns={PM_PROSPECTS_COLUMNS} />
 
         <section className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full min-w-[760px] text-left text-[13px]">
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
                 <th className="px-3 py-2"><SortHeader columnKey="host_name" label="Host" sortable /></th>
@@ -230,7 +230,7 @@ export default async function PmProspectsPage({
                     {p.listings_count}
                   </td>
                   <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">
-                    {p.localities.filter(Boolean).join(', ') || '—'}
+                    <span title={p.localities.filter(Boolean).join(', ')} className="inline-block max-w-[18rem] truncate align-bottom">{p.localities.filter(Boolean).join(', ') || '—'}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <a
@@ -273,7 +273,7 @@ export default async function PmProspectsPage({
           listings we harvested (sample). High-supply towns are where PM outreach lands best.
         </p>
         <div className="mt-3 overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full min-w-[640px] text-left text-[13px]">
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
                 <th className="px-3 py-2">Town</th>

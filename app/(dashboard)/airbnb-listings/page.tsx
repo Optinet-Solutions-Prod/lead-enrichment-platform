@@ -175,7 +175,7 @@ export default async function AirbnbListingsPage({
       <AdvancedFilters columns={AIRBNB_LISTINGS_COLUMNS} preserve={['loc']} />
 
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-        <table className="w-full text-left text-[13px]">
+        <table className="w-full min-w-[860px] text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               <th className="px-3 py-2"><SortHeader columnKey="title" label="Listing" sortable /></th>
@@ -195,7 +195,7 @@ export default async function AirbnbListingsPage({
             )}
             {rows.map(r => (
               <tr key={r.id} className="border-t border-[color:var(--color-border)] align-top">
-                <td className="max-w-96 px-3 py-2">
+                <td className="px-3 py-2">
                   {r.url ? (
                     <a
                       href={r.url}
@@ -203,7 +203,7 @@ export default async function AirbnbListingsPage({
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
                     >
-                      <span className="truncate">{r.title ?? `Listing ${r.airbnb_id}`}</span>
+                      <span title={r.title ?? undefined} className="inline-block max-w-[26rem] truncate align-bottom">{r.title ?? `Listing ${r.airbnb_id}`}</span>
                       <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-text-secondary)]" />
                     </a>
                   ) : (

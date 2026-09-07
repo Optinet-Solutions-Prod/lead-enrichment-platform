@@ -13,7 +13,7 @@ function fmtDate(iso: string): string {
 export function MaltaparkListingsTable({ rows }: Props) {
   return (
     <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-      <table className="w-full text-left text-[13px]">
+      <table className="w-full min-w-[760px] text-left text-[13px]">
         <thead>
           <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
             <th className="px-3 py-2">Photo</th>
@@ -40,14 +40,14 @@ export function MaltaparkListingsTable({ rows }: Props) {
                   <div className="h-10 w-14 rounded bg-[color:var(--color-bg-secondary)]" />
                 )}
               </td>
-              <td className="max-w-96 px-3 py-2">
+              <td className="px-3 py-2">
                 <a
                   href={r.url}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
                 >
-                  <span className="truncate">{r.title ?? `Listing ${r.listing_id}`}</span>
+                  <span title={r.title ?? undefined} className="inline-block max-w-[24rem] truncate align-bottom">{r.title ?? `Listing ${r.listing_id}`}</span>
                   <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-text-secondary)]" />
                 </a>
               </td>

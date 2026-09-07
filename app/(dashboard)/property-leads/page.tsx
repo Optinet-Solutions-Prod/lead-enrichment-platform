@@ -210,7 +210,7 @@ export default async function PropertyLeadsPage({
       <AdvancedFilters columns={PROPERTY_LEADS_COLUMNS} preserve={['site']} />
 
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-        <table className="w-full text-left text-[13px]">
+        <table className="w-full min-w-[1080px] text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               <th className="px-3 py-2"><SortHeader columnKey="source_site" label="Source" sortable /></th>
@@ -237,7 +237,7 @@ export default async function PropertyLeadsPage({
                 <td className="whitespace-nowrap px-3 py-2 text-[color:var(--color-text-secondary)]">
                   {r.source_site}
                 </td>
-                <td className="max-w-80 px-3 py-2">
+                <td className="px-3 py-2">
                   {r.listing_url ? (
                     <a
                       href={r.listing_url}
@@ -245,7 +245,7 @@ export default async function PropertyLeadsPage({
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
                     >
-                      <span className="truncate">{r.title ?? r.listing_url}</span>
+                      <span title={r.title ?? r.listing_url ?? undefined} className="inline-block max-w-[22rem] truncate align-bottom">{r.title ?? r.listing_url}</span>
                       <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-text-secondary)]" />
                     </a>
                   ) : (
@@ -256,10 +256,10 @@ export default async function PropertyLeadsPage({
                   {r.price_text ?? '—'}
                 </td>
                 <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">
-                  {r.location ?? '—'}
+                  <span title={r.location ?? undefined} className="inline-block max-w-[14rem] truncate align-bottom">{r.location ?? '—'}</span>
                 </td>
                 <td className="px-3 py-2 text-[color:var(--color-text-primary)]">
-                  {r.owner_name ?? '—'}
+                  <span title={r.owner_name ?? undefined} className="inline-block max-w-[12rem] truncate align-bottom">{r.owner_name ?? '—'}</span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                   {r.contact_phone ? (

@@ -137,7 +137,7 @@ export default async function HfpsRegisterPage({
       <AdvancedFilters columns={HFPS_COLUMNS} />
 
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-        <table className="w-full text-left text-[13px]">
+        <table className="w-full min-w-[900px] text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               <th className="px-3 py-2"><SortHeader columnKey="ref" label="Licence" sortable /></th>
