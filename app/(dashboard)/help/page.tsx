@@ -316,10 +316,6 @@ Phase 2  (affiliate_running → complete)
                   '15 country profiles. country_code PK, gologin_profile_id, requires_google_login, is_google_logged_in, languages text[].',
                 ],
                 [
-                  'scheduled_keyword_sets / _items',
-                  'Recurring schedules. Cron expression on the set; one (keyword, country, pages) per item.',
-                ],
-                [
                   'active_profile_locks',
                   'Country lock; PK on country_code prevents two workers using the same profile. job_kind text discriminates scrape vs enrichment.',
                 ],
@@ -360,7 +356,7 @@ Phase 2  (affiliate_running → complete)
                   'GET, POST',
                   '/api/scheduler/tick',
                   'Bearer CRON_SECRET',
-                  'Vercel cron, every minute. Spawns scrape rows from due scheduled_keyword_sets and advances the enrichment chain.',
+                  'Orchestrator tick: housekeeping sweeps + enrichment-chain advancement. No cron fires it currently — invoke manually or from an external scheduler.',
                 ],
               ]}
             />
@@ -467,10 +463,10 @@ Phase 2  (affiliate_running → complete)
               headers={['Source', 'Schedule', 'Path / function', 'Purpose']}
               rows={[
                 [
-                  'Vercel cron',
-                  '* * * * *',
+                  'Manual / external',
+                  'on demand',
                   '/api/scheduler/tick',
-                  'Every minute. Spawns scrape rows from due scheduled_keyword_sets, advances enrichment chains.',
+                  'Housekeeping sweeps + enrichment-chain advancement. No Vercel cron on the current plan.',
                 ],
                 [
                   'Supabase pg_cron',

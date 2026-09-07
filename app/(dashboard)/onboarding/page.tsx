@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
-  CalendarClock,
   CheckCircle2,
   CheckSquare,
   Circle,
@@ -40,7 +39,6 @@ const SECTIONS: SectionDef[] = [
   { id: 'enrichment', title: 'Enrichment pipeline', icon: Workflow },
   { id: 'leads', title: 'Working with leads', icon: ListChecks },
   { id: 'overrides', title: 'Manual overrides', icon: Edit3 },
-  { id: 'schedules', title: 'Recurring schedules', icon: CalendarClock },
   { id: 'profiles', title: 'Profiles & languages', icon: Globe },
   { id: 'activity', title: 'Activity log', icon: Clock },
   { id: 'workers', title: 'Workers & health', icon: Cpu },
@@ -581,7 +579,7 @@ export default function OnboardingPage() {
             done={completed.has('overrides')}
             onToggle={() => toggle('overrides')}
             prev="leads"
-            next="schedules"
+            next="profiles"
           >
             <p>
               Every boolean enrichment flag (Is an affiliate,
@@ -607,51 +605,12 @@ export default function OnboardingPage() {
           </Section>
 
           <Section
-            id="schedules"
-            title="Recurring schedules"
-            icon={CalendarClock}
-            done={completed.has('schedules')}
-            onToggle={() => toggle('schedules')}
-            prev="overrides"
-            next="profiles"
-          >
-            <p>
-              <Code>/schedules</Code> lets you pre-configure a set of
-              keyword/country/pages combinations and have the system run them
-              on a cron expression. Useful for daily / weekly market scans.
-            </p>
-            <ul>
-              <li>
-                <strong>Set</strong> — one named bundle with a cron expression
-                (e.g. <Code>0 9 * * 1</Code> for Mondays at 9 UTC).
-              </li>
-              <li>
-                <strong>Items</strong> — one (keyword, country, pages) per row
-                inside a set. Each fires a separate scrape job when the cron
-                triggers.
-              </li>
-              <li>
-                <strong>Run enrichment</strong> — checkbox on the set; when
-                ticked, every spawned job has{' '}
-                <Code>with_enrichment=true</Code> and auto-runs the full chain.
-              </li>
-              <li>
-                The scheduler tick (Vercel cron, every minute) finds due sets
-                and inserts queue rows.
-              </li>
-            </ul>
-            <TryItRow>
-              <TryIt href="/schedules" label="Manage schedules" />
-            </TryItRow>
-          </Section>
-
-          <Section
             id="profiles"
             title="Country profiles & languages"
             icon={Globe}
             done={completed.has('profiles')}
             onToggle={() => toggle('profiles')}
-            prev="schedules"
+            prev="overrides"
             next="activity"
           >
             <p>
