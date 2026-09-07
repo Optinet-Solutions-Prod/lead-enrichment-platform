@@ -5,6 +5,7 @@ import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { PageIntro } from '../_components/page-intro'
 import { Pagination } from '../_components/pagination'
 import { SortHeader } from '../_components/sort-header'
 
@@ -155,17 +156,38 @@ export default async function PmProspectsPage({
 
   return (
     <div className="flex flex-col gap-6 p-4">
-      <header>
-        <h1 className="text-[18px] font-semibold text-[color:var(--color-text-primary)]">
-          PM Prospects
-        </h1>
-        <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          Self-managing Airbnb hosts (1–4 listings, lettings brands filtered out) — the
-          audience for a property-management offer. {total.toLocaleString()}{' '}
-          prospects · {purestCount.toLocaleString()} solo hosts (1–2 listings). Contact
-          channel: their Airbnb profile. Recomputes automatically as the Airbnb harvest grows.
-        </p>
-      </header>
+      <PageIntro
+        title="PM Prospects"
+        tier="Derived"
+        tagline="Self-managing Airbnb hosts — owners running 1–4 listings themselves, with no agency in between. These are the people most likely to buy property management."
+        sourceLine="computed automatically from Airbnb Listings: hosts are grouped by profile, then operators with 5+ listings and lettings-brand names (your competitors) are filtered out. Recomputes on every Airbnb crawl you ingest"
+        statsLine={`${total.toLocaleString()} prospects · ${purestCount.toLocaleString()} solo hosts (1–2 listings)`}
+        relations={[
+          { href: '/airbnb-listings', label: 'The raw Airbnb data behind this' },
+          { href: '/property-scrape', label: 'Run a fresh Airbnb crawl' },
+        ]}
+        learnMore={
+          <>
+            <p>
+              <strong>Why this filter:</strong> big hosts (Haven &amp; Keys, ThreeSIXTY,
+              Shortletsmalta…) are property managers already — competitors, not customers. A
+              host with one or two listings (the green <em>solo host</em> badge) is almost
+              certainly an owner doing check-ins and cleaning themselves.
+            </p>
+            <p>
+              <strong>How to contact them:</strong> the profile link opens their Airbnb page —
+              outreach goes through Airbnb messaging, so keep it personal and paced (bulk
+              solicitation breaks Airbnb&apos;s rules and gets accounts flagged). Airbnb only
+              shows first names and localities, never phones or addresses.
+            </p>
+            <p>
+              <strong>The market map below</strong> compares each town&apos;s licensed
+              short-let supply (official register — complete) with our Airbnb sample: the
+              towns at the top are where a PM offer has the most doors to knock on.
+            </p>
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-4">
         <AdvancedFilters columns={PM_PROSPECTS_COLUMNS} />

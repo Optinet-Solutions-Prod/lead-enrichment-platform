@@ -6,6 +6,7 @@ import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { PageIntro } from '../_components/page-intro'
 import { Pagination } from '../_components/pagination'
 import { SortHeader } from '../_components/sort-header'
 
@@ -138,17 +139,45 @@ export default async function PropertyLeadsPage({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <header>
-        <h1 className="text-[18px] font-semibold text-[color:var(--color-text-primary)]">
-          Property Leads
-        </h1>
-        <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          Harvested Malta property-owner leads across{' '}
-          {sites.length.toLocaleString()} sources · {total.toLocaleString()} leads
-          {siteFilter && ` · showing ${filteredTotal.toLocaleString()} from ${siteFilter}`}
-          {!siteFilter && ` · ${withPhone} with phone · ${withEmail} with email`}
-        </p>
-      </header>
+      <PageIntro
+        title="Owner Leads"
+        tier="Tier 2"
+        tagline="Malta property owners you can contact TODAY — names, phone numbers and emails, mostly people listing their own property without an agent. This is your outreach list."
+        sourceLine={`scraped from ${sites.length} direct-from-owner sites and classifieds (HomesInMalta, PropertiesFromOwner, Maltapark ad text, the MTA hotel register, and a one-off 17-site harvest) — run fresh pulls from Collect Data`}
+        statsLine={
+          siteFilter
+            ? `showing ${filteredTotal.toLocaleString()} from ${siteFilter}`
+            : `${total.toLocaleString()} leads · ${withPhone} with phone · ${withEmail} with email`
+        }
+        relations={[
+          { href: '/property-scrape', label: 'Collect more leads' },
+          { href: '/airbnb-listings', label: 'Airbnb column cross-matches these listings' },
+        ]}
+        learnMore={
+          <>
+            <p>
+              <strong>Where each row comes from:</strong> the source column names the website
+              it was scraped from; click a chip below to see one site&apos;s leads. Phone
+              numbers were published by the owners themselves in their listings — on
+              &quot;by owner&quot; sites they&apos;re in the listing data, on Maltapark we
+              mine them from the ad text (the official reveal is captcha-gated).
+            </p>
+            <p>
+              <strong>The Airbnb column:</strong> we compared every lead against our Airbnb
+              harvest. A red &quot;On Airbnb&quot; badge is a strong match; amber
+              &quot;Possible&quot; means the host&apos;s first name + locality line up —
+              verify before assuming. We also checked all street addresses against the
+              official licence register: none of these leads are licensed short-lets, which
+              makes sense — most are selling, not hosting.
+            </p>
+            <p>
+              <strong>What to do with it (plan steps 1–2):</strong> filter to leads with a
+              phone, pick 30–50, and run a personal outreach round — call or WhatsApp,
+              pitching management for their property. Track who responds before scaling.
+            </p>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-1">
         <Link

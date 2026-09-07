@@ -85,14 +85,51 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Tools',
+    // The property-management funnel, in working order: collect data,
+    // then work the two audiences it produces.
+    label: 'Pipeline',
     items: [
       {
-        label: 'Property Scrape',
+        label: 'Collect Data',
         href: '/property-scrape',
         icon: Search,
         match: (p: string) => p.startsWith('/property-scrape'),
       },
+      {
+        label: 'Owner Leads',
+        href: '/property-leads',
+        icon: Building2,
+        match: (p: string) => p.startsWith('/property-leads'),
+      },
+      {
+        label: 'PM Prospects',
+        href: '/pm-prospects',
+        icon: Handshake,
+        match: (p: string) => p.startsWith('/pm-prospects'),
+      },
+    ],
+  },
+  {
+    // Reference datasets the audiences are built from / verified against.
+    label: 'Market Data',
+    items: [
+      {
+        label: 'Airbnb Listings',
+        href: '/airbnb-listings',
+        icon: BedDouble,
+        match: (p: string) => p.startsWith('/airbnb-listings'),
+      },
+      {
+        label: 'Short-Let Register',
+        href: '/hfps-register',
+        icon: MapPinned,
+        match: (p: string) => p.startsWith('/hfps-register'),
+      },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
       {
         label: 'Scrape',
         hidden: true,
@@ -106,30 +143,6 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/leads',
         icon: ListChecks,
         match: (p: string) => p.startsWith('/leads'),
-      },
-      {
-        label: 'Property Leads',
-        href: '/property-leads',
-        icon: Building2,
-        match: (p: string) => p.startsWith('/property-leads'),
-      },
-      {
-        label: 'PM Prospects',
-        href: '/pm-prospects',
-        icon: Handshake,
-        match: (p: string) => p.startsWith('/pm-prospects'),
-      },
-      {
-        label: 'Airbnb Listings',
-        href: '/airbnb-listings',
-        icon: BedDouble,
-        match: (p: string) => p.startsWith('/airbnb-listings'),
-      },
-      {
-        label: 'Short-Let Register',
-        href: '/hfps-register',
-        icon: MapPinned,
-        match: (p: string) => p.startsWith('/hfps-register'),
       },
       {
         // Open to all signed-in users so the whole ops team can clear

@@ -11,40 +11,81 @@ import {
 
 const initialState: RunState = null
 
-const SOURCES: Array<{
+type Source = {
   key: string
   label: string
   blurb: string
   usesKeyword?: boolean
   defaultOn?: boolean
-}> = [
+  comingSoon?: boolean
+}
+
+/** Grouped by the research plan's source tiers so the form reads as the
+ *  strategy, not a random site list. */
+const TIERS: Array<{ name: string; hint: string; sources: Source[] }> = [
   {
-    key: 'homesinmalta',
-    label: 'HomesInMalta',
-    blurb: 'By-owner portal — owner name + mobile on every listing. Checks the 30 newest.',
-    defaultOn: true,
+    name: 'Tier 2 · Direct-from-owner sites',
+    hint: 'Owners list without an agent, so name + phone sit in the listing. Fastest path to contactable leads — feeds Owner Leads.',
+    sources: [
+      {
+        key: 'homesinmalta',
+        label: 'HomesInMalta',
+        blurb: 'Owner name + mobile on every listing. Checks the 30 newest.',
+        defaultOn: true,
+      },
+      {
+        key: 'propertiesfromowner',
+        label: 'PropertiesFromOwner',
+        blurb: 'Every active listing with the owner’s mobile, one API call.',
+        defaultOn: true,
+      },
+      {
+        key: 'directfromowner',
+        label: 'DirectFromOwner.eu',
+        blurb: 'In the research plan — scraper not built yet.',
+        comingSoon: true,
+      },
+      {
+        key: 'darscover',
+        label: 'Darscover (by owner)',
+        blurb: 'In the research plan — scraper not built yet.',
+        comingSoon: true,
+      },
+    ],
   },
   {
-    key: 'propertiesfromowner',
-    label: 'PropertiesFromOwner',
-    blurb: 'By-owner portal — every active listing with the owner’s mobile, one API call.',
-    defaultOn: true,
+    name: 'Tier 3 · Maltapark classifieds',
+    hint: 'Malta’s biggest classifieds. Phones are login-gated, but sellers often write them in the ad text — we mine those. Feeds Owner Leads.',
+    sources: [
+      {
+        key: 'maltapark',
+        label: 'Maltapark keyword search',
+        blurb: 'Top 10 results for your keyword; phones mined from ad text.',
+        usesKeyword: true,
+      },
+    ],
   },
   {
-    key: 'maltapark',
-    label: 'Maltapark',
-    blurb: 'Keyword search across classifieds; phones mined from ad text (top 10 results).',
-    usesKeyword: true,
+    name: 'Tier 1 · Official licence register',
+    hint: 'The MTA register of every legal short-let. Highest-quality target list (each address IS a short-let operator) but address-only — outreach by mail or after enrichment. Feeds Short-Let Register.',
+    sources: [
+      {
+        key: 'mta',
+        label: 'MTA licence register refresh',
+        blurb: 'Re-downloads the full official register (Malta + Gozo, ~8,300 premises).',
+      },
+    ],
   },
   {
-    key: 'mta',
-    label: 'MTA licence register',
-    blurb: 'Re-downloads the official HFPS register (all licensed short-lets, Malta + Gozo).',
-  },
-  {
-    key: 'airbnb',
-    label: 'Airbnb (via Apify)',
-    blurb: 'Starts a ~300-listing browser crawl on Apify; ingest it below when it finishes.',
+    name: 'Market scan · Airbnb',
+    hint: 'Live Airbnb inventory for Malta + Gozo via a real-browser crawl. Feeds Airbnb Listings, and PM Prospects recomputes from it.',
+    sources: [
+      {
+        key: 'airbnb',
+        label: 'Airbnb (via Apify)',
+        blurb: 'Starts a ~300-listing crawl on Apify (~$1); ingest it below when it finishes.',
+      },
+    ],
   },
 ]
 
@@ -78,45 +119,70 @@ export function RunForm() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form action={formAction} className="flex flex-col gap-3">
-        <div className="grid gap-2 sm:grid-cols-2">
-          {SOURCES.map(s => (
-            <label
-              key={s.key}
-              className="flex cursor-pointer items-start gap-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3 hover:bg-[color:var(--color-bg-secondary)]"
-            >
-              <input
-                type="checkbox"
-                name="sources"
-                value={s.key}
-                defaultChecked={s.defaultOn}
-                onChange={
-                  s.usesKeyword ? e => setMaltaparkOn(e.currentTarget.checked) : undefined
-                }
-                className="mt-0.5"
-              />
-              <span>
-                <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
-                  {s.label}
-                </span>
-                <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-                  {s.blurb}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <label className="flex max-w-sm flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          Maltapark keyword {maltaparkOn ? '' : '(enable Maltapark to use)'}
-          <input
-            type="text"
-            name="keyword"
-            defaultValue="apartment"
-            disabled={!maltaparkOn}
-            className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] text-[color:var(--color-text-primary)] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)] disabled:opacity-50"
-          />
-        </label>
+      <form action={formAction} className="flex flex-col gap-4">
+        {TIERS.map(tier => (
+          <fieldset
+            key={tier.name}
+            className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3"
+          >
+            <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+              {tier.name}
+            </legend>
+            <p className="mb-2 text-[12px] text-[color:var(--color-text-secondary)]">
+              {tier.hint}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {tier.sources.map(s => (
+                <label
+                  key={s.key}
+                  className={[
+                    'flex items-start gap-2 rounded-lg border border-[color:var(--color-border)] p-3',
+                    s.comingSoon
+                      ? 'cursor-not-allowed opacity-60'
+                      : 'cursor-pointer bg-[color:var(--color-bg-primary)] hover:bg-[color:var(--color-bg-secondary)]',
+                  ].join(' ')}
+                >
+                  <input
+                    type="checkbox"
+                    name="sources"
+                    value={s.key}
+                    defaultChecked={s.defaultOn}
+                    disabled={s.comingSoon}
+                    onChange={
+                      s.usesKeyword ? e => setMaltaparkOn(e.currentTarget.checked) : undefined
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--color-text-primary)]">
+                      {s.label}
+                      {s.comingSoon && (
+                        <span className="rounded-full border border-[color:var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+                          soon
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+                      {s.blurb}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {tier.sources.some(s => s.usesKeyword) && (
+              <label className="mt-2 flex max-w-sm flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
+                Maltapark keyword {maltaparkOn ? '' : '(tick Maltapark to use)'}
+                <input
+                  type="text"
+                  name="keyword"
+                  defaultValue="apartment for rent"
+                  disabled={!maltaparkOn}
+                  className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] text-[color:var(--color-text-primary)] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)] disabled:opacity-50"
+                />
+              </label>
+            )}
+          </fieldset>
+        ))}
 
         <button
           type="submit"
@@ -142,8 +208,7 @@ export function RunForm() {
       <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3">
         <p className="text-[12px] text-[color:var(--color-text-secondary)]">
           Airbnb runs on Apify’s browser fleet, so it finishes a few minutes after you start
-          it. Once started above, pull the results in here — the listing pool and PM Prospects
-          update automatically.
+          it. Pull the results in here — Airbnb Listings and PM Prospects update automatically.
         </p>
         <form action={ingestAction} className="mt-2">
           <button

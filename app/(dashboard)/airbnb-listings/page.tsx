@@ -6,6 +6,7 @@ import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { PageIntro } from '../_components/page-intro'
 import { Pagination } from '../_components/pagination'
 import { SortHeader } from '../_components/sort-header'
 
@@ -110,15 +111,38 @@ export default async function AirbnbListingsPage({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <header>
-        <h1 className="text-[18px] font-semibold text-[color:var(--color-text-primary)]">
-          Airbnb Listings (Malta)
-        </h1>
-        <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          {total.toLocaleString()} listings harvested via Apify · host names + localities feed
-          the Property Leads cross-match. Airbnb hides exact addresses and host surnames.
-        </p>
-      </header>
+      <PageIntro
+        title="Airbnb Listings"
+        tagline="The live Airbnb market for Malta + Gozo — every listing we've captured, with its host, locality and nightly price. This is raw market data, not a contact list."
+        sourceLine="harvested by a real-browser crawl (Apify) started from Collect Data → Market scan. Airbnb deliberately hides exact addresses, host surnames and phone numbers"
+        statsLine={`${total.toLocaleString()} listings harvested`}
+        relations={[
+          { href: '/pm-prospects', label: 'PM Prospects is derived from this' },
+          { href: '/hfps-register', label: 'The licence register these must legally be on' },
+          { href: '/property-scrape', label: 'Run a fresh crawl' },
+        ]}
+        learnMore={
+          <>
+            <p>
+              <strong>What it feeds:</strong> hosts here are grouped and filtered into{' '}
+              <strong>PM Prospects</strong> (your outreach audience), and every Owner Lead is
+              cross-matched against these listings (the Airbnb badge on that page).
+            </p>
+            <p>
+              <strong>The licence trick:</strong> Malta law obliges hosts to display their MTA
+              licence number. When a listing shows one, we match it to the register and
+              recover the property&apos;s <em>exact street address</em> — turning an anonymous
+              Airbnb into a mailable lead. Few hosts display it, but every one that does is
+              gold.
+            </p>
+            <p>
+              <strong>Coverage note:</strong> each crawl captures Airbnb&apos;s top search
+              results (~300–1,500 listings), not the full island inventory — treat counts as
+              a sample, and re-crawl from Collect Data to refresh.
+            </p>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-1">
         <Link

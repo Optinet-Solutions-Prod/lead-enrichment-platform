@@ -4,6 +4,7 @@ import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { PageIntro } from '../_components/page-intro'
 import { Pagination } from '../_components/pagination'
 import { SortHeader } from '../_components/sort-header'
 
@@ -99,16 +100,39 @@ export default async function HfpsRegisterPage({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <header>
-        <h1 className="text-[18px] font-semibold text-[color:var(--color-text-primary)]">
-          Licensed Short-Lets (MTA HFPS Register)
-        </h1>
-        <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          {(total ?? 0).toLocaleString()} licensed holiday-premises addresses across Malta and
-          Gozo — the official register every legal Airbnb-style rental must be on. Used to
-          cross-match Property Leads addresses.
-        </p>
-      </header>
+      <PageIntro
+        title="Short-Let Register"
+        tier="Tier 1"
+        tagline="The Malta Tourism Authority's official register of licensed holiday premises. Every address here is a legally operating short-let — which means every row is a confirmed target customer for property management."
+        sourceLine="downloaded from mta.com.mt's public licence CSVs (HFPS Malta + Gozo) — refresh it any time from Collect Data"
+        statsLine={`${(total ?? 0).toLocaleString()} licensed premises`}
+        relations={[
+          { href: '/property-scrape', label: 'Refresh the register' },
+          { href: '/airbnb-listings', label: 'Airbnb listings showing a licence match here' },
+          { href: '/pm-prospects', label: 'Town supply feeds the market map' },
+        ]}
+        learnMore={
+          <>
+            <p>
+              <strong>What&apos;s in a row:</strong> licence ref, premises name, full street
+              address, town, island and bed count. The register does NOT publish phone
+              numbers or emails — the government keeps those private.
+            </p>
+            <p>
+              <strong>How to use it (plan step 3 — scale):</strong> this is the
+              highest-quality volume list: 8,000+ verified operator addresses. The clean
+              channels are direct mail to the premises address, and enrichment — matching an
+              address or premises name against Owner Leads, Airbnb, Maltapark or Facebook to
+              find the operator&apos;s name and number.
+            </p>
+            <p>
+              <strong>Quality note:</strong> multiple flats in one block often share a house
+              number with different premises names — that&apos;s one operator with several
+              licences, a particularly good prospect.
+            </p>
+          </>
+        }
+      />
 
       <AdvancedFilters columns={HFPS_COLUMNS} />
 
