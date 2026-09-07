@@ -230,6 +230,7 @@ const ADMIN_NAV_ITEMS: ReadonlyArray<NavItem> = [
   },
   {
     label: 'QA Feedback (Admin)',
+    hidden: true,
     href: '/admin/feedback',
     icon: MessageCircle,
     match: (p: string) => p.startsWith('/admin/feedback'),
@@ -245,12 +246,14 @@ const ADMIN_NAV_ITEMS: ReadonlyArray<NavItem> = [
   },
   {
     label: 'Utilization (Admin)',
+    hidden: true,
     href: '/admin/utilization',
     icon: Gauge,
     match: (p: string) => p.startsWith('/admin/utilization'),
   },
   {
     label: 'System (Admin)',
+    hidden: true,
     href: '/admin/system',
     icon: Settings,
     match: (p: string) => p.startsWith('/admin/system'),
