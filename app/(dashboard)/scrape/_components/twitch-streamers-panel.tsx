@@ -12,8 +12,8 @@ const initialState: StageRunState = null
  * Twitch is single-pass (the scrape discovers via Helix AND enriches VODs /
  * clips / About-panels in one pure-HTTP run), so — like the Snapchat/Telegram
  * engines — the only operator action is Phase 3:
- *   - Score & check → affiliate scoring + shortener resolution + Monday
- *     new-vs-known (runTwitchStreamerAnalysis, runs inline)
+ *   - Score & check → affiliate scoring + shortener resolution
+ *     (runTwitchStreamerAnalysis, runs inline)
  */
 export function TwitchStreamersPanel({
   jobId,
@@ -71,13 +71,13 @@ export function TwitchStreamersPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score Twitch streamers and check Monday"
+              aria-label="Score Twitch streamers"
               title={
                 noStreamers
                   ? 'No streamers to score yet — run the Twitch scrape first'
                   : scoreNeeded
-                    ? 'Score the discovered streamers — flag affiliates, resolve panel/bio links, and check Monday'
-                    : 'Re-score to refresh affiliate flags, resolved links, and Monday checks'
+                    ? 'Score the discovered streamers — flag affiliates and resolve panel/bio links'
+                    : 'Re-score to refresh affiliate flags and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -104,7 +104,7 @@ export function TwitchStreamersPanel({
         The Twitch scrape discovers channels via the Helix search API and captures each one&apos;s bio, recent VOD / clip
         text, and About-panel links in one pure-HTTP pass.{' '}
         <strong className="font-medium">Score &amp; check</strong> flags likely casino affiliates (niche score), resolves
-        shortener / hub links, parses affiliate S-tags, and checks each ID / @login against Monday. Re-runnable.{' '}
+        shortener / hub links, and parses affiliate S-tags. Re-runnable.{' '}
         <span className="text-[color:var(--color-text-tertiary)]">Follower counts are fetched via Twitch&apos;s public web GraphQL (added 2026-07-22). Legacy rows scraped before that date show as &ldquo;—&rdquo;.</span>
       </p>
 

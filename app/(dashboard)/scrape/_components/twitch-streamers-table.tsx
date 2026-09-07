@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Circle, ExternalLink, Mail, MessageCircle, MonitorPlay, Send, Sparkles } from 'lucide-react'
 import type { TwitchStreamerRow } from '../_lib/queries'
-import { MondayStatusCell } from './monday-status-cell'
 
 /**
  * Per-streamer results table for Twitch jobs (Phase 3). Default order: NEW
@@ -53,15 +52,9 @@ export function TwitchStreamersTable({ rows }: { rows: TwitchStreamerRow[] }) {
             <th className="px-3 py-2 font-medium">Streamer</th>
             <th
               className="cursor-help px-3 py-2 font-medium"
-              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 (or links a casino directly in an About-panel). NEW = a likely affiliate whose affiliate ID / @login isn’t on Monday yet. Hover a badge for the breakdown."
+              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 (or links a casino directly in an About-panel). NEW = a likely affiliate flagged as a new lead candidate. Hover a badge for the breakdown."
             >
               Affiliate
-            </th>
-            <th
-              className="cursor-help px-3 py-2 font-medium"
-              title="Monday recognition. Green ✓ = the streamer / affiliate ID / any of their About-panel links is already on a Monday board. Grey ✕ = we checked and found no match. Blank = scoring hasn’t run yet."
-            >
-              On Monday
             </th>
             <th className="px-3 py-2 text-right font-medium">
               <button
@@ -155,32 +148,16 @@ function TwitchStreamerRowView({ r }: { r: TwitchStreamerRow }) {
                 no · {niche}
               </span>
             )}
-            {r.is_new_lead_candidate ? (
+            {r.is_new_lead_candidate && (
               <span
                 className="inline-flex cursor-help items-center gap-1 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800"
-                title="New lead candidate — a likely affiliate whose affiliate ID / @login isn’t on Monday yet. Worth reviewing for outreach."
+                title="New lead candidate — a likely affiliate worth reviewing for outreach."
               >
                 <Sparkles className="h-3 w-3" /> NEW
               </span>
-            ) : (
-              r.is_known_on_monday === true && (
-                <span
-                  className="inline-flex cursor-help items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
-                  title="Already on Monday — this affiliate’s ID / @login was matched against the board during “Score & check”."
-                >
-                  <CheckCircle2 className="h-3 w-3" /> on Monday
-                </span>
-              )
             )}
           </div>
         )}
-      </td>
-
-      <td className="px-3 py-2">
-        <MondayStatusCell
-          isKnownOnMonday={r.is_known_on_monday}
-          links={r.links}
-        />
       </td>
 
       <td className="px-3 py-2 text-right font-mono tabular-nums text-[11px] text-[color:var(--color-text-primary)]">
@@ -215,8 +192,6 @@ function TwitchStreamerRowView({ r }: { r: TwitchStreamerRow }) {
                 href={p.href}
                 label={p.label}
                 source={p.source}
-                isNew={p.isNew}
-                onMonday={p.onMonday}
                 count={p.count}
               />
             ))
@@ -322,45 +297,22 @@ function LinkChip({
   href,
   label,
   source,
-  isNew,
-  onMonday,
   count,
 }: {
   href: string
   label: string
   source: string
-  isNew?: boolean
-  onMonday?: boolean
   count?: number
 }) {
-  // Three states: NEW (not on Monday — actionable) takes priority, then
-  // already-on-Monday (known), else a neutral captured link.
-  const status = isNew ? 'new' : onMonday ? 'monday' : 'neutral'
-  const cls =
-    status === 'new'
-      ? 'bg-purple-100 text-purple-800 hover:bg-purple-200'
-      : status === 'monday'
-        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-        : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-  const note = status === 'new' ? ' — not on Monday yet' : status === 'monday' ? ' — already on Monday' : ''
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      title={`${source}${count && count > 1 ? ` (${count} links to this host)` : ''}${note}: ${href}`}
-      className={[
-        'inline-flex max-w-[180px] items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-        cls,
-      ].join(' ')}
+      title={`${source}${count && count > 1 ? ` (${count} links to this host)` : ''}: ${href}`}
+      className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-800 hover:bg-blue-200"
     >
-      {status === 'new' ? (
-        <Sparkles className="h-2.5 w-2.5 shrink-0" />
-      ) : status === 'monday' ? (
-        <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
-      ) : (
-        <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-      )}
+      <ExternalLink className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{label}</span>
       {count && count > 1 ? <span className="shrink-0 opacity-60">×{count}</span> : null}
     </a>
@@ -394,36 +346,31 @@ function isNonPartnerHost(host: string): boolean {
   return false
 }
 
-type PartnerChip = { href: string; label: string; source: string; isNew: boolean; onMonday: boolean; count: number }
+type PartnerChip = { href: string; label: string; source: string; count: number }
 
 /** Filter a streamer's links to actual casino-partner links and collapse
  *  duplicates by host (so `youtube.com ×30` / `twitch.tv ×9` noise is gone and
  *  one chip per host remains). For each host, keep the most informative link —
- *  prefer a brand'd or NEW (not-on-Monday) one. */
+ *  prefer a brand'd one. */
 function partnerLinks(links: TwitchStreamerRow['links']): PartnerChip[] {
   const byHost = new Map<string, PartnerChip>()
   for (const l of links) {
     const dest = l.resolved_url ?? l.url
     const host = hostLabel(dest)
     if (isNonPartnerHost(host)) continue
-    const isNew = l.is_known_on_monday === false
-    const onMonday = l.is_known_on_monday === true
     const existing = byHost.get(host)
     if (!existing) {
-      byHost.set(host, { href: dest, label: l.brand || host, source: l.source, isNew, onMonday, count: 1 })
+      byHost.set(host, { href: dest, label: l.brand || host, source: l.source, count: 1 })
       continue
     }
     existing.count++
-    // Upgrade the kept chip if this one carries a brand, a NEW flag, or an
-    // on-Monday match.
+    // Upgrade the kept chip if this one carries a brand.
     if (l.brand && existing.label === host) existing.label = l.brand
-    if (isNew) existing.isNew = true
-    if (onMonday) existing.onMonday = true
   }
-  // Brand'd / NEW partners first, then alphabetical for a stable order.
+  // Brand'd partners first, then alphabetical for a stable order.
   return [...byHost.values()].sort((a, b) => {
-    const aw = (a.isNew ? 2 : 0) + (a.label !== hostLabel(a.href) ? 1 : 0)
-    const bw = (b.isNew ? 2 : 0) + (b.label !== hostLabel(b.href) ? 1 : 0)
+    const aw = a.label !== hostLabel(a.href) ? 1 : 0
+    const bw = b.label !== hostLabel(b.href) ? 1 : 0
     if (aw !== bw) return bw - aw
     return a.label.localeCompare(b.label)
   })

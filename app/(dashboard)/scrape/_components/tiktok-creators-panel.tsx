@@ -16,8 +16,8 @@ const initialState: StageRunState = null
  * jobs. Two operator-triggered ▶ actions:
  *   - Enrich profiles → Phase 2 browser scrape (runTiktokProfileEnrichment,
  *     enqueues a scrape_queue job the GoLogin workers claim)
- *   - Score & check   → Phase 3 affiliate scoring + shortener resolution +
- *     Monday new-vs-known (runTiktokCreatorAnalysis, runs inline)
+ *   - Score & check   → Phase 3 affiliate scoring + shortener resolution
+ *     (runTiktokCreatorAnalysis, runs inline)
  *
  * Mirrors XCreatorsPanel — but TikTok runs logged-out (no burner / login wall).
  */
@@ -143,13 +143,13 @@ export function TiktokCreatorsPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score TikTok creators and check Monday"
+              aria-label="Score TikTok creators"
               title={
                 noCreators
                   ? 'No creators to score yet'
                   : scoreNeeded
-                    ? `${unscored > 0 ? `${unscored} creator${unscored === 1 ? '' : 's'} not yet scored` : 'Newly enriched creators'} — run scoring to flag affiliates, resolve links, mine contacts, and check Monday`
-                    : 'Re-score to refresh affiliate flags, contacts, resolved links, and Monday checks'
+                    ? `${unscored > 0 ? `${unscored} creator${unscored === 1 ? '' : 's'} not yet scored` : 'Newly enriched creators'} — run scoring to flag affiliates, resolve links, and mine contacts`
+                    : 'Re-score to refresh affiliate flags, contacts, and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -176,7 +176,7 @@ export function TiktokCreatorsPanel({
         <strong className="font-medium">Enrich</strong> opens the discovered profiles through GoLogin (logged-out — no
         login needed) to backfill follower counts, bio, the profile bio link, and recent video captions.{' '}
         <strong className="font-medium">Score &amp; check</strong> then flags likely affiliates (niche score), resolves
-        shortener / hub links, mines contacts, and checks each affiliate ID / @handle against Monday. Both are re-runnable.
+        shortener / hub links, and mines contacts. Both are re-runnable.
         {moreToEnrich && (
           <>
             {' '}

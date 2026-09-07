@@ -342,17 +342,27 @@ export function EnqueueForm({
             <option value="tiktok">TikTok</option>
             <option value="snapchat">Snapchat</option>
             <option value="telegram">Telegram</option>
+            <option value="maltapark">Maltapark (Malta classifieds)</option>
           </select>
+          {selectedEngine === 'maltapark' && (
+            <span className="text-[11px] text-[color:var(--color-text-secondary)]">
+              Searches maltapark.com listings by keyword. Country is pinned to
+              Malta; results land in the Maltapark listings panel on the job page.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
           Country
+          {/* Maltapark is Malta-only — the server pins country_code='MT'
+              regardless of this control, so it's disabled for clarity. */}
           <select
             name="country_code"
-            required
+            required={selectedEngine !== 'maltapark'}
+            disabled={selectedEngine === 'maltapark'}
             value={selectedCountry}
             onChange={e => setSelectedCountry(e.target.value)}
-            className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] text-[color:var(--color-text-primary)] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)]"
+            className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] text-[color:var(--color-text-primary)] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)] disabled:opacity-60"
           >
             <option value="" disabled>
               Pick…
@@ -368,6 +378,11 @@ export function EnqueueForm({
               )
             })}
           </select>
+          {selectedEngine === 'maltapark' && (
+            <span className="text-[11px] text-[color:var(--color-text-secondary)]">
+              Pinned to Malta (MT) for Maltapark.
+            </span>
+          )}
           {selectedCountryState && (
             <CountryQueueBadge state={selectedCountryState} />
           )}
@@ -433,7 +448,7 @@ export function EnqueueForm({
               {sourceLabelFor(selectedEngine)} results land in their own table, not the leads
               table. After the scrape completes, open the job and run{' '}
               <strong className="font-medium">Score &amp; check</strong> (▶/⭐) to flag affiliates,
-              resolve links, mine contacts, and check Monday. Until then the results view shows no
+              resolve links, and mine contacts. Until then the results view shows no
               relevant leads.
             </span>
           </div>
@@ -447,7 +462,7 @@ export function EnqueueForm({
             <span>
               Run full enrichment pipeline after scrape
               <span className="block text-[10px] text-[color:var(--color-text-secondary)]">
-                Auto-runs Monday dup check, affiliate detection, Rooster check, contact extraction, S-tag extraction + verify.
+                Auto-runs affiliate detection after the scrape. S-tag and contact extraction are triggered from the job page.
               </span>
             </span>
           </label>

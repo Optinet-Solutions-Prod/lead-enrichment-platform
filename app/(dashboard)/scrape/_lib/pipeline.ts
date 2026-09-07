@@ -10,9 +10,7 @@
  *  the pipeline order and drives the rendering of badges in the jobs
  *  table. Add new keys here as new stages land. */
 export const PIPELINE_STAGES = [
-  { key: 'monday_check', label: 'Monday duplicate check', hidden: false },
   { key: 'affiliate', label: 'Affiliate detection', hidden: false },
-  { key: 'rooster', label: 'Rooster partner check', hidden: false },
   { key: 'stags', label: 'S-tag extraction', hidden: false },
   // S-tag verification stage backend stays wired up (RPC + the
   // column on s_tags_table); flagged hidden so the badge in the
@@ -32,7 +30,7 @@ export type StageKey = (typeof PIPELINE_STAGES)[number]['key']
 export type EnrichmentStatus = Partial<Record<StageKey, boolean>>
 
 /** Kick scrapes don't flow through the leads pipeline above — they write
- *  to `kick_streamers`, so the five leads-pipeline badges never light up
+ *  to `kick_streamers`, so the leads-pipeline badges never light up
  *  for them. The /scrape table renders this Kick-specific 3-dot variant
  *  instead, mirroring the progression in the job detail's "Kick streamer
  *  profiles" panel: discover (scrape) → Enrich → Score & resolve.
@@ -60,7 +58,7 @@ export type KickPipelineStatus = {
 /** The social engines (everyone except google/bing — and except Kick, which
  *  has its own richer 3-dot variant above). These all write to their own
  *  per-engine entity tables (snapchat_creators, youtube_channels, …) and
- *  NEVER to google_lead_gen_table, so the 5-dot leads pipeline above stays
+ *  NEVER to google_lead_gen_table, so the leads pipeline above stays
  *  empty for them — which misreads as "not enriched". They get the 2-dot
  *  progression below instead. */
 export const SOCIAL_BADGE_ENGINES = [
@@ -83,10 +81,10 @@ export function isSocialBadgeEngine(
 
 /** Two-dot progression for the social engines. Discovery is one pass (the
  *  scrape); "Scored & checked" is the operator-triggered Phase-3 step
- *  (⭐ Score & check on the job detail) that flags affiliates, resolves
- *  links, and checks Monday. The Scored dot stays empty until that step
- *  runs — which is exactly what tells an operator the scrape isn't done
- *  yielding leads yet. */
+ *  (⭐ Score & check on the job detail) that flags affiliates and resolves
+ *  links. The Scored dot stays empty until that step runs — which is
+ *  exactly what tells an operator the scrape isn't done yielding leads
+ *  yet. */
 export const SOCIAL_PIPELINE_STAGES = [
   { key: 'discovered', label: 'Discovered' },
   { key: 'scored', label: 'Scored & checked' },
@@ -105,9 +103,7 @@ export type SocialPipelineStatus = {
 /** Approximate per-stage timing for a single scrape job. All times in ms. */
 export type StageTimings = {
   scrape_ms: number | null
-  monday_ms: number | null
   affiliate_ms: number | null
-  rooster_ms: number | null
   contact_ms: number | null
   stag_ms: number | null
   stag_check_ms: number | null
@@ -136,7 +132,7 @@ export type ScrapeJob = {
   with_enrichment: boolean
   enrichment_status: string | null
   language: string | null
-  search_engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | null
+  search_engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | 'maltapark' | null
   view_mode: 'desktop' | 'mobile' | 'both' | null
   /** PPC | Organic | null(both). New-batch flow: a Google batch splits into an
    *  Organic job (scrape_source='apify') + a PPC job (scrape_source='vm'). */

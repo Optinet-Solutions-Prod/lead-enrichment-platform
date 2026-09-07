@@ -9,7 +9,7 @@ import { getUserPreferences } from '@/lib/user-preferences'
 import { createServiceClient } from '@/lib/supabase/service'
 import { translateKeywordsToEnglish } from '@/lib/translate'
 import { AdvancedFilters } from '../../_components/advanced-filters'
-import { Pagination } from '../../monday/_components/pagination'
+import { Pagination } from '../../_components/pagination'
 import { LeadsTable } from '../../leads/_components/leads-table'
 import {
   DEFAULT_LEAD_PAGE_SIZE,
@@ -17,7 +17,6 @@ import {
   queryLeads,
 } from '../../leads/_lib/query'
 import { AutoRefresh } from '../_components/auto-refresh'
-import { PushToMondayButton } from '../_components/push-to-monday-button'
 import { CaptchaRecoveryBanner } from '../_components/captcha-recovery-banner'
 import { MobileSkippedRetryBanner } from '../_components/mobile-skipped-retry-banner'
 import { EnrichmentStages } from '../_components/enrichment-stages'
@@ -37,6 +36,8 @@ import { TelegramChannelsPanel } from '../_components/telegram-channels-panel'
 import { TelegramChannelsTable } from '../_components/telegram-channels-table'
 import { TwitchStreamersPanel } from '../_components/twitch-streamers-panel'
 import { TwitchStreamersTable } from '../_components/twitch-streamers-table'
+import { MaltaparkListingsPanel } from '../_components/maltapark-listings-panel'
+import { MaltaparkListingsTable } from '../_components/maltapark-listings-table'
 import {
   fetchFbAdvertiserRows,
   fetchFbAdvertiserSummary,
@@ -55,6 +56,8 @@ import {
   fetchTwitchStreamerSummary,
   fetchYoutubeChannelRows,
   fetchYoutubeChannelSummary,
+  fetchMaltaparkListingRows,
+  fetchMaltaparkListingSummary,
 } from '../_lib/queries'
 
 type SearchParams = Record<string, string | string[] | undefined>
@@ -78,7 +81,7 @@ type Job = {
   completed_at: string | null
   error_message: string | null
   result_summary: Record<string, unknown> | null
-  search_engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | null
+  search_engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | 'maltapark' | null
   view_mode: 'desktop' | 'mobile' | 'both' | null
   language: string | null
   created_at: string
@@ -98,7 +101,7 @@ export const dynamic = 'force-dynamic'
 // The YouTube "Score & check" action (runYoutubeChannelAnalysis) runs inline
 // from this route and does bounded HTTP work — shortener follows + a two-hop
 // fetch of each likely affiliate's landing page to mine S-tags. Give it room
-// past the default serverless timeout (mirrors the Monday sync routes).
+// past the default serverless timeout.
 export const maxDuration = 300
 
 async function countNotRelevantInJob(
@@ -203,10 +206,9 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
   const resultType = typeof sp.result_type === 'string' ? sp.result_type : ''
   const filters = parseFilters(sp.f)
   const sorts = parseSorts(sp.s)
-  // Default: hide rows flagged is_not_relevant — which now includes
-  // Monday duplicates (existing), manual user flags (existing), AND
-  // casino-operator domains auto-flagged at enrichment time
-  // (20260528200000_operator_denylist.sql). `?show_hidden=1` shows
+  // Default: hide rows flagged is_not_relevant — manual user flags
+  // (existing) AND casino-operator domains auto-flagged at enrichment
+  // time (20260528200000_operator_denylist.sql). `?show_hidden=1` shows
   // every row. Mirrors the /leads toggle so the UX is consistent.
   const showHidden = sp.show_hidden === '1'
 
@@ -226,11 +228,12 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
   const isSnapchat = job.search_engine === 'snapchat'
   const isTelegram = job.search_engine === 'telegram'
   const isTwitch = job.search_engine === 'twitch'
-  // Kick / YouTube / X / Facebook / TikTok / Snapchat / Telegram / Twitch all
-  // live in their own tables/panels — none produces leads, so the lead filters
-  // + table + enrichment stages don't apply.
+  const isMaltapark = job.search_engine === 'maltapark'
+  // Kick / YouTube / X / Facebook / TikTok / Snapchat / Telegram / Twitch /
+  // Maltapark all live in their own tables/panels — none produces leads, so
+  // the lead filters + table + enrichment stages don't apply.
   const noLeadsEngine =
-    isKick || isYoutube || isX || isFacebook || isTiktok || isSnapchat || isTelegram || isTwitch
+    isKick || isYoutube || isX || isFacebook || isTiktok || isSnapchat || isTelegram || isTwitch || isMaltapark
 
   const [
     { rows, total },
@@ -253,6 +256,8 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
     telegramRows,
     twitchSummary,
     twitchRows,
+    maltaparkSummary,
+    maltaparkRows,
     prefs,
   ] = await Promise.all([
       queryLeads({
@@ -292,6 +297,8 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
       isTelegram ? fetchTelegramChannelRows(id) : Promise.resolve(null),
       isTwitch ? fetchTwitchStreamerSummary(id) : Promise.resolve(null),
       isTwitch ? fetchTwitchStreamerRows(id) : Promise.resolve(null),
+      isMaltapark ? fetchMaltaparkListingSummary(id) : Promise.resolve(null),
+      isMaltapark ? fetchMaltaparkListingRows(id) : Promise.resolve(null),
       getUserPreferences(),
     ])
 
@@ -378,9 +385,6 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
             </p>
           </div>
           <div className="flex shrink-0 items-start gap-2">
-            {job.status === 'completed' && (
-              <PushToMondayButton jobId={job.id} engine={job.search_engine} />
-            )}
             {(showHidden || hiddenCount > 0) && (
               <Link
                 href={toggleHref}
@@ -388,7 +392,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
                 title={
                   showHidden
                     ? 'Hide rows marked as not relevant'
-                    : 'Include rows marked as not relevant (operators, Monday duplicates, manual flags) in the table below'
+                    : 'Include rows marked as not relevant (operators, manual flags) in the table below'
                 }
               >
                 {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -484,6 +488,11 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
           {twitchSummary && <TwitchStreamersPanel jobId={job.id} summary={twitchSummary} />}
           {twitchRows && twitchRows.length > 0 && <TwitchStreamersTable rows={twitchRows} />}
         </>
+      ) : isMaltapark ? (
+        <>
+          {maltaparkSummary && <MaltaparkListingsPanel jobId={job.id} summary={maltaparkSummary} />}
+          {maltaparkRows && maltaparkRows.length > 0 && <MaltaparkListingsTable rows={maltaparkRows} />}
+        </>
       ) : (
         stageSummary && <EnrichmentStages jobId={job.id} summary={stageSummary} />
       )}
@@ -543,7 +552,6 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
           tiktokSummary?.inflight === true ||
           (stageSummary != null &&
             (stageSummary.affiliate.inflight_pending + stageSummary.affiliate.inflight_running > 0 ||
-              stageSummary.rooster.inflight_pending + stageSummary.rooster.inflight_running > 0 ||
               stageSummary.contact.inflight_pending + stageSummary.contact.inflight_running > 0 ||
               stageSummary.stag.inflight_pending + stageSummary.stag.inflight_running > 0))
         }
@@ -552,7 +560,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
   )
 }
 
-function EngineBadge({ engine }: { engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | null }) {
+function EngineBadge({ engine }: { engine: 'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | 'maltapark' | null }) {
   const e = engine ?? 'google'
   const styles =
     e === 'bing'
@@ -573,8 +581,10 @@ function EngineBadge({ engine }: { engine: 'google' | 'bing' | 'youtube' | 'twit
                     ? 'bg-yellow-100 text-yellow-800'
                     : e === 'telegram'
                       ? 'bg-sky-100 text-sky-800'
-                      : 'bg-blue-100 text-blue-800'
-  const label = e === 'youtube' ? 'YouTube' : e === 'bing' ? 'Bing' : e === 'twitch' ? 'Twitch' : e === 'kick' ? 'Kick' : e === 'x' ? 'X' : e === 'facebook' ? 'Facebook' : e === 'tiktok' ? 'TikTok' : e === 'snapchat' ? 'Snapchat' : e === 'telegram' ? 'Telegram' : 'Google'
+                      : e === 'maltapark'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-blue-100 text-blue-800'
+  const label = e === 'youtube' ? 'YouTube' : e === 'bing' ? 'Bing' : e === 'twitch' ? 'Twitch' : e === 'kick' ? 'Kick' : e === 'x' ? 'X' : e === 'facebook' ? 'Facebook' : e === 'tiktok' ? 'TikTok' : e === 'snapchat' ? 'Snapchat' : e === 'telegram' ? 'Telegram' : e === 'maltapark' ? 'Maltapark' : 'Google'
   return (
     <span
       title={`Scraped on ${label}`}

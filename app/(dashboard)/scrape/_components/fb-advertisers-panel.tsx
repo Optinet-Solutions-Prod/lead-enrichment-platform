@@ -12,8 +12,8 @@ const initialState: StageRunState = null
  * search_engine='facebook' jobs. The keyword scrape (single pass) already
  * captured each advertiser Page + its ad landing links, so the only
  * operator-triggered action here is Phase 3:
- *   - Score & check → affiliate scoring + shortener resolution + Monday
- *     new-vs-known (runFbAdvertiserAnalysis, runs inline)
+ *   - Score & check → affiliate scoring + shortener resolution
+ *     (runFbAdvertiserAnalysis, runs inline)
  *
  * (There is no "Enrich" step — Facebook's per-page Ad Library view is
  * unreliable, so link capture lives in the discovery scrape itself.)
@@ -74,13 +74,13 @@ export function FbAdvertisersPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score Facebook advertisers and check Monday"
+              aria-label="Score Facebook advertisers"
               title={
                 noAdvertisers
                   ? 'No advertisers to score yet — run the Facebook scrape first'
                   : scoreNeeded
-                    ? 'Score the discovered advertisers — flag affiliates, resolve ad links, mine contacts, and check Monday'
-                    : 'Re-score to refresh affiliate flags, contacts, resolved links, and Monday checks'
+                    ? 'Score the discovered advertisers — flag affiliates, resolve ad links, and mine contacts'
+                    : 'Re-score to refresh affiliate flags, contacts, and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -106,8 +106,7 @@ export function FbAdvertisersPanel({
       <p className="mt-1.5 text-[11px] leading-snug text-[color:var(--color-text-secondary)]">
         The Facebook scrape captures each advertiser Page and the ad landing links from its ads.{' '}
         <strong className="font-medium">Score &amp; check</strong> flags likely casino affiliates (niche score), resolves
-        shortener links, mines contacts from the ad copy, and checks each affiliate ID / Page name against Monday.
-        Re-runnable.
+        shortener links, and mines contacts from the ad copy. Re-runnable.
       </p>
 
       {(message || error) && (

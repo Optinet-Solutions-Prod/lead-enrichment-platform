@@ -13,7 +13,6 @@ import {
   Circle,
   Clock,
   Cpu,
-  Database,
   Edit3,
   Globe,
   ListChecks,
@@ -21,7 +20,6 @@ import {
   RotateCcw,
   Search,
   Sparkles,
-  Star,
   Workflow,
 } from 'lucide-react'
 
@@ -44,10 +42,8 @@ const SECTIONS: SectionDef[] = [
   { id: 'overrides', title: 'Manual overrides', icon: Edit3 },
   { id: 'schedules', title: 'Recurring schedules', icon: CalendarClock },
   { id: 'profiles', title: 'Profiles & languages', icon: Globe },
-  { id: 'brands', title: 'Rooster brands', icon: Star },
   { id: 'activity', title: 'Activity log', icon: Clock },
   { id: 'workers', title: 'Workers & health', icon: Cpu },
-  { id: 'monday', title: 'Monday data', icon: Database },
   { id: 'alerts', title: 'Alert recipients (admin)', icon: Bell },
 ]
 
@@ -59,9 +55,12 @@ function useCompleted() {
       const raw = localStorage.getItem(STORAGE_KEY)
       // One-shot hydration from persisted state on mount; the lint rule
       // is a generic warning against setState in effects, but "load
-      // saved state once" is exactly what useEffect is for.
+      // saved state once" is exactly what useEffect is for. Drop ids of
+      // sections that no longer exist (e.g. the removed 'brands') so a
+      // stale entry can't push the progress bar past 100%.
+      const known = new Set(SECTIONS.map(s => s.id))
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setCompleted(new Set(JSON.parse(raw) as string[]))
+      if (raw) setCompleted(new Set((JSON.parse(raw) as string[]).filter(id => known.has(id))))
     } catch {
       /* localStorage unavailable */
     }
@@ -204,12 +203,11 @@ export default function OnboardingPage() {
             next="scrape"
           >
             <p>
-              This app finds high-quality affiliate-leads for Rooster by scraping
+              This app finds high-quality affiliate leads by scraping
               Google search results across 15 countries, then running each lead
-              through a five-stage enrichment pipeline (3 auto + 2
+              through a three-stage enrichment pipeline (1 auto + 2
               operator-triggered). The end product is a
-              short-list of websites that look like real affiliates and aren&apos;t
-              already on your Monday boards.
+              short-list of websites that look like real affiliates.
             </p>
             <ul>
               <li>
@@ -217,13 +215,13 @@ export default function OnboardingPage() {
                 language) → lands as Organic + PPC rows.
               </li>
               <li>
-                <strong>Enrich</strong> each row through six stages — checks for
-                duplicates, affiliate signals, partner brands, contact info,
+                <strong>Enrich</strong> each row through the pipeline stages —
+                checks for affiliate signals, partner brands, contact info,
                 tracking-tags.
               </li>
               <li>
-                <strong>Review</strong> on the Leads page, override anything the
-                automation got wrong, and ship the keepers to Monday.
+                <strong>Review</strong> on the Leads page and override anything
+                the automation got wrong.
               </li>
             </ul>
             <Tip>
@@ -277,7 +275,7 @@ export default function OnboardingPage() {
               </li>
               <li>
                 <strong>Run full enrichment after scrape</strong> — when ticked,
-                an orchestrator auto-fires all six enrichment stages once
+                an orchestrator auto-fires the enrichment stages once
                 scraping finishes.
               </li>
               <li>
@@ -328,9 +326,8 @@ export default function OnboardingPage() {
                 orchestrator hasn&apos;t spun up enrichment yet.
               </li>
               <li>
-                <Badge tone="sky">enriching · affiliate</Badge> /{' '}
-                <Badge tone="sky">enriching · rooster</Badge> — auto-chain
-                stages 1–3 are running. (S-tag and Contact extraction are
+                <Badge tone="sky">enriching · affiliate</Badge> — the auto
+                affiliate stage is running. (S-tag and Contact extraction are
                 operator-triggered from the job page.)
               </li>
               <li>
@@ -458,8 +455,8 @@ export default function OnboardingPage() {
             next="leads"
           >
             <p>
-              Five stages exist on each lead. The first three run{' '}
-              <strong>automatically</strong> after the scrape; the last two
+              Three stages exist on each lead. The first runs{' '}
+              <strong>automatically</strong> after the scrape; the other two
               are <strong>operator-triggered</strong> from the job detail
               page once the auto-chain is done. Each stage writes back to{' '}
               <Code>google_lead_gen_table</Code> via the{' '}
@@ -467,28 +464,14 @@ export default function OnboardingPage() {
             </p>
             <ol>
               <li>
-                <strong>1. Monday duplicate check</strong>{' '}
-                <em>(auto)</em> — pure DB query against the Monday replica
-                tables. No fetch needed; sets <Code>is_on_monday</Code>.
-              </li>
-              <li>
-                <strong>2. Affiliate detection</strong>{' '}
+                <strong>1. Affiliate detection</strong>{' '}
                 <em>(auto)</em> — fetches the lead&apos;s homepage in a
                 browser, scores it for affiliate signals (out-bound
                 tracking links, casino keywords, sponsored language). Sets{' '}
                 <Code>is_affiliate</Code> + confidence.
               </li>
               <li>
-                <strong>3. Rooster partner check</strong>{' '}
-                <em>(auto, last in chain)</em> — runs three cheap signals
-                against the cached HTML: outgoing <Code>href</Code> match
-                against brand domains,{' '}
-                <Code>&lt;img alt=&quot;Brand&quot;&gt;</Code> match, and
-                image filename token match (logo-spinjo.svg). Escalates to
-                a <Code>rooster_deep</Code> follow-up if none hit.
-              </li>
-              <li>
-                <strong>4. S-tag extraction</strong>{' '}
+                <strong>2. S-tag extraction</strong>{' '}
                 <em>(manual, affiliate rows only)</em> — follows outbound
                 tracking links, takes a screenshot of each landing, pulls
                 out <Code>btag</Code> / <Code>stag</Code> / <Code>cxd</Code>{' '}
@@ -497,16 +480,16 @@ export default function OnboardingPage() {
                 rows.
               </li>
               <li>
-                <strong>5. Contact extraction</strong>{' '}
+                <strong>3. Contact extraction</strong>{' '}
                 <em>(manual)</em> — visits homepage, <Code>/contact</Code>,{' '}
                 <Code>/about</Code>, <Code>/impressum</Code> and runs a
                 cascade: regex → GPT-4o web search → Hunter.io fallback.
               </li>
             </ol>
             <p className="mt-2 text-[11px] italic text-[color:var(--color-text-secondary)]">
-              S-tag duplicate verification (the old stage 6) is hidden
-              from the UI for now — backend RPC is still wired up and
-              will surface again once the workflow is finalised.
+              S-tag duplicate verification is hidden from the UI for now
+              — backend RPC is still wired up and will surface again once
+              the workflow is finalised.
             </p>
             <Tip>
               The pipeline badges on the jobs table (small circles in the
@@ -526,7 +509,7 @@ export default function OnboardingPage() {
             <p>
               <Code>/leads</Code> is the one-table view of every scraped lead.
               It mirrors the <Code>google_lead_gen_table</Code> with all
-              enrichment columns, monday.com-style advanced filters, multi-key
+              enrichment columns, spreadsheet-style advanced filters, multi-key
               sort, search, and per-row actions.
             </p>
             <ul>
@@ -570,7 +553,7 @@ export default function OnboardingPage() {
               </li>
               <li>
                 <strong>Bulk retry</strong> — the bar&apos;s Affiliate /
-                Rooster / Contact / S-tags buttons re-enqueue the selected
+                Contact / S-tags buttons re-enqueue the selected
                 leads for any single enrichment stage. Great for retrying a
                 handful of failed domains.
               </li>
@@ -601,8 +584,8 @@ export default function OnboardingPage() {
             next="schedules"
           >
             <p>
-              Every boolean enrichment flag (Is on Monday, Is an affiliate,
-              Rooster brand, Has contacts, S-tags, Verified s-tags) has an
+              Every boolean enrichment flag (Is an affiliate,
+              Has contacts, S-tags, Verified s-tags) has an
               inline editor on the leads table. Setting any of them stamps an{' '}
               <Code>*_overridden_at</Code> timestamp so the orchestrator
               skips that stage for that lead going forward.
@@ -669,7 +652,7 @@ export default function OnboardingPage() {
             done={completed.has('profiles')}
             onToggle={() => toggle('profiles')}
             prev="schedules"
-            next="brands"
+            next="activity"
           >
             <p>
               <Code>/profiles</Code> manages the 15 GoLogin country profiles —
@@ -710,45 +693,12 @@ export default function OnboardingPage() {
           </Section>
 
           <Section
-            id="brands"
-            title="Rooster brands"
-            icon={Star}
-            done={completed.has('brands')}
-            onToggle={() => toggle('brands')}
-            prev="profiles"
-            next="activity"
-          >
-            <p>
-              <Code>/brands</Code> is the editable list of Rooster partner
-              domains. The Rooster check stage searches each lead&apos;s page
-              content and outgoing links for any of the active domains here.
-            </p>
-            <ul>
-              <li>
-                <strong>Add / edit / delete</strong> — domain + display name +
-                optional notes.
-              </li>
-              <li>
-                <strong>Active toggle</strong> — flip to <Code>false</Code> to
-                exclude a brand from the check without deleting its history.
-              </li>
-              <li>
-                Edits take effect immediately — the next enrichment run pulls
-                the active list fresh.
-              </li>
-            </ul>
-            <TryItRow>
-              <TryIt href="/brands" label="Manage Rooster brands" />
-            </TryItRow>
-          </Section>
-
-          <Section
             id="activity"
             title="Activity log"
             icon={Clock}
             done={completed.has('activity')}
             onToggle={() => toggle('activity')}
-            prev="brands"
+            prev="profiles"
             next="workers"
           >
             <p>
@@ -788,7 +738,7 @@ export default function OnboardingPage() {
             done={completed.has('workers')}
             onToggle={() => toggle('workers')}
             prev="activity"
-            next="monday"
+            next="alerts"
           >
             <p>
               The dashboard at <Code>/</Code> shows a live grid of all six VM
@@ -821,57 +771,20 @@ export default function OnboardingPage() {
           </Section>
 
           <Section
-            id="monday"
-            title="Monday data"
-            icon={Database}
-            done={completed.has('monday')}
-            onToggle={() => toggle('monday')}
-            prev="workers"
-            next="alerts"
-          >
-            <p>
-              <Code>/monday/leads</Code> mirrors four Monday boards (Leads,
-              Affiliates, Not-Relevant Leads, Email-Undelivered Leads) into
-              Supabase. The mirror is what powers the Monday duplicate check
-              and the s-tag verification stage.
-            </p>
-            <ul>
-              <li>
-                <strong>Webhooks</strong> — Monday pushes each
-                create/update/delete event to <Code>/api/monday/webhook</Code>{' '}
-                in real time.
-              </li>
-              <li>
-                <strong>Nightly re-sync</strong> — Vercel cron at 23:00 UTC
-                hits <Code>/api/monday/sync</Code> as a safety net for missed
-                webhook events. Full re-sync of all four boards.
-              </li>
-              <li>
-                <strong>Manual sync</strong> — run{' '}
-                <Code>npm run monday:sync</Code> locally any time the mirror
-                feels behind.
-              </li>
-            </ul>
-            <TryItRow>
-              <TryIt href="/monday/leads" label="Browse Monday data" />
-            </TryItRow>
-          </Section>
-
-          <Section
             id="alerts"
             title="Alert recipients (admin)"
             icon={Bell}
             done={completed.has('alerts')}
             onToggle={() => toggle('alerts')}
-            prev="monday"
+            prev="workers"
           >
             <p>
               When the tool finds a strong lead, we&apos;ll email an
               affiliate manager so they can act on it without watching{' '}
               <Code>/leads</Code> all day. The recipient registry lives at{' '}
               <Code>/admin/alerts</Code>; the auto-trigger conditions
-              (e.g. &quot;is_affiliate=true AND has_contact=true AND not
-              on Monday&quot;) are still being defined and will land in a
+              (e.g. &quot;is_affiliate=true AND has_contact=true&quot;)
+              are still being defined and will land in a
               follow-up. Until then, the page just manages the list and
               every alert sent is recorded in <Code>lead_alerts_log</Code>.
             </p>

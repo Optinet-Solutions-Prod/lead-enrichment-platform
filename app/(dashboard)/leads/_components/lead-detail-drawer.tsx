@@ -5,7 +5,6 @@ import Link from 'next/link'
 import {
   Brain,
   Check,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -19,7 +18,6 @@ import {
   MapPin,
   Phone,
   RotateCcw,
-  Send,
   Tag,
   Trash2,
   User,
@@ -33,18 +31,11 @@ import {
   setCachedLeadDetail,
 } from '../_lib/detail-cache'
 import {
-  confirmMondayCandidate,
   deleteLeadScreenshot,
   forceEnrichLeadsAction,
-  pushLeadToMondayAction,
-  pushLeadToMondayNotRelevantAction,
   setNotRelevantAction,
   type MarkNotRelevantState,
-  type PushNotRelevantState,
-  type PushToMondayState,
 } from '../actions'
-import type { MondayCandidate } from '../_lib/detail-query'
-import { MAX_OPERATOR_NOTE_LEN } from '@/lib/monday/push-constants'
 
 type Detail = LeadDetail
 
@@ -358,8 +349,6 @@ function DetailBody({
           leadId={lead.id}
           inheritedFromLeadId={lead.inherited_from_lead_id}
           inheritedAt={lead.inherited_at}
-          isOnMonday={lead.is_on_monday === true}
-          mondayBoard={lead.monday_board}
           isNotRelevant={lead.is_not_relevant}
           forceEnrich={lead.force_enrich}
         />
@@ -370,17 +359,6 @@ function DetailBody({
         isNotRelevant={lead.is_not_relevant}
         markedAt={lead.not_relevant_marked_at}
         markedBy={lead.not_relevant_marked_by}
-      />
-
-      {!lead.is_not_relevant && lead.monday_board !== 'not_relevant_leads' && (
-        <PushNotRelevantButton leadId={lead.id} />
-      )}
-
-      <PushToMondayPanel
-        leadId={lead.id}
-        pushedAt={lead.pushed_to_monday_at}
-        pushedItemId={lead.monday_pushed_item_id}
-        pushedBy={lead.monday_pushed_by}
       />
 
       <Section title="Context">
@@ -450,30 +428,6 @@ function DetailBody({
         )}
       </Section>
 
-      <Section title="Monday duplicate check">
-        <KV
-          label="On Monday?"
-          value={
-            lead.is_on_monday === null
-              ? '—'
-              : lead.is_on_monday
-                ? (
-                  <span className="inline-flex flex-wrap items-center gap-1.5">
-                    <span>{lead.monday_board ?? 'Yes'}</span>
-                    <MatchKindBadge kind={lead.monday_match_kind} />
-                  </span>
-                )
-                : 'No'
-          }
-        />
-        {lead.monday_item_id && (
-          <KV label="Item ID" value={lead.monday_item_id} />
-        )}
-        {lead.is_on_monday !== true && (detail.monday_candidates?.length ?? 0) > 0 && (
-          <PossibleMondayMatches leadId={lead.id} candidates={detail.monday_candidates} />
-        )}
-      </Section>
-
       {detail.serp_screenshot_url && (
         <SerpScreenshotSection url={detail.serp_screenshot_url} />
       )}
@@ -513,49 +467,6 @@ function DetailBody({
         )}
       </Section>
 
-      <Section title="Rooster brand check">
-        <KV
-          label="Rooster partner?"
-          value={
-            lead.is_rooster_partner === null ? (
-              '—'
-            ) : (
-              <span className="inline-flex flex-wrap items-center gap-1.5">
-                {lead.is_rooster_partner ? (lead.brand ?? 'Yes') : 'No'}
-                {lead.rooster_source === 'monday' && <MondayBadge title="Rooster-partner status identified from the matched Monday.com item, not our enrichment." />}
-              </span>
-            )
-          }
-        />
-        {lead.rooster_brands && lead.rooster_brands.length > 0 && (
-          <ul className="mt-1 space-y-0.5 text-[11px]">
-            {lead.rooster_brands.map((b, i) => (
-              <li key={i} className="text-[color:var(--color-text-primary)]">
-                <span className="font-medium">{b.domain}</span>
-                {b.brand_name && <span className="text-[color:var(--color-text-secondary)]"> — {b.brand_name}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Positive callout: promotes one of our brands (Rooster partner) but
-          isn't recorded on Monday yet — i.e. a fresh affiliate to onboard.
-          Only fires when both signals agree, sitting right under the two
-          checks (On Monday? + Rooster partner?) it draws from. */}
-      {lead.is_rooster_partner === true && lead.is_on_monday !== true && (
-        <section className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-900">
-            <span aria-hidden="true">🎯</span>
-            New affiliate candidate
-          </div>
-          <p className="mt-0.5 text-[11px] text-emerald-800">
-            Promotes one of our brands but isn&apos;t on Monday yet — a lead to
-            onboard.
-          </p>
-        </section>
-      )}
-
       <Section title="Contacts">
         {!detail.contact ? (
           <p className="text-[color:var(--color-text-secondary)]">Not yet extracted.</p>
@@ -575,22 +486,7 @@ function DetailBody({
                   <Tag className="h-3 w-3" />
                   <span>{t.source_param ?? 'tag'}={t.s_tag}</span>
                   <span className="ml-auto flex flex-wrap items-center gap-1">
-                    {t.is_rooster_brand && (
-                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-800">
-                        Rooster brand
-                      </span>
-                    )}
-                    {t.origin === 'monday' && <MondayBadge title="Tracking id inherited from the matched Monday.com item." />}
-                    {t.is_existing_on_monday === true && (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-800">
-                        on Monday
-                      </span>
-                    )}
-                    {t.is_existing_on_monday === false && (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-800">
-                        new
-                      </span>
-                    )}
+                    {t.origin === 'monday' && <MondayBadge title="Tracking id inherited from a matched Monday.com item (legacy integration)." />}
                     {t.extracted_via === 'mobile' && (
                       <span
                         className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800"
@@ -694,11 +590,6 @@ function DetailBody({
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
-                      {sib.is_rooster_partner && (
-                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-800">
-                          Rooster
-                        </span>
-                      )}
                       <span className="rounded-full bg-[color:var(--color-bg-primary)] px-2 py-0.5 font-mono text-[10px] text-[color:var(--color-text-secondary)]">
                         ×{sib.shared_count}
                       </span>
@@ -710,74 +601,6 @@ function DetailBody({
           </ul>
         )}
       </Section>
-    </div>
-  )
-}
-
-/** Fuzzy "possible Monday matches" surfaced when the exact matcher found
- *  nothing. The operator eyeballs each candidate and confirms the right one,
- *  which sets a manual override (persists across future scrapes). */
-function PossibleMondayMatches({
-  leadId,
-  candidates,
-}: {
-  leadId: number
-  candidates: MondayCandidate[]
-}) {
-  const [pending, startTransition] = useTransition()
-  const [confirmedId, setConfirmedId] = useState<string | null>(null)
-  const BOARD_LABEL: Record<string, string> = {
-    affiliates: 'Affiliates',
-    leads: 'Leads',
-    not_relevant_leads: 'Not Relevant',
-    email_undelivered_leads: 'Email Undelivered',
-  }
-  return (
-    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[11px]">
-      <p className="mb-1.5 font-medium text-amber-900">
-        Possible Monday matches — not an exact hit, so validate before trusting
-      </p>
-      <ul className="flex flex-col gap-1.5">
-        {candidates.map(c => (
-          <li
-            key={`${c.board}:${c.item_id}`}
-            className="flex items-start justify-between gap-2 rounded bg-[color:var(--color-bg-primary)] px-2 py-1.5"
-          >
-            <span className="min-w-0">
-              <span className="block truncate font-medium text-[color:var(--color-text-primary)]">
-                {c.item_name || c.website || c.item_id}
-              </span>
-              <span className="block truncate text-[10px] text-[color:var(--color-text-secondary)]">
-                {(BOARD_LABEL[c.board] ?? c.board)} · matched on {c.matched_on}
-                {c.website ? ` · ${c.website}` : ''}
-              </span>
-            </span>
-            {confirmedId === c.item_id ? (
-              <span className="shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800">
-                Confirmed ✓
-              </span>
-            ) : (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  const fd = new FormData()
-                  fd.set('lead_id', String(leadId))
-                  fd.set('board', c.board)
-                  fd.set('item_id', c.item_id)
-                  startTransition(async () => {
-                    await confirmMondayCandidate(fd)
-                    setConfirmedId(c.item_id)
-                  })
-                }}
-                className="shrink-0 rounded bg-[color:var(--color-accent)] px-2 py-1 text-[10px] font-medium text-white disabled:opacity-50"
-              >
-                This one
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }
@@ -910,41 +733,6 @@ function Section({
         {children}
       </div>
     </section>
-  )
-}
-
-function MatchKindBadge({ kind }: { kind: string | null }) {
-  if (!kind || kind === 'exact') return null
-  const styles: Record<string, { label: string; cls: string; title: string }> = {
-    registered: {
-      label: 'subdomain match',
-      cls: 'bg-amber-100 text-amber-800',
-      title: 'Matched on the registered domain (eTLD+1) — the lead is a subdomain variant of the Monday item.',
-    },
-    exact_name: {
-      label: 'item-title match',
-      cls: 'bg-violet-100 text-violet-800',
-      title: 'Matched on the Monday item’s title — the brand domain is the item name and the Website column on Monday wasn’t filled in.',
-    },
-    registered_name: {
-      label: 'item-title subdomain',
-      cls: 'bg-violet-100 text-violet-800',
-      title: 'Matched on the registered domain of the Monday item’s title — the lead is a subdomain variant of a title-only Monday item (Website column empty).',
-    },
-    mentioned_in_updates: {
-      label: 'in updates',
-      cls: 'bg-sky-100 text-sky-800',
-      title: 'Matched a domain mentioned in a Monday board comment/post on the parent item.',
-    },
-  }
-  const s = styles[kind] ?? { label: kind, cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]', title: '' }
-  return (
-    <span
-      title={s.title}
-      className={['inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide', s.cls].join(' ')}
-    >
-      {s.label}
-    </span>
   )
 }
 
@@ -1193,7 +981,7 @@ function ContactRow({
 }
 
 /** Flatten a contact record into a plain-text block operators can paste
- *  into Monday / a CRM / an email. Prefers the v2 items[] and annotates
+ *  into a CRM / an email. Prefers the v2 items[] and annotates
  *  each line with the tool that found it; falls back to the flat arrays. */
 function buildContactText(contact: NonNullable<LeadDetail['contact']>): string {
   const lines: string[] = []
@@ -1241,16 +1029,12 @@ function MemoryPanel({
   leadId,
   inheritedFromLeadId,
   inheritedAt,
-  isOnMonday,
-  mondayBoard,
   isNotRelevant,
   forceEnrich,
 }: {
   leadId: number
   inheritedFromLeadId: number
   inheritedAt: string | null
-  isOnMonday: boolean
-  mondayBoard: string | null
   isNotRelevant: boolean
   forceEnrich: boolean
 }) {
@@ -1276,18 +1060,11 @@ function MemoryPanel({
   }
 
   // Reason this lead was auto-skipped from enrichment. We compute a
-  // friendly label rather than show the raw boolean trio so the
-  // operator knows WHY the data is from memory (Monday vs prior
-  // local scrape) at a glance.
-  const reason = isOnMonday
-    ? mondayBoard === 'affiliates'
-      ? 'Already a confirmed affiliate on Monday'
-      : mondayBoard === 'not_relevant_leads'
-        ? 'Already on Monday Not Relevant board'
-        : 'Already on Monday'
-    : isNotRelevant
-      ? 'Previously flagged not-relevant'
-      : 'Same domain seen in an earlier scrape'
+  // friendly label rather than show the raw booleans so the operator
+  // knows WHY the data is from memory at a glance.
+  const reason = isNotRelevant
+    ? 'Previously flagged not-relevant'
+    : 'Same domain seen in an earlier scrape'
 
   const inheritedDate = inheritedAt
     ? new Date(inheritedAt).toLocaleDateString(undefined, {
@@ -1365,24 +1142,11 @@ function NotRelevantPanel({
 }) {
   const initial: MarkNotRelevantState = null
   const [state, action, pending] = useActionState(setNotRelevantAction, initial)
-  const pushInitial: PushNotRelevantState = null
-  const [pushState, pushAction, pushPending] = useActionState(
-    pushLeadToMondayNotRelevantAction,
-    pushInitial,
-  )
   const [confirming, setConfirming] = useState(false)
-  // Default true — most operators want the Monday-side record too,
-  // and the prompt's UX clearer when the heavier action is the
-  // default rather than buried.
-  const [alsoPushToMonday, setAlsoPushToMonday] = useState(true)
 
   useEffect(() => {
     if (state?.status === 'ok') invalidateLeadDetailCache(leadId)
   }, [state, leadId])
-
-  useEffect(() => {
-    if (pushState?.status === 'ok') invalidateLeadDetailCache(leadId)
-  }, [pushState, leadId])
 
   // Optimistic flip — server action revalidates the lead drawer's data
   // source on next open, but the panel updates immediately so the user
@@ -1444,283 +1208,16 @@ function NotRelevantPanel({
       </p>
       {confirming && (
         <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-2.5 py-2">
-          <label className="flex cursor-pointer items-start gap-2 text-[11px] text-amber-900">
-            <input
-              type="checkbox"
-              checked={alsoPushToMonday}
-              onChange={e => setAlsoPushToMonday(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-amber-700"
-            />
-            <span>
-              <strong>Also push to Monday Not Relevant board</strong>
-              <span className="block text-[10px] text-amber-800/80">
-                Recommended — adds a permanent record so future scrapes of the
-                same domain auto-skip via the Monday duplicate check, not just
-                the local flag.
-              </span>
-            </span>
-          </label>
-          {alsoPushToMonday ? (
-            <form action={pushAction} className="flex items-center gap-2">
-              <input type="hidden" name="lead_id" value={leadId} />
-              <button
-                type="submit"
-                disabled={pushPending}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {pushPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                Push to Monday + mark not relevant
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                disabled={pushPending}
-                className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] hover:bg-[color:var(--color-bg-secondary)]"
-              >
-                Cancel
-              </button>
-            </form>
-          ) : (
-            <form action={action} className="flex items-center gap-2">
-              <input type="hidden" name="lead_id" value={leadId} />
-              <input type="hidden" name="value" value="true" />
-              <button
-                type="submit"
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
-                Confirm (local only)
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                disabled={pending}
-                className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] hover:bg-[color:var(--color-bg-secondary)]"
-              >
-                Cancel
-              </button>
-            </form>
-          )}
-        </div>
-      )}
-      {state?.status === 'error' && (
-        <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">
-          {state.error}
-        </p>
-      )}
-      {pushState?.status === 'error' && (
-        <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">
-          {pushState.error}
-        </p>
-      )}
-      {pushState?.status === 'ok' && (
-        <p className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
-          {pushState.message}
-        </p>
-      )}
-    </section>
-  )
-}
-
-/**
- * Standalone "Push to Monday Not Relevant" button — sits between
- * the Not-Relevant panel and the regular Push-to-Monday panel.
- * Click expands a comment textarea (mirrors the regular Push-to-
- * Monday panel) so the operator can leave context before confirming.
- * The push creates a new item on Monday's Not Relevant board with
- * status="Not relevant" and Owner set to the operator's Monday user.
- */
-function PushNotRelevantButton({ leadId }: { leadId: number }) {
-  const initial: PushNotRelevantState = null
-  const [state, action, pending] = useActionState(
-    pushLeadToMondayNotRelevantAction,
-    initial,
-  )
-  const [confirming, setConfirming] = useState(false)
-
-  useEffect(() => {
-    if (state?.status === 'ok') invalidateLeadDetailCache(leadId)
-  }, [state, leadId])
-
-  return (
-    <section className="rounded-md border border-amber-200 bg-amber-50/40 px-3 py-2.5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-amber-900">
-            Push to Monday — Not Relevant
-          </p>
-          <p className="mt-0.5 text-[10px] text-amber-800">
-            Adds the domain to Monday&apos;s Not Relevant board (status
-            <em> Not relevant</em>, assigned to you) and marks it
-            not-relevant locally. Future scrapes of the same domain
-            auto-skip.
-          </p>
-        </div>
-        {!confirming && (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Send className="h-3 w-3" />
-            Push & mark
-          </button>
-        )}
-      </div>
-
-      {confirming && (
-        <form action={action} className="mt-2 flex flex-col gap-2">
-          <input type="hidden" name="lead_id" value={leadId} />
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-medium text-amber-900">
-              Comment (optional) — fills the item&apos;s Comments column
-              on Monday
-            </span>
-            <textarea
-              name="note"
-              rows={3}
-              maxLength={MAX_OPERATOR_NOTE_LEN}
-              disabled={pending}
-              placeholder="Why was this flagged as not relevant? Left blank, nothing extra is posted."
-              className="w-full resize-y rounded-md border border-amber-300 bg-white px-2 py-1.5 text-[11px] text-amber-900 placeholder:text-amber-700/60 focus:border-amber-500 focus:outline-none disabled:opacity-50"
-            />
-          </label>
-          <div className="flex items-center gap-2">
+          <form action={action} className="flex items-center gap-2">
+            <input type="hidden" name="lead_id" value={leadId} />
+            <input type="hidden" name="value" value="true" />
             <button
               type="submit"
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-400 bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {pending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Send className="h-3 w-3" />
-              )}
-              Confirm push
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={pending}
-              className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] text-amber-900 hover:bg-amber-100"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      {state?.status === 'error' && (
-        <p className="mt-2 rounded-md bg-red-100 px-2 py-1 text-[11px] text-red-800">
-          {state.error}
-        </p>
-      )}
-      {state?.status === 'ok' && (
-        <p className="mt-2 rounded-md bg-emerald-100 px-2 py-1 text-[11px] text-emerald-900">
-          {state.message}
-        </p>
-      )}
-    </section>
-  )
-}
-
-function PushToMondayPanel({
-  leadId,
-  pushedAt,
-  pushedItemId,
-  pushedBy,
-}: {
-  leadId: number
-  pushedAt: string | null
-  pushedItemId: string | null
-  pushedBy: string | null
-}) {
-  const initial: PushToMondayState = null
-  const [state, action, pending] = useActionState(pushLeadToMondayAction, initial)
-  const [confirming, setConfirming] = useState(false)
-
-  useEffect(() => {
-    if (state?.status === 'ok') invalidateLeadDetailCache(leadId)
-  }, [state, leadId])
-
-  // After a successful push the row's pushedAt won't reflect immediately
-  // (drawer fetches its own data via /api/leads/[id]) — but the action
-  // returns the new item_id so we can switch to "already pushed" UI right
-  // away.
-  const successItemId =
-    state?.status === 'ok' ? state.monday_item_id : null
-  const effectivePushedAt = pushedAt ?? (state?.status === 'ok' ? new Date().toISOString() : null)
-  const effectiveItemId = pushedItemId ?? successItemId
-
-  if (effectivePushedAt) {
-    return (
-      <section className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2">
-        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold text-emerald-800">
-            Pushed to Monday
-          </p>
-          <p className="truncate text-[10px] text-emerald-700/80">
-            Item {effectiveItemId} · {new Date(effectivePushedAt).toLocaleString()}
-            {pushedBy ? ` · by ${pushedBy}` : ''}
-          </p>
-        </div>
-      </section>
-    )
-  }
-
-  return (
-    <section className="flex flex-col gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-          Push to Monday
-        </p>
-        {!confirming && (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-accent)] bg-[color:var(--color-accent)]/15 px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-text-primary)] hover:bg-[color:var(--color-accent)]/30"
-          >
-            <Send className="h-3 w-3" />
-            Push to Monday
-          </button>
-        )}
-      </div>
-      <p className="text-[10px] text-[color:var(--color-text-secondary)]">
-        Creates a new item on the <em>Leads</em> board with this lead&apos;s
-        keyword, country, URL, source, primary contact email, and (if
-        present) attaches the screenshot + posts s-tags as an item update.
-      </p>
-      {confirming && (
-        <form action={action} className="flex flex-col gap-2">
-          <input type="hidden" name="lead_id" value={leadId} />
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-medium text-[color:var(--color-text-secondary)]">
-              Comment (optional) — fills the item&apos;s Comments column on Monday
-            </span>
-            <textarea
-              name="note"
-              rows={3}
-              maxLength={MAX_OPERATOR_NOTE_LEN}
-              disabled={pending}
-              placeholder="Add any context for the team — left blank, nothing extra is posted."
-              className="w-full resize-y rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2 py-1.5 text-[11px] text-[color:var(--color-text-primary)] placeholder:text-[color:var(--color-text-secondary)]/60 focus:border-[color:var(--color-accent)] focus:outline-none disabled:opacity-50"
-            />
-          </label>
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-accent)] bg-[color:var(--color-accent)]/30 px-2.5 py-1 text-[11px] font-semibold hover:bg-[color:var(--color-accent)]/50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {pending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Send className="h-3 w-3" />
-              )}
-              Confirm push
+              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+              Confirm
             </button>
             <button
               type="button"
@@ -1730,8 +1227,8 @@ function PushToMondayPanel({
             >
               Cancel
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
       {state?.status === 'error' && (
         <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">

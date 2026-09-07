@@ -8,7 +8,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/user-preferences'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
-import { Pagination } from '../monday/_components/pagination'
+import { Pagination } from '../_components/pagination'
 import { AutoRefresh } from './_components/auto-refresh'
 import { EnqueueForm } from './_components/enqueue-form'
 import { JobsCardList, JobsTable } from './_components/jobs-table'
@@ -17,7 +17,7 @@ import { getFleetQueueSnapshot, listActiveProfiles, queryJobs } from './_lib/que
 
 type SearchParams = Record<string, string | string[] | undefined>
 
-// 0 is the "All" sentinel — see ALL_ROWS in monday/_components/pagination.tsx.
+// 0 is the "All" sentinel — see ALL_ROWS in _components/pagination.tsx.
 // queryJobs substitutes a soft cap so a multi-thousand-job table doesn't lock
 // up the browser.
 const PAGE_SIZES = [20, 50, 100, 0] as const

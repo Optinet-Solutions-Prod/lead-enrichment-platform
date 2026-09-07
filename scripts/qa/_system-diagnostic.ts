@@ -2,7 +2,6 @@
  * End-of-session sanity probe. Prints a compact report card for:
  * - Fleet + workers
  * - Enigma bandwidth poller
- * - Monday mirror freshness per board
  * - Recent scrape volume & failure rate
  * - Anything hung in the queue
  *
@@ -111,32 +110,11 @@ async function main() {
     console.log(`  is_low:    ${s.is_low}`)
   })
 
-  await section('Monday mirror · freshness per board', async () => {
-    const boards = [
-      { key: 'leads', label: 'Leads', table: 'leads_table' },
-      { key: 'affiliates', label: 'Affiliates', table: 'affiliates_table' },
-      { key: 'not_relevant_leads', label: 'Not Relevant', table: 'not_relevant_leads_table' },
-      { key: 'email_undelivered_leads', label: 'Email Undelivered', table: 'email_undelivered_leads_table' },
-    ] as const
-    for (const b of boards) {
-      const [{ count }, latest] = await Promise.all([
-        supa.from(b.table).select('id', { count: 'exact', head: true }),
-        supa.from(b.table).select('synced_at').order('synced_at', { ascending: false }).limit(1),
-      ])
-      const iso = (latest.data?.[0] as { synced_at: string | null } | undefined)?.synced_at ?? null
-      const ageMin = iso ? Math.round((Date.now() - new Date(iso).getTime()) / 60_000) : null
-      const stale = ageMin === null || ageMin > 24 * 60
-      console.log(`  ${b.label.padEnd(22)} items=${(count ?? 0).toString().padStart(6)}  last_synced=${iso ?? 'never'} (${ageMin ?? '?'} min ago) ${stale ? '⚠ STALE' : 'OK'}`)
-    }
-  })
-
-  await section('S-tags · mapping status', async () => {
-    const [{ count: total }, { count: mapped }] = await Promise.all([
-      supa.from('s_tags_table').select('id', { count: 'exact', head: true }),
-      supa.from('s_tags_table').select('id', { count: 'exact', head: true }).eq('is_existing_on_monday', true),
-    ])
+  await section('S-tags · extraction status', async () => {
+    const { count: total } = await supa
+      .from('s_tags_table')
+      .select('id', { count: 'exact', head: true })
     console.log(`  total tag rows:            ${total ?? 0}`)
-    console.log(`  mapped to Monday item(s):  ${mapped ?? 0}`)
     // Unique s_tag values via SQL — do it in memory since we don't have SQL access
     const { data: sample } = await supa
       .from('s_tags_table')

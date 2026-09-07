@@ -3,7 +3,6 @@
 import { useActionState, useEffect, useState } from 'react'
 import {
   AlertTriangle,
-  CheckCircle2,
   EyeOff,
   Loader2,
   Mail,
@@ -70,15 +69,6 @@ export function BulkActionsBar({ selectedIds, onClear }: Props) {
           pending={retryPending}
         >
           Affiliate
-        </RetryButton>
-        <RetryButton
-          stage="rooster"
-          idCsv={idCsv}
-          icon={<CheckCircle2 className="h-3 w-3" />}
-          action={retryAction}
-          pending={retryPending}
-        >
-          Rooster
         </RetryButton>
         <RetryButton
           stage="contact"
@@ -208,7 +198,7 @@ function RetryButton({
   action,
   pending,
 }: {
-  stage: 'affiliate' | 'rooster' | 'contact' | 'stag'
+  stage: 'affiliate' | 'contact' | 'stag'
   idCsv: string
   icon: React.ReactNode
   children: React.ReactNode

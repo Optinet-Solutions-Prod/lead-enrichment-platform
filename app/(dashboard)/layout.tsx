@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { getOrgContext } from '@/lib/orgs/context'
 import { DashboardShell } from './_components/dashboard-shell'
 import { InteractiveBanner } from './_components/interactive-banner'
 import { loadProxyBandwidth } from './_lib/dashboard-queries'
@@ -15,6 +16,12 @@ export default async function DashboardLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // Organization gate: every dashboard page lives inside an org. A signed-in
+  // user with no membership yet (fresh signup without an invite) goes to
+  // /welcome to create one — /welcome sits outside this layout, so no loop.
+  const org = await getOrgContext()
+  if (!org) redirect('/welcome')
 
   // Show the local-part of the email as the username (e.g. "admin" for
   // admin@rooster.local). Keeps the sidebar concise.
@@ -64,6 +71,7 @@ export default async function DashboardLayout({
   return (
     <DashboardShell
       username={username}
+      orgName={org.orgName}
       isAdmin={isAdmin}
       proxyBandwidth={proxyBandwidth}
       openFeedbackCount={openFeedbackCount}

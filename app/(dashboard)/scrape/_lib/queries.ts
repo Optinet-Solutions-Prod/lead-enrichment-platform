@@ -16,7 +16,7 @@ import {
   type StageKey,
   type StageTimings,
 } from './pipeline'
-import { ENGINE_CONFIGS } from '@/lib/monday/engine-config'
+import { ENGINE_CONFIGS } from '@/lib/engines'
 
 // Re-export client-safe types for callers that already import from
 // queries.ts. The actual definitions live in ./pipeline because that
@@ -257,7 +257,7 @@ export type StageStatus = {
   lastRunAt: string | null
   total: number
   /** The primary "positive" count for the stage — interpretation varies:
-   *  Monday/stagCheck = matched; Affiliate/Rooster/Contact/Stag = positive flag count. */
+   *  stagCheck = matched; Affiliate/Contact/Stag = positive flag count. */
   positive: number
   /** Fetch-errored (only tracked for affiliate detection via confidence=ERROR). */
   errored: number
@@ -268,9 +268,7 @@ export type StageStatus = {
 }
 
 export type StageSummary = {
-  monday: StageStatus
   affiliate: StageStatus
-  rooster: StageStatus
   contact: StageStatus
   stag: StageStatus
   stagCheck: StageStatus
@@ -292,9 +290,7 @@ export async function fetchStageSummary(jobId: string): Promise<StageSummary> {
     .select(
       [
         'id',
-        'monday_checked_at, is_on_monday',
         'affiliate_checked_at, is_affiliate, affiliate_confidence',
-        'rooster_checked_at, is_rooster_partner',
         'contact_checked_at, has_contact_details',
         's_tags_checked_at, has_s_tags',
         'stag_check_checked_at',
@@ -305,32 +301,10 @@ export async function fetchStageSummary(jobId: string): Promise<StageSummary> {
 
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>
   const s: StageSummary = {
-    monday: EMPTY_STATUS(),
     affiliate: EMPTY_STATUS(),
-    rooster: EMPTY_STATUS(),
     contact: EMPTY_STATUS(),
     stag: EMPTY_STATUS(),
     stagCheck: EMPTY_STATUS(),
-  }
-  // Scope the tag scan to this job's leads — otherwise this fetches
-  // every s_tags_table row in the DB and counts matches that belong
-  // to other jobs against the current job's summary.
-  const summaryLeadIds = rows
-    .map(r => r.id as number | undefined)
-    .filter((id): id is number => typeof id === 'number')
-  const tagMatchedByLead = new Map<number, boolean>()
-  if (summaryLeadIds.length > 0) {
-    const { data: tagData, error: tagErr } = await svc
-      .from('s_tags_table')
-      .select('lead_id, is_existing_on_monday')
-      .not('is_existing_on_monday', 'is', null)
-      .in('lead_id', summaryLeadIds)
-    if (tagErr) throw tagErr
-    for (const t of tagData ?? []) {
-      const leadId = t.lead_id as number
-      if (t.is_existing_on_monday === true) tagMatchedByLead.set(leadId, true)
-      else if (!tagMatchedByLead.has(leadId)) tagMatchedByLead.set(leadId, false)
-    }
   }
 
   // ----- in-flight enrichment-fetch-queue counts -----
@@ -347,7 +321,6 @@ export async function fetchStageSummary(jobId: string): Promise<StageSummary> {
     if (!qErr) {
       const map: Record<string, keyof StageSummary> = {
         affiliate: 'affiliate',
-        rooster: 'rooster',
         contact: 'contact',
         stag: 'stag',
       }
@@ -367,22 +340,19 @@ export async function fetchStageSummary(jobId: string): Promise<StageSummary> {
   }
 
   for (const row of rows) {
-    bump(s.monday, row.monday_checked_at as string | null, row.is_on_monday === true, false)
     bump(
       s.affiliate,
       row.affiliate_checked_at as string | null,
       row.is_affiliate === true,
       row.affiliate_confidence === 'ERROR',
     )
-    bump(s.rooster, row.rooster_checked_at as string | null, row.is_rooster_partner === true, false)
     bump(s.contact, row.contact_checked_at as string | null, row.has_contact_details === true, false)
     bump(s.stag, row.s_tags_checked_at as string | null, row.has_s_tags === true, false)
 
-    // s-tag dup check: stamp is on parent lead row, match status is per tag
-    const leadId = row.id as number | undefined
-    const tagCheckTs = row.stag_check_checked_at as string | null
-    const tagMatched = leadId != null && tagMatchedByLead.get(leadId) === true
-    bump(s.stagCheck, tagCheckTs, tagMatched, false)
+    // s-tag dup check: the stamp lives on the parent lead row. With the
+    // external cross-check gone there is no per-tag match source, so the
+    // rollup tracks run/coverage only (positive stays 0).
+    bump(s.stagCheck, row.stag_check_checked_at as string | null, false, false)
   }
   return s
 }
@@ -476,7 +446,6 @@ export type KickLinkRow = {
   resolved_url: string | null
   source: 'channel_description' | 'stream_title' | 'promo_card' | 'pinned_chat'
   promo_brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type KickStreamerRow = {
@@ -497,10 +466,6 @@ export type KickStreamerRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the streamer (via its channel slug or any of its casino
-   *  links' S-tags / brands) is already known on a Monday board. Null
-   *  before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   about_scraped_at: string | null
   links: KickLinkRow[]
@@ -517,7 +482,7 @@ export async function fetchKickStreamerRows(jobId: string): Promise<KickStreamer
       'id, slug, channel_url, follower_count, is_live, category_name, stream_language, stream_viewer_count, ' +
         'instagram_handle, twitter_handle, facebook_handle, youtube_handle, tiktok_handle, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, about_scraped_at',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, about_scraped_at',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -527,7 +492,7 @@ export async function fetchKickStreamerRows(jobId: string): Promise<KickStreamer
 
   const { data: links } = await svc
     .from('kick_links')
-    .select('kick_streamer_id, url, resolved_url, source, promo_brand, is_known_on_monday')
+    .select('kick_streamer_id, url, resolved_url, source, promo_brand')
     .in('kick_streamer_id', rows.map(r => r.id))
   const linksByStreamer = new Map<string, KickLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<KickLinkRow & { kick_streamer_id: string }>) {
@@ -537,7 +502,6 @@ export async function fetchKickStreamerRows(jobId: string): Promise<KickStreamer
       resolved_url: l.resolved_url,
       source: l.source,
       promo_brand: l.promo_brand,
-      is_known_on_monday: l.is_known_on_monday,
     })
     linksByStreamer.set(l.kick_streamer_id, arr)
   }
@@ -570,7 +534,7 @@ export type YoutubeChannelSummary = {
   /** Channels with a niche_score (Phase 3 scoring has run). */
   scored: number
   likelyAffiliates: number
-  /** Likely affiliates carrying ≥1 S-tag not already on Monday. */
+  /** Likely affiliates flagged as new lead candidates. */
   newCandidates: number
   /** Scored channels with no casino funnel link — slot-gameplay vloggers /
    *  land-based casino / news. Hidden from the default results view. */
@@ -649,7 +613,6 @@ export type YoutubeChannelLinkRow = {
   brand: string | null
   s_tag: string | null
   resolved_url: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type YoutubeChannelRow = {
@@ -667,9 +630,6 @@ export type YoutubeChannelRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the channel's affiliate IDs / brands / links match an
-   *  existing Monday item. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   /** Phase 3 relevance gate: no casino funnel link → hidden from default view. */
   is_not_relevant: boolean | null
@@ -694,7 +654,7 @@ export async function fetchYoutubeChannelRows(jobId: string): Promise<YoutubeCha
     .select(
       'id, channel_url, channel_name, channel_handle, subscriber_count, email, website_url, ' +
         'twitter_url, instagram_url, tiktok_url, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, is_not_relevant, last_video_at, ' +
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, is_not_relevant, last_video_at, ' +
         'about_tab_scraped_at, about_tab_captcha_blocked',
     )
     .eq('scrape_queue_id', jobId)
@@ -707,12 +667,12 @@ export async function fetchYoutubeChannelRows(jobId: string): Promise<YoutubeCha
 
   const { data: links } = await svc
     .from('youtube_channel_links')
-    .select('youtube_channel_id, brand, s_tag, resolved_url, is_known_on_monday')
+    .select('youtube_channel_id, brand, s_tag, resolved_url')
     .in('youtube_channel_id', rows.map(r => r.id))
   const linksByChannel = new Map<string, YoutubeChannelLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<YoutubeChannelLinkRow & { youtube_channel_id: string }>) {
     const arr = linksByChannel.get(l.youtube_channel_id) ?? []
-    arr.push({ brand: l.brand, s_tag: l.s_tag, resolved_url: l.resolved_url, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ brand: l.brand, s_tag: l.s_tag, resolved_url: l.resolved_url })
     linksByChannel.set(l.youtube_channel_id, arr)
   }
 
@@ -748,7 +708,7 @@ export type XCreatorSummary = {
   /** Creators with a niche_score (Phase 3 scoring has run). */
   scored: number
   likelyAffiliates: number
-  /** Likely affiliates with an unknown S-tag/operator or @handle not on Monday. */
+  /** Likely affiliates flagged as new lead candidates. */
   newCandidates: number
   inflight: boolean
   inflightStatus: 'pending' | 'running' | null
@@ -818,7 +778,6 @@ export type XLinkRow = {
   resolved_url: string | null
   source: 'bio' | 'pinned_tweet' | 'website'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type XCreatorRow = {
@@ -839,9 +798,6 @@ export type XCreatorRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the creator's affiliate IDs / brands / links match an
-   *  existing Monday item. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   about_scraped_at: string | null
   links: XLinkRow[]
@@ -858,7 +814,7 @@ export async function fetchXCreatorRows(jobId: string): Promise<XCreatorRow[]> {
       'id, username, profile_url, display_name, followers_count, verified, location, website_url, ' +
         'instagram_handle, youtube_handle, tiktok_handle, facebook_handle, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, about_scraped_at',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, about_scraped_at',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -867,12 +823,12 @@ export async function fetchXCreatorRows(jobId: string): Promise<XCreatorRow[]> {
 
   const { data: links } = await svc
     .from('x_links')
-    .select('x_creator_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('x_creator_id, url, resolved_url, source, brand')
     .in('x_creator_id', rows.map(r => r.id))
   const linksByCreator = new Map<string, XLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<XLinkRow & { x_creator_id: string }>) {
     const arr = linksByCreator.get(l.x_creator_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByCreator.set(l.x_creator_id, arr)
   }
 
@@ -904,7 +860,7 @@ export type TiktokCreatorSummary = {
   /** Creators with a niche_score (Phase 3 scoring has run). */
   scored: number
   likelyAffiliates: number
-  /** Likely affiliates with an unknown S-tag/operator or @handle not on Monday. */
+  /** Likely affiliates flagged as new lead candidates. */
   newCandidates: number
   /** Enriched creators with no funnel link — name-squatters the Phase 2 gate
    *  flagged not-relevant. Hidden from the default results view. */
@@ -988,7 +944,6 @@ export type TiktokLinkRow = {
   resolved_url: string | null
   source: 'bio_link' | 'video_caption'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type TiktokCreatorRow = {
@@ -1005,9 +960,6 @@ export type TiktokCreatorRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the creator's bio/caption links resolve to an S-tag on
-   *  a Monday board. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   /** Phase 2 gate: no funnel link → name-squatter, hidden from default view. */
   is_not_relevant: boolean | null
@@ -1025,7 +977,7 @@ export async function fetchTiktokCreatorRows(jobId: string): Promise<TiktokCreat
     .select(
       'id, username, profile_url, display_name, bio, bio_link, follower_count, verified, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, is_not_relevant, about_scraped_at',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, is_not_relevant, about_scraped_at',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -1034,12 +986,12 @@ export async function fetchTiktokCreatorRows(jobId: string): Promise<TiktokCreat
 
   const { data: links } = await svc
     .from('tiktok_links')
-    .select('tiktok_creator_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('tiktok_creator_id, url, resolved_url, source, brand')
     .in('tiktok_creator_id', rows.map(r => r.id))
   const linksByCreator = new Map<string, TiktokLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<TiktokLinkRow & { tiktok_creator_id: string }>) {
     const arr = linksByCreator.get(l.tiktok_creator_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByCreator.set(l.tiktok_creator_id, arr)
   }
 
@@ -1069,7 +1021,7 @@ export type FbAdvertiserSummary = {
   /** Pages not yet scored — drives the Score button state. */
   unscored: number
   likelyAffiliates: number
-  /** Likely affiliates with an unknown S-tag/operator or page_name not on Monday. */
+  /** Likely affiliates flagged as new lead candidates. */
   newCandidates: number
 }
 
@@ -1110,7 +1062,6 @@ export type FbLinkRow = {
   resolved_url: string | null
   source: 'ad_landing' | 'ad_cta' | 'page_website'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type FbAdvertiserRow = {
@@ -1127,9 +1078,6 @@ export type FbAdvertiserRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when this Page (via name / ID / any of its links' S-tags) is
-   *  already known on a Monday board. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   about_scraped_at: string | null
   links: FbLinkRow[]
@@ -1145,7 +1093,7 @@ export async function fetchFbAdvertiserRows(jobId: string): Promise<FbAdvertiser
     .select(
       'id, page_id, page_name, page_url, page_category, ad_count, total_active_ads, page_website_url, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, about_scraped_at',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, about_scraped_at',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -1154,12 +1102,12 @@ export async function fetchFbAdvertiserRows(jobId: string): Promise<FbAdvertiser
 
   const { data: links } = await svc
     .from('fb_links')
-    .select('fb_advertiser_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('fb_advertiser_id, url, resolved_url, source, brand')
     .in('fb_advertiser_id', rows.map(r => r.id))
   const linksByAdvertiser = new Map<string, FbLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<FbLinkRow & { fb_advertiser_id: string }>) {
     const arr = linksByAdvertiser.get(l.fb_advertiser_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByAdvertiser.set(l.fb_advertiser_id, arr)
   }
 
@@ -1187,7 +1135,7 @@ export type SnapchatCreatorSummary = {
   scored: number
   unscored: number
   likelyAffiliates: number
-  /** Likely affiliates with an unknown S-tag/operator or @handle not on Monday. */
+  /** Likely affiliates flagged as new lead candidates. */
   newCandidates: number
   /** Scored creators with no affiliate funnel link — lifestyle / land-based /
    *  slot-gameplay non-affiliates. Hidden from the default results view. */
@@ -1242,7 +1190,6 @@ export type SnapchatLinkRow = {
   resolved_url: string | null
   source: 'bio_link'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type SnapchatCreatorRow = {
@@ -1259,9 +1206,6 @@ export type SnapchatCreatorRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the creator's bio-link resolves to an S-tag on a
-   *  Monday board. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   /** Phase 3 relevance gate: no affiliate funnel link → hidden from default view. */
   is_not_relevant: boolean | null
@@ -1278,7 +1222,7 @@ export async function fetchSnapchatCreatorRows(jobId: string): Promise<SnapchatC
     .select(
       'id, username, profile_url, display_name, bio, bio_link, subscriber_count, is_snap_star, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate, is_not_relevant',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate, is_not_relevant',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -1287,12 +1231,12 @@ export async function fetchSnapchatCreatorRows(jobId: string): Promise<SnapchatC
 
   const { data: links } = await svc
     .from('snapchat_links')
-    .select('snapchat_creator_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('snapchat_creator_id, url, resolved_url, source, brand')
     .in('snapchat_creator_id', rows.map(r => r.id))
   const linksByCreator = new Map<string, SnapchatLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<SnapchatLinkRow & { snapchat_creator_id: string }>) {
     const arr = linksByCreator.get(l.snapchat_creator_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByCreator.set(l.snapchat_creator_id, arr)
   }
 
@@ -1359,7 +1303,6 @@ export type TelegramLinkRow = {
   resolved_url: string | null
   source: 'post' | 'description'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type TelegramChannelRow = {
@@ -1374,9 +1317,6 @@ export type TelegramChannelRow = {
   discord_url: string | null
   is_likely_affiliate: boolean | null
   niche_score: number | null
-  /** True when the channel's posted / description links resolve to
-   *  an S-tag on a Monday board. Null before scoring runs. */
-  is_known_on_monday: boolean | null
   is_new_lead_candidate: boolean | null
   links: TelegramLinkRow[]
 }
@@ -1391,7 +1331,7 @@ export async function fetchTelegramChannelRows(jobId: string): Promise<TelegramC
     .select(
       'id, username, channel_url, title, description, subscriber_count, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_known_on_monday, is_new_lead_candidate',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -1400,12 +1340,12 @@ export async function fetchTelegramChannelRows(jobId: string): Promise<TelegramC
 
   const { data: links } = await svc
     .from('telegram_links')
-    .select('telegram_channel_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('telegram_channel_id, url, resolved_url, source, brand')
     .in('telegram_channel_id', rows.map(r => r.id))
   const linksByChannel = new Map<string, TelegramLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<TelegramLinkRow & { telegram_channel_id: string }>) {
     const arr = linksByChannel.get(l.telegram_channel_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByChannel.set(l.telegram_channel_id, arr)
   }
 
@@ -1473,7 +1413,6 @@ export type TwitchLinkRow = {
   resolved_url: string | null
   source: 'panel' | 'bio' | 'vod_description' | 'clip_description' | 'stream_title'
   brand: string | null
-  is_known_on_monday: boolean | null
 }
 
 export type TwitchStreamerRow = {
@@ -1501,7 +1440,6 @@ export type TwitchStreamerRow = {
   is_likely_affiliate: boolean | null
   niche_score: number | null
   is_new_lead_candidate: boolean | null
-  is_known_on_monday: boolean | null
   links: TwitchLinkRow[]
 }
 
@@ -1538,7 +1476,7 @@ export async function fetchTwitchStreamerRows(jobId: string): Promise<TwitchStre
       'id, broadcaster_login, display_name, broadcaster_url, profile_image_url, ' +
         'broadcaster_language, is_live, game_name, follower_count, last_activity_at, ' +
         'contact_email, telegram_url, discord_url, ' +
-        'is_likely_affiliate, niche_score, is_new_lead_candidate, is_known_on_monday',
+        'is_likely_affiliate, niche_score, is_new_lead_candidate',
     )
     .eq('scrape_queue_id', jobId)
   if (error) throw error
@@ -1550,12 +1488,12 @@ export async function fetchTwitchStreamerRows(jobId: string): Promise<TwitchStre
 
   const { data: links } = await svc
     .from('twitch_links')
-    .select('twitch_streamer_id, url, resolved_url, source, brand, is_known_on_monday')
+    .select('twitch_streamer_id, url, resolved_url, source, brand')
     .in('twitch_streamer_id', rows.map(r => r.id))
   const linksByStreamer = new Map<string, TwitchLinkRow[]>()
   for (const l of (links ?? []) as unknown as Array<TwitchLinkRow & { twitch_streamer_id: string }>) {
     const arr = linksByStreamer.get(l.twitch_streamer_id) ?? []
-    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand, is_known_on_monday: l.is_known_on_monday })
+    arr.push({ url: l.url, resolved_url: l.resolved_url, source: l.source, brand: l.brand })
     linksByStreamer.set(l.twitch_streamer_id, arr)
   }
 
@@ -1826,57 +1764,28 @@ async function fetchEnrichmentStatus(
   type LeadRow = {
     id: number
     scrape_job_id: string | null
-    is_on_monday: boolean | null
     affiliate_checked_at: string | null
-    rooster_checked_at: string | null
     contact_checked_at: string | null
     s_tags_checked_at: string | null
+    stag_check_checked_at: string | null
   }
   const data = (await selectInChunks(jobIds, chunk =>
     svc
       .from('google_lead_gen_table')
       .select(
-        'id, scrape_job_id, is_on_monday, affiliate_checked_at, rooster_checked_at, contact_checked_at, s_tags_checked_at',
+        'id, scrape_job_id, affiliate_checked_at, contact_checked_at, s_tags_checked_at, stag_check_checked_at',
       )
       .in('scrape_job_id', chunk),
   )) as unknown as LeadRow[]
-
-  // s_tag_check stage applied if any s_tags_table row for the job has a
-  // non-null is_existing_on_monday — fetch that separately, scoped to
-  // this job's leads (was previously a full-table scan that picked up
-  // matches from unrelated jobs).
-  const leadIdsForStag = data
-    .map(r => r.id as number | undefined)
-    .filter((id): id is number => typeof id === 'number')
-  const leadIdsWithStagCheck = new Set<number>()
-  if (leadIdsForStag.length > 0) {
-    type StagDupRow = { lead_id: number; is_existing_on_monday: boolean | null }
-    const stagDup = (await selectInChunks(leadIdsForStag, chunk =>
-      svc
-        .from('s_tags_table')
-        .select('lead_id, is_existing_on_monday')
-        .not('is_existing_on_monday', 'is', null)
-        .in('lead_id', chunk),
-    )) as unknown as StagDupRow[]
-    for (const r of stagDup) leadIdsWithStagCheck.add(r.lead_id as number)
-  }
 
   for (const row of data) {
     const jobId = row.scrape_job_id as string | null
     if (!jobId) continue
     const acc = out.get(jobId) ?? {}
-    if (row.is_on_monday !== null) acc.monday_check = true
     if (row.affiliate_checked_at !== null) acc.affiliate = true
-    if (row.rooster_checked_at !== null) acc.rooster = true
     if (row.contact_checked_at !== null) acc.contacts = true
     if (row.s_tags_checked_at !== null) acc.stags = true
-    // Key on the lead's own id — leadIdsWithStagCheck holds s_tags_table.lead_id
-    // values (the google_lead_gen_table.id space). row.s_tag_id is an FK to
-    // s_tags_table.id (a different sequence), so testing it here only matched on
-    // coincidental id collisions.
-    if (leadIdsWithStagCheck.has(row.id)) {
-      acc.stag_check = true
-    }
+    if (row.stag_check_checked_at !== null) acc.stag_check = true
     out.set(jobId, acc)
   }
   return out
@@ -1969,7 +1878,7 @@ async function fetchSocialProgress(
 
 /** Approximate per-stage durations from min/max of *_checked_at on the
  *  job's leads. The pipeline runs sequentially in practice
- *  (monday → affiliate → rooster|contact|stag → stag_check) so each
+ *  (affiliate → contact|stag → stag_check) so each
  *  stage's duration is `max(checked_at) - prior_stage_end`, with
  *  prior_stage_end falling back to scrape `completed_at` for the first
  *  stage. Approximate but cheap — no schema change required. */
@@ -1989,7 +1898,7 @@ async function fetchStageTimings(
       .select(
         [
           'id, scrape_job_id',
-          'monday_checked_at, affiliate_checked_at, rooster_checked_at',
+          'affiliate_checked_at',
           'contact_checked_at, s_tags_checked_at, stag_check_checked_at',
         ].join(', '),
       )
@@ -2002,18 +1911,14 @@ async function fetchStageTimings(
   type LeadRow = {
     id: number
     scrape_job_id: string | null
-    monday_checked_at: string | null
     affiliate_checked_at: string | null
-    rooster_checked_at: string | null
     contact_checked_at: string | null
     s_tags_checked_at: string | null
     stag_check_checked_at: string | null
   }
 
   type StageMax = {
-    monday: number | null
     affiliate: number | null
-    rooster: number | null
     contact: number | null
     stag: number | null
     stag_check: number | null
@@ -2021,9 +1926,7 @@ async function fetchStageTimings(
      *  still in flight (any stage still has rows with null checked_at). */
     total_leads: number
     /** Per-stage applied row counts — for the in-progress check. */
-    monday_done: number
     affiliate_done: number
-    rooster_done: number
     contact_done: number
     stag_done: number
     stag_check_done: number
@@ -2033,16 +1936,12 @@ async function fetchStageTimings(
   for (const r of leadRows as unknown as LeadRow[]) {
     if (!r.scrape_job_id) continue
     const acc = perJob.get(r.scrape_job_id) ?? {
-      monday: null,
       affiliate: null,
-      rooster: null,
       contact: null,
       stag: null,
       stag_check: null,
       total_leads: 0,
-      monday_done: 0,
       affiliate_done: 0,
-      rooster_done: 0,
       contact_done: 0,
       stag_done: 0,
       stag_check_done: 0,
@@ -2056,9 +1955,7 @@ async function fetchStageTimings(
       if (cur === null || ms > cur) (acc[key] as number | null) = ms
       ;(acc[doneKey] as number) += 1
     }
-    fold('monday', r.monday_checked_at, 'monday_done')
     fold('affiliate', r.affiliate_checked_at, 'affiliate_done')
-    fold('rooster', r.rooster_checked_at, 'rooster_done')
     fold('contact', r.contact_checked_at, 'contact_done')
     fold('stag', r.s_tags_checked_at, 'stag_done')
     fold('stag_check', r.stag_check_checked_at, 'stag_check_done')
@@ -2071,9 +1968,7 @@ async function fetchStageTimings(
     if (!Number.isFinite(startMs) || !Number.isFinite(completedMs)) {
       out.set(job.id, {
         scrape_ms: null,
-        monday_ms: null,
         affiliate_ms: null,
-        rooster_ms: null,
         contact_ms: null,
         stag_ms: null,
         stag_check_ms: null,
@@ -2086,32 +1981,27 @@ async function fetchStageTimings(
     const scrape_ms = Math.max(0, completedMs - startMs)
 
     // Each stage starts at the prior stage's end time. The chain is:
-    //   monday → affiliate → (rooster + stag in parallel) → stag_check
-    //                                                    └→ contact (last)
-    // So contact starts at MAX(rooster_end, stag_end) — it's gated on
-    // both rooster and stag finishing, not just affiliate.
-    const mondayEnd = stages?.monday ?? null
+    //   affiliate → stag → stag_check
+    //            └→ contact (last)
+    // So contact starts at stag_end — it's gated on stag finishing,
+    // not just affiliate.
     const affiliateEnd = stages?.affiliate ?? null
-    const roosterEnd = stages?.rooster ?? null
     const contactEnd = stages?.contact ?? null
     const stagEnd = stages?.stag ?? null
     const stagCheckEnd = stages?.stag_check ?? null
 
-    const monday_ms = mondayEnd !== null ? Math.max(0, mondayEnd - completedMs) : null
-    const affiliateStart = mondayEnd ?? completedMs
+    const affiliateStart = completedMs
     const affiliate_ms = affiliateEnd !== null ? Math.max(0, affiliateEnd - affiliateStart) : null
     const allStart = affiliateEnd ?? affiliateStart
-    const rooster_ms = roosterEnd !== null ? Math.max(0, roosterEnd - allStart) : null
     const stag_ms = stagEnd !== null ? Math.max(0, stagEnd - allStart) : null
     const stagCheckStart = stagEnd ?? allStart
     const stag_check_ms = stagCheckEnd !== null ? Math.max(0, stagCheckEnd - stagCheckStart) : null
-    // Contact starts AFTER rooster + stag finish (new "contact runs last"
-    // chain). Falls back to allStart if neither rooster nor stag has
-    // landed yet.
-    const contactStart = Math.max(roosterEnd ?? allStart, stagEnd ?? allStart)
+    // Contact starts AFTER stag finishes ("contact runs last" chain).
+    // Falls back to allStart if stag hasn't landed yet.
+    const contactStart = stagEnd ?? allStart
     const contact_ms = contactEnd !== null ? Math.max(0, contactEnd - contactStart) : null
 
-    const ends = [completedMs, mondayEnd, affiliateEnd, roosterEnd, contactEnd, stagEnd, stagCheckEnd]
+    const ends = [completedMs, affiliateEnd, contactEnd, stagEnd, stagCheckEnd]
       .filter((v): v is number => typeof v === 'number')
     const lastEnd = ends.length > 0 ? Math.max(...ends) : completedMs
     const total_ms = Math.max(0, lastEnd - startMs)
@@ -2123,18 +2013,14 @@ async function fetchStageTimings(
     const partial = (done: number) => done > 0 && done < total
     const enrichment_in_progress =
       total > 0 &&
-      (partial(stages?.monday_done ?? 0) ||
-        partial(stages?.affiliate_done ?? 0) ||
-        partial(stages?.rooster_done ?? 0) ||
+      (partial(stages?.affiliate_done ?? 0) ||
         partial(stages?.contact_done ?? 0) ||
         partial(stages?.stag_done ?? 0) ||
         partial(stages?.stag_check_done ?? 0))
 
     out.set(job.id, {
       scrape_ms,
-      monday_ms,
       affiliate_ms,
-      rooster_ms,
       contact_ms,
       stag_ms,
       stag_check_ms,
@@ -2143,4 +2029,49 @@ async function fetchStageTimings(
     })
   }
   return out
+}
+
+// ============================================================
+// Maltapark listing queries (plain-HTTP classifieds source — no
+// scoring/enrichment phases; the scraper captures listing cards only)
+// ============================================================
+
+export type MaltaparkListingRow = {
+  id: number
+  listing_id: number
+  title: string | null
+  url: string
+  price_text: string | null
+  thumbnail_url: string | null
+  first_seen_at: string
+  last_seen_at: string
+}
+
+export type MaltaparkListingSummary = {
+  total: number
+}
+
+export async function fetchMaltaparkListingSummary(
+  jobId: string,
+): Promise<MaltaparkListingSummary> {
+  const svc = createServiceClient()
+  const { count } = await svc
+    .from('maltapark_listings')
+    .select('id', { count: 'exact', head: true })
+    .eq('scrape_job_id', jobId)
+  return { total: count ?? 0 }
+}
+
+/** Listing rows for the Maltapark results table, newest listing id first. */
+export async function fetchMaltaparkListingRows(
+  jobId: string,
+): Promise<MaltaparkListingRow[]> {
+  const svc = createServiceClient()
+  const { data, error } = await svc
+    .from('maltapark_listings')
+    .select('id, listing_id, title, url, price_text, thumbnail_url, first_seen_at, last_seen_at')
+    .eq('scrape_job_id', jobId)
+    .order('listing_id', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as unknown as MaltaparkListingRow[]
 }

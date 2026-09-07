@@ -170,11 +170,9 @@ export default async function DashboardPage({
 
 function DailyReportSection({ report }: { report: DailyReport }) {
   const tiles: Array<{ label: string; value: number; hint: string; icon: React.ReactNode }> = [
-    { label: 'Synced from Monday', value: report.syncedFromMonday, hint: 'items mirrored from the boards', icon: <Database className="h-3.5 w-3.5" /> },
     { label: 'Batches scraped', value: report.batchesScraped, hint: 'distinct scrape batches', icon: <Search className="h-3.5 w-3.5" /> },
     { label: 'Scrapes completed', value: report.scrapesCompleted, hint: 'keyword×engine jobs finished', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
     { label: 'Leads found', value: report.leadsFound, hint: 'new leads discovered', icon: <ListChecks className="h-3.5 w-3.5" /> },
-    { label: 'Pushed to Monday', value: report.pushedToMonday, hint: 'leads sent to Monday', icon: <ArrowUpRight className="h-3.5 w-3.5" /> },
   ]
   return (
     <section className="flex flex-col gap-3 rounded-md border border-[color:var(--color-accent)] bg-[color:var(--color-bg-primary)] p-4">
@@ -184,12 +182,12 @@ function DailyReportSection({ report }: { report: DailyReport }) {
             Daily report · {report.label}
           </h2>
           <p className="mt-0.5 text-[11px] text-[color:var(--color-text-secondary)]">
-            Monday sync, scraping, and push activity for the selected UTC day.
+            Scraping and lead activity for the selected UTC day.
           </p>
         </div>
         <DayToggle active={report.day} />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {tiles.map(t => (
           <div key={t.label} className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-2.5">
             <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-text-secondary)]">
@@ -419,7 +417,7 @@ function BandwidthMeter({ bw }: { bw: ProxyBandwidth }) {
 
 function KpiStrip({ data }: { data: DashboardData }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-3">
       <KpiCard
         label="Total leads"
         value={fmt(data.kpiLeads.total)}
@@ -434,11 +432,6 @@ function KpiStrip({ data }: { data: DashboardData }) {
         label="Affiliates · last 7 days"
         kpi={data.kpiAffiliates}
         icon={<Search className="h-4 w-4" />}
-      />
-      <KpiCardWithDelta
-        label="Rooster matches · 7d"
-        kpi={data.kpiRooster}
-        icon={<CheckCircle2 className="h-4 w-4" />}
       />
     </div>
   )
@@ -524,7 +517,7 @@ function PipelineHealth({ data }: { data: DashboardData }) {
 }
 
 function ContactCoverageSection({ coverage }: { coverage: DashboardData['contactCoverage'] }) {
-  const { affiliatesTotal, affiliatesChecked, affiliatesWithContact, leadsWithContact, inheritedFromMonday, affiliatesViaMonday } = coverage
+  const { affiliatesTotal, affiliatesChecked, affiliatesWithContact, leadsWithContact } = coverage
   const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
   const coveragePct = pct(affiliatesWithContact, affiliatesTotal)
   const checkedPct = pct(affiliatesChecked, affiliatesTotal)
@@ -557,20 +550,6 @@ function ContactCoverageSection({ coverage }: { coverage: DashboardData['contact
           label="All leads reachable"
           value={leadsWithContact}
           hint="across the whole base"
-          tone="plain"
-        />
-      </div>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatCard
-          label="Inherited from Monday.com"
-          value={inheritedFromMonday}
-          hint="leads populated from a matched item (no scrape)"
-          tone="plain"
-        />
-        <StatCard
-          label="Affiliates identified via Monday"
-          value={affiliatesViaMonday}
-          hint="classified from Monday, not our enrichment"
           tone="plain"
         />
       </div>

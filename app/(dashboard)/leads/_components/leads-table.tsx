@@ -3,24 +3,21 @@
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { Check, CheckSquare, ExternalLink, EyeOff, Link2, Send, Square, Zap } from 'lucide-react'
+import { Check, CheckSquare, ExternalLink, EyeOff, Link2, Square, Zap } from 'lucide-react'
 import { isInteractiveTarget } from '@/lib/dom/is-interactive-target'
-import { SortHeader } from '../../monday/_components/sort-header'
+import { SortHeader } from '../../_components/sort-header'
 import { RowContextMenu, type ContextMenuAction } from '../../_components/row-context-menu'
 import type { LeadRow } from '../_lib/query'
 import {
   forceEnrichLeadsAction,
-  pushLeadToMondayNotRelevantAction,
   setAffiliateLabel,
   setContactLabel,
   setNotRelevantAction,
-  setRoosterLabel,
   setStagLabel,
 } from '../actions'
 import { BooleanLabelEditor } from './boolean-label-editor'
 import { BulkActionsBar } from './bulk-actions-bar'
 import { LeadDetailDrawer } from './lead-detail-drawer'
-import { MondayLabelEditor } from './monday-label-editor'
 import { StagCheckHint } from './stag-check-hint'
 
 type Props = {
@@ -391,7 +388,7 @@ export function LeadsTable({
       {
         label: isBulk ? `Force enrich ${n} leads` : 'Force enrich',
         icon: Zap,
-        hint: 'Re-run enrichment even if already on Monday / not relevant',
+        hint: 'Re-run enrichment even if already marked not relevant',
         onClick: () =>
           startAction(async () => {
             const result = await forceEnrichLeadsAction(targetIds)
@@ -405,7 +402,7 @@ export function LeadsTable({
       {
         label: isBulk ? `Mark ${n} as not relevant` : 'Mark as not relevant',
         icon: EyeOff,
-        hint: 'Local flag only — hides from /leads + skips enrichment. Does NOT push to Monday.',
+        hint: 'Hides from /leads + skips enrichment.',
         onClick: () =>
           startAction(async () => {
             let updated = 0
@@ -423,40 +420,6 @@ export function LeadsTable({
                 ? { ok: true, text: `Marked ${updated} lead${updated === 1 ? '' : 's'} as not relevant.` }
                 : { ok: false, text: `Marked ${updated}/${targetIds.length}. Errors: ${errors.slice(0, 2).join('; ')}` },
             )
-            if (errors.length === 0) setSelectedIds(new Set())
-          }),
-        separatorAfter: true,
-      },
-      {
-        label: isBulk ? `Push ${n} to Not Relevant` : 'Push to Monday Not Relevant',
-        icon: Send,
-        // Bulk push is heavy — N sequential create_item calls. Keep
-        // bulk allowed but warn via the hint so operators know what
-        // they're triggering.
-        hint: isBulk
-          ? `Creates ${n} items on Monday — runs sequentially, may take a minute`
-          : 'Creates a Not Relevant board item and marks this lead not-relevant',
-        onClick: () =>
-          startAction(async () => {
-            let pushed = 0
-            const errors: string[] = []
-            for (const id of targetIds) {
-              const fd = new FormData()
-              fd.set('lead_id', String(id))
-              const result = await pushLeadToMondayNotRelevantAction(null, fd)
-              if (result?.status === 'ok') pushed += 1
-              else if (result?.status === 'error') errors.push(`#${id}: ${result.error}`)
-            }
-            setContextToast(
-              errors.length === 0
-                ? { ok: true, text: `Pushed ${pushed} lead${pushed === 1 ? '' : 's'} to Monday Not Relevant.` }
-                : {
-                    ok: false,
-                    text: `Pushed ${pushed}/${targetIds.length}. Errors: ${errors.slice(0, 2).join('; ')}`,
-                  },
-            )
-            // Clear selection after a successful bulk push so the
-            // next right-click starts fresh.
             if (errors.length === 0) setSelectedIds(new Set())
           }),
       },
@@ -561,9 +524,7 @@ export function LeadsTable({
                 </>
               )}
               <Th>{jobContext ? 'Full URL' : 'URL'}</Th>
-              <Th>Is on Monday?</Th>
               <Th>Is an affiliate?</Th>
-              <Th>Rooster brand?</Th>
               <Th>S-tags</Th>
               {/* "Verified s-tags" column hidden — backend stage still
                 runs on the lead row (s_tags_checked_at), surface again
@@ -667,27 +628,11 @@ export function LeadsTable({
                   )}
                 </Td>
                 <Td>
-                  <MondayLabelEditor
-                    leadId={row.id}
-                    isOnMonday={row.is_on_monday}
-                    board={row.monday_board}
-                    isOverridden={row.monday_overridden_at !== null}
-                  />
-                </Td>
-                <Td>
                   <BooleanLabelEditor
                     leadId={row.id}
                     value={row.is_affiliate}
                     isOverridden={row.is_affiliate_overridden_at !== null}
                     action={setAffiliateLabel}
-                  />
-                </Td>
-                <Td>
-                  <BooleanLabelEditor
-                    leadId={row.id}
-                    value={row.is_rooster_partner}
-                    isOverridden={row.is_rooster_overridden_at !== null}
-                    action={setRoosterLabel}
                   />
                 </Td>
                 <Td>
@@ -795,28 +740,12 @@ export function LeadsTable({
                   <CopyRowLinkButton leadId={row.id} />
                 )}
               </Field>
-              <Field label="Is on Monday?">
-                <MondayLabelEditor
-                  leadId={row.id}
-                  isOnMonday={row.is_on_monday}
-                  board={row.monday_board}
-                  isOverridden={row.monday_overridden_at !== null}
-                />
-              </Field>
               <Field label="Is an affiliate?">
                 <BooleanLabelEditor
                   leadId={row.id}
                   value={row.is_affiliate}
                   isOverridden={row.is_affiliate_overridden_at !== null}
                   action={setAffiliateLabel}
-                />
-              </Field>
-              <Field label="Rooster brand?">
-                <BooleanLabelEditor
-                  leadId={row.id}
-                  value={row.is_rooster_partner}
-                  isOverridden={row.is_rooster_overridden_at !== null}
-                  action={setRoosterLabel}
                 />
               </Field>
               <Field label="S-tags">

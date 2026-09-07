@@ -125,7 +125,6 @@ export default function HelpPage() {
 │  scrape_queue · google_lead_gen_table           │
 │  enrichment_fetch_queue · s_tags_table          │
 │  fetched_html_cache · activity_log              │
-│  Monday replica (4 boards)                       │
 └──┬─────────────────────┬─────────────────────────┘
    │ poll                │ poll
    ▼                     ▼
@@ -217,7 +216,7 @@ export default function HelpPage() {
                   If <Code>with_enrichment=true</Code>, the next scheduler-tick
                   cron call (within 60s) invokes{' '}
                   <Code>advance_enrichment_chain(uuid)</Code> which kicks off
-                  the 6-stage enrichment pipeline.
+                  the enrichment pipeline.
                 </>,
               ]}
             />
@@ -243,23 +242,20 @@ export default function HelpPage() {
               <Code>complete</Code>. It&apos;s idempotent — calling it
               repeatedly during a phase is a no-op.
             </p>
-            <Pre>{`pending → affiliate_running → all_running → complete
+            <Pre>{`pending → affiliate_running → complete
 
 Phase 0+1  (pending → affiliate_running)
-  • Run mark_monday_duplicates_for_job (pure DB).
   • Insert enrichment_fetch_queue rows with
     process_stages=['affiliate'] for every non-overridden lead.
 
-Phase 2  (affiliate_running → all_running)
+Phase 2  (affiliate_running → complete)
   • Wait until every lead is either:
       - is_affiliate_overridden_at NOT NULL, or
       - affiliate_checked_at NOT NULL, or
       - has no pending/running/paused queue row for 'affiliate'
-  • Then enqueue rooster + contact (all leads) and stag (affiliate=true only).
-
-Phase 3  (all_running → complete)
-  • Same blocked-check on rooster, contact, and stag.
-  • When all are terminal, set enrichment_status='complete'.`}</Pre>
+  • When all are terminal, set enrichment_status='complete'.
+    S-tag and contact extraction are operator-triggered from
+    the job page.`}</Pre>
             <p>
               Worker side: each enrichment worker polls{' '}
               <Code>claim_enrichment_fetch_job</Code>, opens GoLogin (multi-page
@@ -268,18 +264,6 @@ Phase 3  (all_running → complete)
               (and any extras like resolved s-tags or browser-resolved final
               URLs).
             </p>
-            <Tip>
-              <strong>Rooster cheap → deep escalation.</strong> Stage 3 first
-              runs three cheap signals on cached HTML: outgoing{' '}
-              <Code>href</Code> domain match, <Code>&lt;img alt&gt;</Code>{' '}
-              brand-name match, and image-filename token match
-              (logo-spinjo.svg). If all three miss, score-row enqueues a{' '}
-              <Code>rooster_deep</Code> follow-up that opens the page in
-              Chromium, follows tracking redirects, and checks the resolved
-              hostnames. This catches affiliates that cloak brand links
-              behind /go/ redirects, without paying browser cost on
-              first-pass hits.
-            </Tip>
             <p>
               The score-row endpoint runs the stage logic and writes back to{' '}
               <Code>google_lead_gen_table</Code> — including the relevant{' '}
@@ -313,7 +297,7 @@ Phase 3  (all_running → complete)
                 ],
                 [
                   'google_lead_gen_table',
-                  'One row per scraped lead. Holds scrape output + every enrichment-stage column (is_affiliate, is_rooster_partner, has_contact_details, has_s_tags, *_checked_at timestamps, *_overridden_at timestamps).',
+                  'One row per scraped lead. Holds scrape output + every enrichment-stage column (is_affiliate, has_contact_details, has_s_tags, *_checked_at timestamps, *_overridden_at timestamps).',
                 ],
                 [
                   'enrichment_fetch_queue',
@@ -321,7 +305,7 @@ Phase 3  (all_running → complete)
                 ],
                 [
                   's_tags_table',
-                  'Per-lead extracted tracking tags. s_tag, source_param (btag|stag|cxd|mid|affid), brand, tracking_url, final_url, is_existing_on_monday, screenshot_path, redirect_chain.',
+                  'Per-lead extracted tracking tags. s_tag, source_param (btag|stag|cxd|mid|affid), brand, tracking_url, final_url, screenshot_path, redirect_chain.',
                 ],
                 [
                   'fetched_html_cache',
@@ -330,10 +314,6 @@ Phase 3  (all_running → complete)
                 [
                   'gologin_profiles',
                   '15 country profiles. country_code PK, gologin_profile_id, requires_google_login, is_google_logged_in, languages text[].',
-                ],
-                [
-                  'rooster_brands',
-                  'Editable list of partner brand domains. Active toggle, name, optional notes.',
                 ],
                 [
                   'scheduled_keyword_sets / _items',
@@ -351,10 +331,6 @@ Phase 3  (all_running → complete)
                   'activity_log',
                   'Audit trail of UI mutations. action (dotted scheme), entity_type, entity_id, details jsonb.',
                 ],
-                [
-                  'leads_table / affiliates_table / not_relevant_leads_table / email_undelivered_leads_table',
-                  'Monday board mirror — synced via webhook + nightly cron.',
-                ],
               ]}
             />
           </Section>
@@ -363,7 +339,7 @@ Phase 3  (all_running → complete)
             <p>
               Most user actions go through Next.js server actions, not REST
               endpoints. The few real HTTP routes below exist for
-              webhooks, cron, and worker callbacks.
+              cron and worker callbacks.
             </p>
             <ReferenceTable
               headers={['Method', 'Path', 'Auth', 'Purpose']}
@@ -381,22 +357,10 @@ Phase 3  (all_running → complete)
                   'Lead detail for the row drawer. Returns full enrichment payload + s-tags + screenshot URLs.',
                 ],
                 [
-                  'POST',
-                  '/api/monday/webhook',
-                  'HS256 JWT (MONDAY_WEBHOOK_SECRET)',
-                  'Monday.com event receiver. Handles create_item / change_column_value / item_deleted / create_update etc.',
-                ],
-                [
                   'GET, POST',
                   '/api/scheduler/tick',
                   'Bearer CRON_SECRET',
                   'Vercel cron, every minute. Spawns scrape rows from due scheduled_keyword_sets and advances the enrichment chain.',
-                ],
-                [
-                  'GET, POST',
-                  '/api/monday/sync',
-                  'Bearer CRON_SECRET',
-                  'Vercel cron, daily 23:00 UTC. Full re-sync of all 4 Monday boards into the Supabase mirror. maxDuration=300.',
                 ],
               ]}
             />
@@ -411,11 +375,6 @@ Phase 3  (all_running → complete)
     "lead_id": 12345,
     "html": "<html>…</html>"
   }'`}</Pre>
-            <p>
-              Manually trigger the Monday re-sync:
-            </p>
-            <Pre>{`curl -H "Authorization: Bearer $CRON_SECRET" \\
-  https://your-app.vercel.app/api/monday/sync`}</Pre>
           </Section>
 
           <Section id="rpcs" title="Supabase RPCs" icon={FileCode}>
@@ -462,12 +421,8 @@ Phase 3  (all_running → complete)
                   'pg_cron, every minute. Frees any active_profile_lock held > max_age_minutes (default 30).',
                 ],
                 [
-                  'mark_monday_duplicates_for_job(job_id)',
-                  'Pure DB Monday duplicate check across the 4 board mirrors + their updates.',
-                ],
-                [
                   'mark_s_tag_duplicates_for_job(job_id)',
-                  'Cross-references each lead’s extracted tags against the Monday mirror.',
+                  'Cross-references each lead’s extracted tags for duplicates.',
                 ],
                 [
                   'replace_s_tags_for_lead(lead_id, tags)',
@@ -475,11 +430,11 @@ Phase 3  (all_running → complete)
                 ],
                 [
                   'replace_and_verify_s_tags_for_lead(lead_id, tags)',
-                  'Replace + dup-check + Rooster-brand cross-reference inline. Used by the s-tag stage.',
+                  'Replace + dup-check inline. Used by the s-tag stage.',
                 ],
                 [
                   'advance_enrichment_chain(job_id)',
-                  'State machine driving the 6-stage enrichment chain. Called every minute by the scheduler tick.',
+                  'State machine driving the enrichment chain. Called every minute by the scheduler tick.',
                 ],
                 [
                   'cancel_scrape_job(job_id)',
@@ -501,13 +456,9 @@ Phase 3  (all_running → complete)
             />
             <p>
               <strong>Stage values that flow through the queue:</strong>{' '}
-              <Code>affiliate</Code>, <Code>rooster</Code>,{' '}
-              <Code>rooster_deep</Code> (auto-enqueued fallback when the
-              cheap rooster check misses), <Code>contact</Code>,{' '}
+              <Code>affiliate</Code>, <Code>contact</Code>,{' '}
               <Code>stag</Code>. The orchestrator advances the chain via{' '}
-              <Code>advance_enrichment_chain</Code>; rooster_deep does not
-              gate the chain — it runs alongside and silently corrects the
-              flag if a brand link is found behind redirects.
+              <Code>advance_enrichment_chain</Code>.
             </p>
           </Section>
 
@@ -522,12 +473,6 @@ Phase 3  (all_running → complete)
                   'Every minute. Spawns scrape rows from due scheduled_keyword_sets, advances enrichment chains.',
                 ],
                 [
-                  'Vercel cron',
-                  '0 23 * * *',
-                  '/api/monday/sync',
-                  'Daily at 23:00 UTC. Full re-sync of all 4 Monday boards into the Supabase mirror.',
-                ],
-                [
                   'Supabase pg_cron',
                   '* * * * *',
                   'release_stale_locks(30)',
@@ -538,7 +483,7 @@ Phase 3  (all_running → complete)
             <Tip>
               Vercel cron sends an <Code>Authorization: Bearer $CRON_SECRET</Code>{' '}
               header automatically when the env var is set on the project.
-              Both internal cron paths verify it.
+              The internal cron path verifies it.
             </Tip>
           </Section>
 
@@ -552,11 +497,9 @@ Phase 3  (all_running → complete)
                 ['NEXT_PUBLIC_SUPABASE_URL', 'Supabase project URL (public)'],
                 ['SUPABASE_SERVICE_ROLE_KEY', 'Service-role key for service-role client (bypasses RLS).'],
                 ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'Anon key for the cookie-aware client used by user sessions.'],
-                ['MONDAY_API_TOKEN', 'Monday.com GraphQL token (read + write).'],
-                ['MONDAY_WEBHOOK_SECRET', 'HS256 secret used to verify incoming webhook JWTs.'],
                 ['OPENAI_API_KEY', 'GPT-4o (Responses API + web_search) for the contact cascade.'],
                 ['HUNTER_API_KEY', 'Hunter.io domain-search fallback for contact extraction.'],
-                ['CRON_SECRET', 'Bearer secret for /api/scheduler/tick and /api/monday/sync.'],
+                ['CRON_SECRET', 'Bearer secret for /api/scheduler/tick.'],
                 ['INTERNAL_API_TOKEN', 'Bearer secret for /api/enrichment/score-row (workers → Vercel).'],
               ]}
             />
@@ -723,20 +666,6 @@ PGPASSWORD=… psql "host=db.<ref>.supabase.co user=postgres dbname=postgres" \\
               </li>
             </ul>
             <p>
-              <strong>Monday data feels behind.</strong>
-            </p>
-            <ul>
-              <li>
-                Trigger the manual re-sync:{' '}
-                <Code>npm run monday:sync</Code> locally, or hit{' '}
-                <Code>/api/monday/sync</Code> with the bearer token.
-              </li>
-              <li>
-                Check the webhook receiver logs in Vercel for any 4xx/5xx
-                responses.
-              </li>
-            </ul>
-            <p>
               <strong>Login warning persists for a country I just signed in.</strong>
             </p>
             <ul>
@@ -761,30 +690,6 @@ PGPASSWORD=… psql "host=db.<ref>.supabase.co user=postgres dbname=postgres" \\
                 <Code>google_login_verified_at</Code> on{' '}
                 <Code>/profiles</Code> — re-sign-in via GoLogin and re-flip
                 the toggle.
-              </li>
-            </ul>
-            <p>
-              <strong>Rooster brand says NO on a site that lists our brands.</strong>
-            </p>
-            <ul>
-              <li>
-                The page might hide brand links behind tracking redirects
-                (/go/, ?dest=). With migration <Code>20260429070000</Code>{' '}
-                applied + the latest enrichment_worker.py on the VMs,{' '}
-                <Code>rooster_deep</Code> auto-enqueues on every
-                cheap-check miss and resolves redirects in browser to
-                check the final hostnames.
-              </li>
-              <li>
-                Stage 3 also catches brand mentions in{' '}
-                <Code>&lt;img alt=&quot;Brand&quot;&gt;</Code> attributes
-                and image filenames (e.g. <Code>logo-spinjo.svg</Code>).
-              </li>
-              <li>
-                If still no — verify the brand is in the{' '}
-                <Code>rooster_brands</Code> table with{' '}
-                <Code>is_active=true</Code> and the right{' '}
-                <Code>domain</Code>.
               </li>
             </ul>
             <p>

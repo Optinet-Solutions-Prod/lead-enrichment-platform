@@ -50,8 +50,70 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   reference data kept (`operator_domains_denylist`, `rooster_brands`, `batch_counter`).
   `.env.local` written (gitignored) with the new project's keys. Details in
   `03-ENV-AND-ISOLATION.md`.
-- ⬜ Not started: local run, org/tenancy model + RLS, removing Monday *functions* + the Monday
-  step in `complete_scrape_job`, repointing hardcoded prod refs, outreach.
+- 📝 **Build plan written (2026-09-04):** `04-BUILD-PLAN.md` — concrete plan for tenancy
+  (orgs/invites/RLS), per-org BYO integrations, source/country entitlements, Monday removal,
+  pricing. Grounded in a full code audit.
+- ✅ **Milestone A done (2026-09-04): Monday removed.** App code (lib/monday, /monday routes,
+  monday-dashboard, push/label UI, ~30 coupled files edited, ~60 files deleted), the 8 Vercel
+  Monday crons, the proxy allowlist, and the DB layer (11 Monday functions dropped, the
+  `inherit-monday-data` pg_cron unscheduled, `advance_enrichment_chain` /
+  `mark_s_tag_duplicates_for_job` / `replace_and_verify_s_tags_for_lead` rewritten Monday-free
+  — migration `20260904120000_remove_monday.sql`, applied live). Monday *columns* intentionally
+  kept (inert) for a later cleanup. Login now lands on `/scrape`. ScrapingBee key scrubbed from
+  docs (⚠ still rotate it — it's in git history). `.env.example` de-drifted.
+- ✅ **Milestone B done (2026-09-04): organizations core.** `organizations` / `org_members`
+  (owner|admin|member) / `org_invites` (hashed tokens, 14-day expiry, email-bound) /
+  `org_settings` (enabled_sources default `{google}`) / `usage_events` + RLS + write-RPCs —
+  migration `20260904130000_organizations.sql`, applied live. Supabase Auth: signup enabled,
+  12-char min passwords, `custom_access_token_hook` enabled (JWT carries `org_id`+`org_role`).
+  App: `/signup` (invite-aware), `/invite/<token>`, `/welcome` (create org),
+  `/settings/organization` (members, roles, invite links, rename); dashboard layout gates on
+  org membership; sidebar shows the org name. **Verified live by
+  `scripts/orgs/verify-tenancy.ts` — 19/19 checks green** (JWT claims, invite lifecycle, role
+  enforcement, cross-org RLS isolation), and `scripts/orgs/smoke-pages.ts` — every dashboard
+  page (incl. admin) renders 200 with a real session.
+  Auth-config notes: email **confirmation is ON** for plain `/signup` (no SMTP configured —
+  Supabase's built-in mailer is rate-limited; add SMTP or toggle "Confirm email" off in the
+  dashboard for friction-free staging signups). Invited users bypass it entirely — the signup
+  action admin-creates them pre-confirmed (the unguessable invite link + server-side email
+  match is the vouch). No users are seeded; create the first account via `/signup` or
+  `npm run auth:seed-admin`.
+- ✅ **De-verticalized (2026-09-07):** `/stag-mapping` and `/brands` (Rooster Brands) routes
+  deleted; the Rooster-partner concept removed from all dashboard UI (leads column/editor/
+  drawer/bulk, overview KPI, enrichment stage card, onboarding/help copy); the auto enrichment
+  chain is now **affiliate → complete** (migration `20260907120000_chain_stops_at_affiliate.sql`,
+  applied live). S-tag extraction + contact extraction remain as operator-triggered features.
+  Kept inert: rooster DB columns/`rooster_brands` table, the backend rooster scoring path in
+  score-row (never invoked — no rooster jobs are enqueued), the `@rooster.local` auth email
+  domain (functional), and the legacy `rooster_running` status label for historical rows.
+  Root metadata rebranded to "Lead Engine".
+- ✅ **Maltapark source added (2026-09-07, SaaS-only):** engine `maltapark` — plain-HTTP
+  scraper of maltapark.com classifieds (`GET /search/?c=s1&search=<kw>&page=<n>`, verified
+  live; parser tested against real HTML). New: `maltapark_listings` table + MT country row
+  (migration `20260907130000_maltapark_source.sql`, applied), `vm/maltapark_search.py` +
+  worker dispatch (pure-HTTP path, no GoLogin), enqueue-form option (country pinned to MT),
+  job-page listings panel/table, jobs filter. NOTE: jobs queue but don't RUN until a worker
+  process is pointed at THIS Supabase (a separate systemd unit on the existing EC2 box works —
+  deploy `worker.py` + `maltapark_search.py` from THIS repo with an `~/.env` pointing here;
+  never reuse the prod worker units).
+- ✅ **Malta property-owner harvest (2026-09-07):** 98 leads in `public.property_leads`
+  (migration `20260907140000_property_leads.sql`) from 10 of 18 requested sources, surfaced at
+  `/property-leads` (nav → Tools). Loader: `scripts/property/insert-leads.ts` (replace-per-site,
+  idempotent). Plain-HTTP harvest for most; Apify website-content-crawler (real browser) cracked
+  myhive.mt. Dead ends with evidence: timesofmalta (no online classifieds exists — subdomains
+  NXDOMAIN, homepage links none), maltaproperty.com (lead-form-only, zero contacts in 42 rendered
+  pages), keysdirect/dar.mt/letify (login-gated contact), propertiesforsalemalta (dormant),
+  maltadirectrentals (pre-launch). Best repeatable endpoints: homesinmalta.com WP REST
+  (owner name+phone), propertiesfromowner.com `/api/map` (all owner mobiles), MTA licence CSVs.
+- ✅ **Short-let intelligence layer (2026-09-07, PM-offer pivot):** `airbnb_listings`
+  (1,560 Malta/Gozo listings via Apify tri_angle~airbnb-scraper, ~$6.30 total),
+  `hfps_register` (8,294 licensed short-let addresses from MTA CSVs), and the
+  `airbnb_pm_prospects` VIEW (894 self-managing hosts, 844 with 1-2 listings; lettings brands
+  regex-filtered). UI: `/pm-prospects` (prospect list + town market map), `/airbnb-listings`,
+  `/hfps-register`. Cross-checks: property_leads↔Airbnb = 1 candidate (name+locality);
+  property_leads↔HFPS = 0 (none of our leads are licensed short-lets — conclusive negative);
+  8 Airbnb listings displaying licence numbers were resolved to exact register addresses
+  (licence→address de-anonymization works). Migrations `20260907150000` + `160000` + `170000`.
 
 ## The plan in one screen
 
@@ -72,3 +134,4 @@ Full reasoning, trade-offs and risks are in `02-SAAS-PLAN.md`.
 | `01-ARCHITECTURE.md` | How the inherited system works: stack, subsystems, DB (44 tables / 89 functions), VM fleet, what to keep vs drop. |
 | `02-SAAS-PLAN.md` | Tenancy model, phased plan, the hard parts, business/legal risks. |
 | `03-ENV-AND-ISOLATION.md` | The two repos + two Supabase projects, isolation rules, the hardcoded prod references to repoint, how to run, cloning the schema. |
+| `04-BUILD-PLAN.md` | The concrete Phase 1+ execution plan: tenancy schema, RLS migration, per-org BYO integrations, source/country entitlements, Monday removal playbook, pricing model, milestones A–F. |

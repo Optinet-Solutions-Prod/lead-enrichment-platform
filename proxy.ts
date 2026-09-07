@@ -7,8 +7,7 @@ import { updateSession } from '@/lib/supabase/middleware'
  *   /auth/portal-callback   — cross-dashboard SSO landing; authenticates via a
  *                             portal-signed JWT and CREATES the session, so it
  *                             necessarily arrives without one
- *   /api/monday/webhook     — Monday authenticates via HS256 JWT, not Supabase
- *   /api/monday/sync        — Vercel cron authenticates via Bearer CRON_SECRET
+ *   /signup, /invite/<token> — public auth pages (signup + invite acceptance)
  *   /api/scheduler/tick     — Vercel cron authenticates via Bearer CRON_SECRET
  *   /api/proxy/bandwidth/refresh — Vercel cron authenticates via Bearer CRON_SECRET
  *   static assets           — handled by the `matcher` below
@@ -19,19 +18,19 @@ import { updateSession } from '@/lib/supabase/middleware'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Never gate the webhook, the scheduler cron, the Monday nightly re-sync
-  // cron, the internal enrichment endpoint (auth'd via INTERNAL_API_TOKEN),
-  // the SSO callback (verifies a portal-signed JWT and mints the session
-  // itself — gating it would redirect the token away before it's read), or
-  // the login page itself.
+  // Never gate the scheduler cron, the internal enrichment endpoint (auth'd
+  // via INTERNAL_API_TOKEN), the SSO callback (verifies a portal-signed JWT
+  // and mints the session itself — gating it would redirect the token away
+  // before it's read), or the public auth pages (login, signup, invite
+  // acceptance — the invite page bounces through signup when no session).
   if (
     pathname.startsWith('/auth/portal-callback') ||
-    pathname.startsWith('/api/monday/webhook') ||
-    pathname.startsWith('/api/monday/sync') ||
     pathname.startsWith('/api/scheduler/tick') ||
     pathname.startsWith('/api/proxy/bandwidth/refresh') ||
     pathname.startsWith('/api/enrichment/') ||
-    pathname.startsWith('/login')
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/signup') ||
+    pathname.startsWith('/invite/')
   ) {
     return NextResponse.next()
   }
@@ -106,6 +105,6 @@ function isHardAuthError(e: unknown): boolean {
 export const config = {
   // Run on all routes except static assets + endpoints that authenticate themselves.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/monday/webhook|api/monday/sync|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment).*)',
   ],
 }

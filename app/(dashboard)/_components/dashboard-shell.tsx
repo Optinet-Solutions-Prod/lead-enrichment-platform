@@ -5,28 +5,28 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
+  BedDouble,
   Bell,
   BookOpen,
+  Building2,
   ChevronLeft,
+  MapPinned,
   Clock,
   Cpu,
   DollarSign,
-  Database,
-  Fingerprint,
   Gauge,
   Globe,
   Hand,
+  Handshake,
   HelpCircle,
   KeyRound,
   LayoutDashboard,
-  LineChart,
   ListChecks,
   LogOut,
   Menu,
   MessageCircle,
   Search,
   Settings,
-  Star,
   Users,
   X,
 } from 'lucide-react'
@@ -41,10 +41,9 @@ type NavItem = {
   match: (p: string) => boolean
   badge?: 'openFeedback'
   /** Hidden from non-admins (2026-07-27). Used to keep the analytical
-   *  dashboards (Operations / S-tag Mapping / Monday Analytics)
-   *  admin-only while Overview stays visible to everyone. Route-level
-   *  guards on those pages back this up (nav-hiding alone isn't
-   *  security). */
+   *  dashboards (Operations / S-tag Mapping) admin-only while Overview
+   *  stays visible to everyone. Route-level guards on those pages back
+   *  this up (nav-hiding alone isn't security). */
   adminOnly?: boolean
 }
 
@@ -77,20 +76,6 @@ const NAV_GROUPS: NavGroup[] = [
         match: (p: string) => p.startsWith('/operations'),
         adminOnly: true,
       },
-      {
-        label: 'S-tag Mapping',
-        href: '/stag-mapping',
-        icon: Fingerprint,
-        match: (p: string) => p.startsWith('/stag-mapping'),
-        adminOnly: true,
-      },
-      {
-        label: 'Monday Analytics',
-        href: '/monday-dashboard',
-        icon: LineChart,
-        match: (p: string) => p.startsWith('/monday-dashboard'),
-        adminOnly: true,
-      },
     ],
   },
   {
@@ -109,12 +94,28 @@ const NAV_GROUPS: NavGroup[] = [
         match: (p: string) => p.startsWith('/leads'),
       },
       {
-        // Raw Monday item list — distinct from the aggregated
-        // Monday Analytics dashboard above.
-        label: 'Monday Data',
-        href: '/monday/leads',
-        icon: Database,
-        match: (p: string) => p.startsWith('/monday/leads') || p.startsWith('/monday/updates'),
+        label: 'Property Leads',
+        href: '/property-leads',
+        icon: Building2,
+        match: (p: string) => p.startsWith('/property-leads'),
+      },
+      {
+        label: 'PM Prospects',
+        href: '/pm-prospects',
+        icon: Handshake,
+        match: (p: string) => p.startsWith('/pm-prospects'),
+      },
+      {
+        label: 'Airbnb Listings',
+        href: '/airbnb-listings',
+        icon: BedDouble,
+        match: (p: string) => p.startsWith('/airbnb-listings'),
+      },
+      {
+        label: 'Short-Let Register',
+        href: '/hfps-register',
+        icon: MapPinned,
+        match: (p: string) => p.startsWith('/hfps-register'),
       },
       {
         // Open to all signed-in users so the whole ops team can clear
@@ -130,12 +131,6 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/profiles',
         icon: Globe,
         match: (p: string) => p.startsWith('/profiles'),
-      },
-      {
-        label: 'Rooster Brands',
-        href: '/brands',
-        icon: Star,
-        match: (p: string) => p.startsWith('/brands'),
       },
       {
         label: 'Activity Log',
@@ -165,6 +160,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Account',
     items: [
+      {
+        label: 'Organization',
+        href: '/settings/organization',
+        icon: Building2,
+        match: (p: string) => p.startsWith('/settings/organization'),
+      },
       {
         // URL keeps the /admin/ prefix for backwards-compat (sidebar
         // entries, deep links). Page is now open to all signed-in users
@@ -234,6 +235,8 @@ const ADMIN_NAV_ITEMS: ReadonlyArray<NavItem> = [
 type Props = {
   children: React.ReactNode
   username: string
+  /** The signed-in user's organization name (sidebar brand line). */
+  orgName?: string
   isAdmin?: boolean
   proxyBandwidth?: ProxyBandwidth | null
   openFeedbackCount?: number
@@ -242,10 +245,12 @@ type Props = {
 export function DashboardShell({
   children,
   username,
+  orgName,
   isAdmin = false,
   proxyBandwidth = null,
   openFeedbackCount = 0,
 }: Props) {
+  const brand = orgName ?? 'Dashboard'
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [expanded, setExpanded] = useState(true)
@@ -289,11 +294,13 @@ export function DashboardShell({
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-[color:var(--color-border)] px-4">
           {showLabels ? (
-            <span className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]">
-              Rooster Partners
+            <span className="truncate text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]">
+              {brand}
             </span>
           ) : (
-            <span className="text-base font-bold text-[color:var(--color-accent)]">R</span>
+            <span className="text-base font-bold text-[color:var(--color-accent)]">
+              {brand.charAt(0).toUpperCase()}
+            </span>
           )}
           <button
             type="button"
@@ -429,7 +436,7 @@ export function DashboardShell({
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-[13px] font-semibold">Rooster Partners</span>
+          <span className="truncate text-[13px] font-semibold">{brand}</span>
         </header>
 
         <main className="min-w-0 flex-1 bg-[color:var(--color-bg-primary)]">{children}</main>

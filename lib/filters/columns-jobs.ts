@@ -21,12 +21,14 @@ const SEARCH_ENGINE_OPTIONS = [
   { value: 'google', label: 'Google' },
   { value: 'bing', label: 'Bing' },
   { value: 'youtube', label: 'YouTube' },
+  { value: 'twitch', label: 'Twitch' },
   { value: 'kick', label: 'Kick' },
   { value: 'x', label: 'X (Twitter)' },
   { value: 'facebook', label: 'Facebook' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'snapchat', label: 'Snapchat' },
   { value: 'telegram', label: 'Telegram' },
+  { value: 'maltapark', label: 'Maltapark' },
 ] as const
 
 const VIEW_MODE_OPTIONS = [

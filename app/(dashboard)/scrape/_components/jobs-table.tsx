@@ -117,22 +117,16 @@ function displayStatus(job: ScrapeJob): { label: string; style: string; title?: 
       return {
         label: 'enriching · affiliate',
         style: 'bg-sky-100 text-sky-800',
-        title: 'Scrape done; affiliate-detection stage running',
+        title: 'Scrape done; affiliate-detection stage running. S-tag and Contact extraction are operator-triggered from the job page.',
       }
+    // Legacy statuses from before the auto chain shrank to affiliate-only.
     case 'rooster_running':
-      return {
-        label: 'enriching · rooster',
-        style: 'bg-sky-100 text-sky-800',
-        title: 'Scrape done; Rooster brand check running. S-tag and Contact extraction are operator-triggered from the job page.',
-      }
-    // Legacy statuses from before the chain shrank to 1–3. Treated
-    // identically to rooster_running — chain only waits on rooster now.
     case 'all_running':
     case 'contact_running':
       return {
-        label: 'enriching · rooster',
+        label: 'enriching',
         style: 'bg-sky-100 text-sky-800',
-        title: 'Legacy chain status; auto pipeline now stops at Rooster. S-tag and Contact extraction are manual.',
+        title: 'Legacy chain status; the auto pipeline now stops after Affiliate. S-tag and Contact extraction are manual.',
       }
     case 'pending':
     case null:
@@ -824,7 +818,7 @@ export function JobsTable({
           ? `Push all leads from ${n} jobs to Not Relevant`
           : 'Push all leads to Not Relevant',
         icon: Send,
-        hint: 'Pushes every lead from the selected jobs to Monday’s Not Relevant board (status=Not relevant, owner=you) and marks them not-relevant locally. Skips leads already on that board. Cap: 500 leads per click.',
+        hint: 'Marks every lead from the selected jobs as not relevant (owner=you). Skips leads already marked. Cap: 500 leads per click.',
         onClick: () =>
           startAction(async () => {
             const fd = new FormData()
@@ -1428,9 +1422,7 @@ function stageBreakdown(job: ScrapeJob): Array<{ label: string; value: string }>
     rows.push({ label, value: formatMs(ms) })
   }
   push('Scrape', t.scrape_ms)
-  push('Monday check', t.monday_ms)
   push('Affiliate', t.affiliate_ms)
-  push('Rooster', t.rooster_ms)
   push('S-tags', t.stag_ms)
   // 'S-tag check' breakdown row hidden until the verification stage is
   // re-surfaced in the UI. Timing is still computed in fetchStageTimings.

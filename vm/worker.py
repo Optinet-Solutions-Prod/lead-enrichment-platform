@@ -210,6 +210,14 @@ TWITCH_SEARCH_PATH = os.environ.get(
 )
 TWITCH_SEARCH_TIMEOUT_S = int(os.environ.get("TWITCH_SEARCH_TIMEOUT_SECONDS", "300"))
 TWITCH_PHASE1_MAX_RESULTS = int(os.environ.get("TWITCH_PHASE1_MAX_RESULTS", "100"))
+# Maltapark (maltapark.com classifieds, SaaS line) is the PURE-HTTP
+# single-pass path (like Snapchat/Telegram): server-rendered search pages,
+# no GoLogin/Chromium, no API key, no Phase-2 job.
+MALTAPARK_SEARCH_PATH = os.environ.get(
+    "MALTAPARK_SEARCH_PATH",
+    str(Path.home() / "maltapark_search.py"),
+)
+MALTAPARK_SEARCH_TIMEOUT_S = int(os.environ.get("MALTAPARK_SEARCH_TIMEOUT_SECONDS", "300"))
 KILL_SCRIPT_PATH     = os.environ.get(
     "KILL_SCRIPT_PATH",
     str(Path.home() / "kill_gologin.py"),
@@ -780,6 +788,107 @@ def run_youtube_search(
     except Exception:  # noqa: BLE001
         combined = ""
     return result.returncode, combined, output_path, log_path
+
+
+def run_maltapark_search(
+    keyword: str,
+    pages: int,
+    job_id: str,
+) -> tuple[int, str, Path, Path]:
+    """Invoke maltapark_search.py as a subprocess. Pure HTTP — no GoLogin,
+    no port. Mirrors run_youtube_search()'s contract.
+
+    Returns: (exit_code, combined_log_text, json_output_path, log_path)
+    """
+    output_path = Path(RESULTS_DIR) / f"maltapark_{WORKER_ID}_{GOLOGIN_PORT}.json"
+    log_path    = Path(RESULTS_DIR) / f"maltapark_{WORKER_ID}_{GOLOGIN_PORT}.log"
+    output_path.unlink(missing_ok=True)
+    log_path.unlink(missing_ok=True)
+
+    cmd = [
+        "python3",
+        "-u",
+        MALTAPARK_SEARCH_PATH,
+        "-k", keyword,
+        "--pages", str(pages),
+        "--job-id", job_id,
+        "--worker-id", WORKER_ID,
+        "--output", str(output_path),
+    ]
+
+    env = os.environ.copy()
+    log.info("launching maltapark_search (keyword=%r pages=%d log=%s timeout=%ds)",
+             keyword, pages, log_path, MALTAPARK_SEARCH_TIMEOUT_S)
+
+    with open(log_path, "w", encoding="utf-8") as log_f:
+        result = subprocess.run(
+            cmd,
+            env=env,
+            stdout=log_f,
+            stderr=subprocess.STDOUT,
+            timeout=MALTAPARK_SEARCH_TIMEOUT_S,
+        )
+
+    try:
+        combined = log_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        combined = ""
+    return result.returncode, combined, output_path, log_path
+
+
+def process_maltapark_job(job: dict[str, Any]) -> None:
+    """Handle a scrape_queue row where search_engine='maltapark'.
+
+    Pure HTTP like YouTube Phase 1 — no GoLogin profile, no port-kill
+    cycle. The child writes listings straight into public.maltapark_listings;
+    complete_scrape_job gets an empty results array (summary only), which
+    also releases the country lock.
+    """
+    job_id = job["id"]
+    keyword = job["keyword"]
+    pages = int(job.get("pages") or 3)
+
+    log.info("claimed maltapark job %s | keyword=%r pages=%d", job_id, keyword, pages)
+
+    try:
+        exit_code, combined_log, output_path, log_path = run_maltapark_search(
+            keyword=keyword,
+            pages=pages,
+            job_id=job_id,
+        )
+    except subprocess.TimeoutExpired:
+        fail_job(job_id, f"Maltapark search took too long ({MALTAPARK_SEARCH_TIMEOUT_S}s) and was stopped.")
+        return
+    except Exception as exc:  # noqa: BLE001
+        fail_job(job_id, classify_failure(exit_code=None, error_text=str(exc), source="maltapark_search"))
+        return
+
+    if "[RESULT] SUCCESS" not in combined_log:
+        fail_job(job_id, classify_failure(exit_code=exit_code, error_text=combined_log, source="maltapark_search"))
+        return
+
+    if not output_path.exists():
+        fail_job(job_id, "Maltapark search finished but the results file is missing on disk.")
+        return
+    try:
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        fail_job(job_id, "Maltapark search finished but the results file is corrupted — re-run usually fixes this.")
+        return
+
+    summary = {
+        "total_results": payload.get("total_results"),
+        "pages_scraped": payload.get("pages_scraped"),
+        "scraped_at": payload.get("timestamp"),
+        "view_mode": "desktop",  # no mobile/desktop split for classifieds
+    }
+    try:
+        complete_job(job_id, [], summary)
+    except Exception as exc:  # noqa: BLE001
+        log.error("complete_scrape_job RPC failed for maltapark job %s: %s", job_id, exc)
+        return
+
+    log.info("maltapark job %s completed | %d listings", job_id, summary.get("total_results") or 0)
 
 
 def process_youtube_job(job: dict[str, Any]) -> None:
@@ -2712,7 +2821,7 @@ def process_job(job: dict[str, Any]) -> None:
     # that pre-date the migration that added the column.
     language = (job.get("language") or "en").strip().lower() or "en"
     engine = (job.get("search_engine") or "google").strip().lower() or "google"
-    if engine not in ("google", "bing", "youtube", "kick", "x", "facebook", "tiktok", "snapchat", "telegram", "twitch"):
+    if engine not in ("google", "bing", "youtube", "kick", "x", "facebook", "tiktok", "snapchat", "telegram", "twitch", "maltapark"):
         engine = "google"
 
     # Apify organic path routes BEFORE any GoLogin/engine handling — no
@@ -2764,6 +2873,11 @@ def process_job(job: dict[str, Any]) -> None:
     # REST + gql panel mining, no GoLogin/Chromium, no Phase-2 job.
     if engine == "twitch":
         process_twitch_job(job)
+        return
+    # Maltapark (SaaS line) is the PURE-HTTP single-pass path — server-rendered
+    # classifieds search pages, no GoLogin/Chromium, no API key, no Phase-2 job.
+    if engine == "maltapark":
+        process_maltapark_job(job)
         return
 
     # view_mode controls whether scraper.py runs the desktop pass, the

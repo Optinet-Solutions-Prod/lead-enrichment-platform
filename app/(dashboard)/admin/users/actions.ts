@@ -1,35 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { logActivity } from '@/lib/activity-log'
+// Every action in this file is privileged — we don't trust client-side
+// route gating, so each one re-verifies via the shared requireAdmin.
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 export type CreateUserState =
   | { status: 'ok'; message: string; username: string }
   | { status: 'error'; error: string }
   | null
-
-/**
- * Verify the caller is an admin. Used by every action in this file —
- * createUser is privileged and we don't trust client-side route gating.
- */
-async function requireAdmin(): Promise<
-  | { ok: true; user_id: string }
-  | { ok: false; error: string }
-> {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: 'Not signed in.' }
-
-  const svc = createServiceClient()
-  const { data, error } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: 'Admin access required.' }
-  return { ok: true, user_id: user.id }
-}
 
 /** Mirror of the username → email mapping used by the /login flow. */
 const EMAIL_DOMAIN = 'rooster.local'
@@ -161,62 +142,6 @@ export async function setAdminFlagAction(
   return {
     status: 'ok',
     message: value ? 'User promoted to admin.' : 'Admin flag cleared.',
-  }
-}
-
-export type SetMondayUserIdState =
-  | { status: 'ok'; message: string }
-  | { status: 'error'; error: string }
-  | null
-
-/**
- * Set / clear the Monday user ID for one user. The Monday ID is what
- * Push to Monday stamps as Owner on every new lead the user creates.
- * Empty value = clear, which BLOCKS that user's future pushes with a
- * "link your Monday account" error (no silent default-owner fallback).
- */
-export async function setMondayUserIdAction(
-  _prev: SetMondayUserIdState,
-  fd: FormData,
-): Promise<SetMondayUserIdState> {
-  const auth = await requireAdmin()
-  if (!auth.ok) return { status: 'error', error: auth.error }
-
-  const targetId = String(fd.get('user_id') ?? '').trim()
-  if (!targetId) return { status: 'error', error: 'Missing user_id.' }
-
-  const raw = String(fd.get('monday_user_id') ?? '').trim()
-  let mondayId: number | null = null
-  if (raw.length > 0) {
-    if (!/^\d+$/.test(raw)) {
-      return { status: 'error', error: 'Monday user ID must be a positive integer (or blank to clear).' }
-    }
-    mondayId = Number(raw)
-    if (!Number.isFinite(mondayId) || mondayId <= 0) {
-      return { status: 'error', error: 'Monday user ID must be a positive integer.' }
-    }
-  }
-
-  const svc = createServiceClient()
-  const { error } = await svc
-    .from('user_profiles')
-    .update({ monday_user_id: mondayId, updated_at: new Date().toISOString() })
-    .eq('id', targetId)
-  if (error) return { status: 'error', error: error.message }
-
-  await logActivity({
-    action: mondayId === null ? 'admin.clear_monday_user_id' : 'admin.set_monday_user_id',
-    entity_type: 'user',
-    entity_id: targetId,
-    details: { monday_user_id: mondayId },
-  })
-
-  revalidatePath('/admin/users')
-  return {
-    status: 'ok',
-    message: mondayId === null
-      ? 'Monday ID cleared.'
-      : `Monday ID set to ${mondayId}.`,
   }
 }
 

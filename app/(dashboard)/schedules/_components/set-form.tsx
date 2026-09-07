@@ -132,7 +132,7 @@ export function SetForm(props: Props) {
         <span>
           Run full enrichment after each scheduled scrape
           <span className="block text-[10px] text-[color:var(--color-text-secondary)]">
-            Auto-runs Monday dup check, affiliate detection, Rooster check, contact extraction, S-tag extraction + verify on each batch the cron creates.
+            Auto-runs affiliate detection on each batch the cron creates. S-tag and contact extraction are triggered from the job page.
           </span>
         </span>
       </label>

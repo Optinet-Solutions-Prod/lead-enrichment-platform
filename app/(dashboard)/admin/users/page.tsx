@@ -20,7 +20,6 @@ type ProfileRow = {
   display_name: string | null
   is_admin: boolean
   is_shadow: boolean
-  monday_user_id: number | null
 }
 
 export default async function AdminUsersPage() {
@@ -42,7 +41,7 @@ export default async function AdminUsersPage() {
   // username + display_name driven.
   const [{ data: usersPage }, { data: profiles }] = await Promise.all([
     svc.auth.admin.listUsers({ page: 1, perPage: 200 }),
-    svc.from('user_profiles').select('id, username, display_name, is_admin, is_shadow, monday_user_id'),
+    svc.from('user_profiles').select('id, username, display_name, is_admin, is_shadow'),
   ])
 
   const profileById = new Map<string, ProfileRow>(
@@ -80,8 +79,8 @@ export default async function AdminUsersPage() {
         </h1>
         <p className="mt-0.5 text-[12px] text-[color:var(--color-text-secondary)]">
           Add new sign-ins, promote / demote admins. Every action a user takes
-          (queue a scrape, override a flag, push to Monday, …) is recorded with
-          their email in <code>activity_log</code> and on each created row.
+          (queue a scrape, override a flag, …) is recorded with their email in{' '}
+          <code>activity_log</code> and on each created row.
         </p>
       </header>
 
@@ -103,7 +102,6 @@ export default async function AdminUsersPage() {
               user={u}
               isAdmin={profileById.get(u.id)?.is_admin ?? false}
               isSelf={u.id === user.id}
-              mondayUserId={profileById.get(u.id)?.monday_user_id ?? null}
             />
           ))}
         </div>

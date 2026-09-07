@@ -263,9 +263,9 @@ export async function POST(request: NextRequest) {
   // advances with_enrichment=true jobs, so new/unknown domains from a no-enrich
   // scrape were left is_affiliate=null (operators: "has tracking links, should
   // be an affiliate, but no tag"). Enqueue ONLY the cheap affiliate stage for
-  // recent, relevant, not-on-Monday, still-unscored ORGANIC leads with no fetch
+  // recent, relevant, still-unscored ORGANIC leads with no fetch
   // row yet. Known domains already inherited is_affiliate so they won't match;
-  // PPC leads are covered by the net above; the heavier rooster/contact/stag
+  // PPC leads are covered by the net above; the heavier contact/stag
   // stages stay gated behind the enrichment toggle.
   const { data: unscored } = await svc
     .from('google_lead_gen_table')
@@ -273,7 +273,6 @@ export async function POST(request: NextRequest) {
     .is('is_affiliate', null)
     .is('affiliate_checked_at', null)
     .neq('is_not_relevant', true)
-    .not('is_on_monday', 'is', true)
     .neq('result_type', 'PPC')
     .gte('created_at', since)
     .order('id', { ascending: false })

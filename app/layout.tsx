@@ -9,8 +9,8 @@ const montserrat = Montserrat({
 })
 
 export const metadata: Metadata = {
-  title: 'Google Lead Gen',
-  description: 'Internal dashboard for Rooster Partners',
+  title: 'Lead Engine',
+  description: 'Scrape, enrich, and reach — outbound lead engine',
 }
 
 export default function RootLayout({

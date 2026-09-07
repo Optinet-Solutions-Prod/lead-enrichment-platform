@@ -56,7 +56,7 @@ export async function signInAction(
     }
   }
 
-  const safeRedirect = isSafePath(from) ? from : '/monday/leads'
+  const safeRedirect = isSafePath(from) ? from : '/scrape'
   redirect(safeRedirect)
 }
 

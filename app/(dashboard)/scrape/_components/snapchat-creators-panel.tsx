@@ -12,8 +12,8 @@ const initialState: StageRunState = null
  * Snapchat is single-pass (the scrape discovers AND enriches each profile in
  * one pure-HTTP run), so — like the Facebook engine — the only operator action
  * is Phase 3:
- *   - Score & check → affiliate scoring + shortener resolution + Monday
- *     new-vs-known (runSnapchatCreatorAnalysis, runs inline)
+ *   - Score & check → affiliate scoring + shortener resolution
+ *     (runSnapchatCreatorAnalysis, runs inline)
  */
 export function SnapchatCreatorsPanel({
   jobId,
@@ -82,13 +82,13 @@ export function SnapchatCreatorsPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score Snapchat creators and check Monday"
+              aria-label="Score Snapchat creators"
               title={
                 noCreators
                   ? 'No creators to score yet — run the Snapchat scrape first'
                   : scoreNeeded
-                    ? 'Score the discovered creators — flag affiliates, resolve bio links, mine contacts, and check Monday'
-                    : 'Re-score to refresh affiliate flags, contacts, resolved links, and Monday checks'
+                    ? 'Score the discovered creators — flag affiliates, resolve bio links, and mine contacts'
+                    : 'Re-score to refresh affiliate flags, contacts, and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -115,8 +115,7 @@ export function SnapchatCreatorsPanel({
         The Snapchat scrape discovers creators from the explore page and captures each profile&apos;s bio, subscriber
         count, and bio link in one pure-HTTP pass.{' '}
         <strong className="font-medium">Score &amp; check</strong> flags likely casino affiliates (niche score), resolves
-        shortener / hub bio links, mines contacts from the bio, and checks each affiliate ID / @handle against Monday.
-        Re-runnable.
+        shortener / hub bio links, and mines contacts from the bio. Re-runnable.
       </p>
 
       {(message || error) && (

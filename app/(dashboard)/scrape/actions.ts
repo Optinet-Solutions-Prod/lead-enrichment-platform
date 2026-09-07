@@ -33,7 +33,6 @@ import { checkQuota } from '@/lib/scrape-quota'
 import { filterOutInFlight } from '@/lib/scrape/filter-in-flight'
 import { findCompletedSiblings, siblingRowKey } from '@/lib/scrape/find-completed-siblings'
 import { getFleetQueueSnapshot } from './_lib/queries'
-import { pushJobToMonday as pushJobToMondayLib } from '@/lib/monday/push-job'
 import { verifyUserPassword } from '@/lib/auth/verify-password'
 import { translateKeywordsToEnglish } from '@/lib/translate'
 
@@ -67,73 +66,6 @@ export type EnqueueState =
   | { status: 'duplicate_warning'; duplicates: DuplicateHit[]; freshCount: number }
   | null
 
-export type CheckMondayState =
-  | { status: 'ok'; message: string; checked: number; matched: number }
-  | { status: 'error'; error: string }
-  | null
-
-// Monday duplicate check is the one per-job action that's intentionally
-// open to all signed-in users (not just the job owner / admins). The RPC
-// `mark_monday_duplicates_for_job` is idempotent, only touches the
-// informational `is_on_monday` / `monday_board` / `monday_item_id`
-// columns on this job's leads, and never enqueues scraper or proxy
-// work — so cross-user use is safe. QA reported the strict ownership
-// gate (R2 hardening) was blocking testers from re-running the check on
-// jobs they didn't queue.
-export async function checkMondayDuplicates(
-  _prev: CheckMondayState,
-  formData: FormData,
-): Promise<CheckMondayState> {
-  const jobId = String(formData.get('job_id') ?? '').trim()
-  if (!jobId) return { status: 'error', error: 'Missing job id.' }
-
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { status: 'error', error: 'Not signed in.' }
-
-  const svc = createServiceClient()
-  const { data: jobExists, error: jobErr } = await svc
-    .from('scrape_queue')
-    .select('id')
-    .eq('id', jobId)
-    .maybeSingle()
-  if (jobErr) return { status: 'error', error: safeError(jobErr, 'Failed to look up job.') }
-  if (!jobExists) return { status: 'error', error: 'Job not found.' }
-
-  const { data, error } = await svc.rpc('mark_monday_duplicates_for_job', {
-    p_job_id: jobId,
-  })
-  if (error) return { status: 'error', error: safeError(error, 'Failed to check Monday duplicates.') }
-
-  const row = (Array.isArray(data) ? data[0] : data) as
-    | { checked: number; matched: number }
-    | null
-  const checked = row?.checked ?? 0
-  const matched = row?.matched ?? 0
-
-  await logActivity({
-    action: 'enrichment.monday_dup_check',
-    entity_type: 'scrape_job',
-    entity_id: jobId,
-    details: { checked, matched },
-  })
-
-  revalidatePath(`/scrape/${jobId}`)
-  return {
-    status: 'ok',
-    checked,
-    matched,
-    message:
-      checked === 0
-        ? 'No rows to check yet.'
-        : matched === 0
-          ? `Checked ${checked} row${checked === 1 ? '' : 's'} — none already on Monday.`
-          : `Checked ${checked} row${checked === 1 ? '' : 's'} — ${matched} already on Monday.`,
-  }
-}
-
 export async function enqueueScrape(
   _prev: EnqueueState,
   formData: FormData,
@@ -145,20 +77,26 @@ export async function enqueueScrape(
   if (!user) return { status: 'error', error: 'Not signed in.' }
 
   const rawKeywords = String(formData.get('keyword') ?? '')
-  const country_code = String(formData.get('country_code') ?? '').trim().toUpperCase()
+  const engineRaw = String(formData.get('search_engine') ?? '').trim().toLowerCase()
+  // Maltapark is Malta-only: the engine pins the country regardless of the
+  // dropdown (the MT gologin_profiles row is an HTTP-only placeholder — the
+  // worker branch never launches a browser for it).
+  const country_code =
+    engineRaw === 'maltapark'
+      ? 'MT'
+      : String(formData.get('country_code') ?? '').trim().toUpperCase()
   const pages = clampInt(formData.get('pages'), 1, 10, 1)
   const priority = clampInt(formData.get('priority'), 0, 100, 0)
   const withEnrichment = formData.get('with_enrichment') === 'on'
   const languageRaw = String(formData.get('language') ?? '').trim().toLowerCase()
   // Allow only 2-letter ISO 639-1 codes; default to English.
   const language = /^[a-z]{2}$/.test(languageRaw) ? languageRaw : 'en'
-  const engineRaw = String(formData.get('search_engine') ?? '').trim().toLowerCase()
   // The form lets the user pick a single engine OR "both" — the latter
   // fans out to two queue rows per keyword (one Google, one Bing).
   // 'youtube' is a separate path (Data API, channel results into
   // youtube_channels) and intentionally NOT included in "both" — the
   // output shape is too different to bundle into a SERP comparison.
-  const enginesToRun: Array<'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram'> =
+  const enginesToRun: Array<'google' | 'bing' | 'youtube' | 'twitch' | 'kick' | 'x' | 'facebook' | 'tiktok' | 'snapchat' | 'telegram' | 'maltapark'> =
     engineRaw === 'both'
       ? ['google', 'bing']
       : engineRaw === 'bing'
@@ -179,7 +117,9 @@ export async function enqueueScrape(
                       ? ['snapchat']
                       : engineRaw === 'telegram'
                         ? ['telegram']
-                        : ['google']
+                        : engineRaw === 'maltapark'
+                          ? ['maltapark']
+                          : ['google']
   // Bing has poor SERP coverage for gambling in some markets — it returns
   // generic/irrelevant results (Darren: "bestes Online Casino Schweiz" on CH).
   // Drop Bing there so the batch runs Google-only. Extend the set as needed.
@@ -531,11 +471,6 @@ export type StageRunState =
  * actions in this file route through this — previously several
  * only checked "is the caller signed in" (BUGS.md #27, R2-1..R2-5),
  * leaving any signed-in user able to mutate any job_id they guessed.
- *
- * Carve-out: `checkMondayDuplicates` deliberately does NOT call this.
- * That action is idempotent, only writes informational `is_on_monday`
- * flags, and never enqueues scraper work — so QA testers need to run
- * it on jobs they don't own. See the comment on that function.
  */
 async function requireJobAccess(
   jobId: string,
@@ -582,7 +517,7 @@ export async function runAffiliateDetection(
   const svc = createServiceClient()
   const { data: leads, error: leadsErr } = await svc
     .from('google_lead_gen_table')
-    .select('id, url, domain, country_code, result_type, monday_board')
+    .select('id, url, domain, country_code, result_type')
     .eq('scrape_job_id', jobId)
     .is('is_affiliate_overridden_at', null)
   if (leadsErr) return { status: 'error', error: safeError(leadsErr, 'Failed to load leads for this job.') }
@@ -605,27 +540,10 @@ export async function runAffiliateDetection(
     domain: string | null
     country_code: string | null
     result_type: string | null
-    monday_board: string | null
   }>) {
     const url = lead.url ?? ''
     if (!url || !url.startsWith('http')) continue
     if (!lead.country_code) continue
-    // Already classified on Monday's Affiliates board — trust that signal
-    // and skip the fetch. Avoids wasted work and prevents "fetch failed"
-    // rows from showing as unknown when we already know they're affiliates.
-    if (lead.monday_board === 'affiliates') {
-      await svc
-        .from('google_lead_gen_table')
-        .update({
-          is_affiliate: true,
-          affiliate_confidence: 'MONDAY_AFFILIATE_BOARD',
-          affiliate_indicators: ['Already on Monday Affiliates board'],
-          affiliate_checked_at: now,
-        })
-        .eq('id', lead.id)
-      skippedCount++
-      continue
-    }
     if (shouldSkipDomain(lead.domain)) {
       await svc
         .from('google_lead_gen_table')
@@ -683,92 +601,6 @@ export async function runAffiliateDetection(
   return {
     status: 'ok',
     message: `Enqueued ${enqueueable.length} fetch job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will process and score them within ~30 s.`,
-  }
-}
-
-// ============================================================
-// Epic 7.3 — Rooster Partner Brand Check
-//
-// Routed through the VM enrichment queue (same as affiliate). The
-// VM worker fetches HTML through GoLogin (real browser, real
-// proxy), writes to fetched_html_cache, then calls the score-row
-// API with stage='rooster' which reads the cache + the active
-// rooster_brands list and writes results back to the lead.
-// ============================================================
-export async function runRoosterCheck(
-  _prev: StageRunState,
-  fd: FormData,
-): Promise<StageRunState> {
-  const jobId = jobIdFrom(fd)
-  if (!jobId) return { status: 'error', error: 'Missing job id.' }
-  const access = await requireJobAccess(jobId)
-  if (!access.ok) return { status: 'error', error: access.error }
-
-  const svc = createServiceClient()
-  const { data: leads, error: leadsErr } = await svc
-    .from('google_lead_gen_table')
-    .select('id, url, domain, country_code, result_type')
-    .eq('scrape_job_id', jobId)
-    .is('is_rooster_overridden_at', null)
-  if (leadsErr) return { status: 'error', error: safeError(leadsErr, 'Failed to load leads for this job.') }
-
-  let skippedCount = 0
-  const enqueueable: Array<{
-    lead_id: number
-    country_code: string
-    url: string
-    want_html: boolean
-    want_screenshot: boolean
-    process_stages: string[]
-  }> = []
-  for (const lead of (leads ?? []) as Array<{
-    id: number
-    url: string | null
-    domain: string | null
-    country_code: string | null
-    result_type: string | null
-  }>) {
-    const url = lead.url ?? ''
-    if (!url || !url.startsWith('http')) continue
-    if (!lead.country_code) continue
-    if (shouldSkipDomain(lead.domain)) {
-      skippedCount++
-      continue
-    }
-    enqueueable.push({
-      lead_id: lead.id,
-      country_code: lead.country_code,
-      url,
-      want_html: true,
-      want_screenshot: false,
-      process_stages: ['rooster'],
-    })
-  }
-
-  if (enqueueable.length === 0) {
-    revalidatePath(`/scrape/${jobId}`)
-    return {
-      status: 'ok',
-      message: skippedCount > 0
-        ? `${skippedCount} skipped — nothing else to enqueue.`
-        : 'No leads to process.',
-    }
-  }
-
-  const { error: qErr } = await svc.from('enrichment_fetch_queue').insert(enqueueable)
-  if (qErr) return { status: 'error', error: safeError(qErr, 'Failed to enqueue enrichment work.') }
-
-  await logActivity({
-    action: 'enrichment.rooster',
-    entity_type: 'scrape_job',
-    entity_id: jobId,
-    details: { enqueued: enqueueable.length, skipped: skippedCount },
-  })
-
-  revalidatePath(`/scrape/${jobId}`)
-  return {
-    status: 'ok',
-    message: `Enqueued ${enqueueable.length} fetch job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will check brand mentions within ~30 s.`,
   }
 }
 
@@ -867,7 +699,7 @@ export async function runContactExtraction(
 // link (so geo-routed redirects use the correct country profile),
 // screenshot of each landing page, then ships the resolved tags to
 // /api/enrichment/score-row which calls replace_and_verify_s_tags
-// (auto-runs the dup-check + Rooster cross-reference inline).
+// (auto-runs the dup-check inline).
 // ============================================================
 export async function runStagExtraction(
   _prev: StageRunState,
@@ -943,7 +775,7 @@ export async function runStagExtraction(
   revalidatePath(`/scrape/${jobId}`)
   return {
     status: 'ok',
-    message: `Enqueued ${enqueueable.length} s-tag job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will crawl listing pages, follow tracking redirects in the country profile, and verify each tag against Monday.`,
+    message: `Enqueued ${enqueueable.length} s-tag job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will crawl listing pages and follow tracking redirects in the country profile.`,
   }
 }
 
@@ -1107,7 +939,7 @@ export async function runKickStreamerAnalysis(
     .from('kick_links')
     .select(
       'id, kick_streamer_id, url, resolved_url, source, promo_brand, promo_bonus_terms, ' +
-        's_tag, brand, is_known_on_monday',
+        's_tag, brand',
     )
     .in('kick_streamer_id', streamerIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load streamer links.') }
@@ -1117,7 +949,6 @@ export async function runKickStreamerAnalysis(
       kick_streamer_id: string
       s_tag: string | null
       brand: string | null
-      is_known_on_monday: boolean | null
     }
   >
 
@@ -1147,22 +978,9 @@ export async function runKickStreamerAnalysis(
     }
   }
 
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse the S-tag / operator brand for each casino link + check it
-  // against Monday (search_s_tag_on_monday) — same pattern as the twitch
-  // scorer this one mirrors. Non-casino links (own site, plain socials) are
-  // left null. Writes the per-link Monday verdict back to kick_links so the
-  // "On Monday" column can show which URLs matched.
+  // 2. Parse the S-tag / operator brand for each casino link — same pattern
+  // as the twitch scorer this one mirrors. Non-casino links (own site, plain
+  // socials) are left null.
   let affiliateLinks = 0
   for (const l of allLinks) {
     const dest = l.resolved_url ?? l.url
@@ -1171,22 +989,15 @@ export async function runKickStreamerAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('kick_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
@@ -1230,28 +1041,14 @@ export async function runKickStreamerAnalysis(
       linkUrls,
     )
 
-    // New-vs-known: a likely affiliate is "new" if any of its casino links
-    // resolved to an S-tag/brand NOT on Monday, or its channel slug (the
-    // kick.com/{slug} identity, Kick's analogue of the Twitch @login) isn't
-    // on Monday. Mirror the twitch verdict exactly.
-    const hasNewTag = streamerLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (s.slug ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -1412,20 +1209,14 @@ export async function runYoutubeContactEnrichment(
 }
 
 // ============================================================
-// YouTube Phase 3 — affiliate scoring + S-tag extraction / new-vs-known
+// YouTube Phase 3 — affiliate scoring + S-tag extraction
 //
 // Pure data work (+ light HTTP to resolve affiliate redirect chains), so it
 // runs INLINE like runKickStreamerAnalysis. For each channel it mines the
 // recent video descriptions for affiliate tracking links, resolves them to
-// an S-tag, checks each S-tag against Monday (search_s_tag_on_monday — the
-// same RPC the lead s-tag dup-check uses), scores affiliate likelihood, and
-// extracts outreach contacts. A channel is flagged is_new_lead_candidate
-// when it's a likely affiliate whose CHANNEL isn't already on Monday — the
-// dedup unit is the channel (its @handle), NOT the affiliate link it carries
-// (Ryan, batch 1678). A channel we've already recorded is not "new" even when
-// it promotes a not-yet-seen operator; a genuinely new channel IS new even
-// when it shares an affiliate link with one we already have. The per-link
-// known/new badge stays as informational intel in the "Affiliate links" column.
+// an S-tag, scores affiliate likelihood, and extracts outreach contacts.
+// Every likely affiliate is flagged is_new_lead_candidate — with no external
+// dedup source, "new" simply means "not yet reviewed by an operator".
 // No leads are created — the operator reviews the flagged candidates.
 // ============================================================
 export async function runYoutubeChannelAnalysis(
@@ -1484,11 +1275,10 @@ export async function runYoutubeChannelAnalysis(
     url: string
     resolved_url: string | null
     s_tag: string | null
-    is_known_on_monday: boolean | null
   }
   // Clean slate: drop this job's previously-mined links so a re-run re-derives
-  // them deterministically (the resolved set + Monday verdicts can change, and
-  // stale rows from an earlier run would otherwise linger un-rechecked).
+  // them deterministically (the resolved set can change, and stale rows from
+  // an earlier run would otherwise linger un-rechecked).
   await svc.from('youtube_channel_links').delete().in('youtube_channel_id', rows.map(r => r.id))
   const linksByChannel = new Map<string, LinkRow[]>()
 
@@ -1504,44 +1294,23 @@ export async function runYoutubeChannelAnalysis(
   let affiliateLinks = 0
   let withContacts = 0
 
-  // Monday "have we seen this affiliate ID/operator?" check, memoized so the
-  // same key across channels costs one RPC. Returns the match (or null).
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // Insert a youtube_channel_links row (deduped per channel by its check key).
-  // Returns true when the link's affiliate ID is NOT known on Monday (→ a
-  // new-lead signal). The check key is the classic S-tag when we have one,
-  // else the affiliate destination/operator brand — YouTube links are usually
-  // redirectors with no in-URL stag, so the operator brand (vipclub,
-  // dashcasinos, gamblemojo) is the dedup key we DO have. (Resolving the real
-  // stag behind the redirector is the documented "stag later" follow-up.)
+  // Insert a youtube_channel_links row (deduped per channel by its dedup key).
+  // The dedup key is the classic S-tag when we have one, else the affiliate
+  // destination/operator brand — YouTube links are usually redirectors with no
+  // in-URL stag, so the operator brand (vipclub, dashcasinos, gamblemojo) is
+  // the dedup key we DO have. (Resolving the real stag behind the redirector
+  // is the documented "stag later" follow-up.)
   async function storeLink(
     channelId: string,
     existing: LinkRow[],
     seen: Set<string>,
     row: { url: string; final_url: string; s_tag: string | null; s_tag_param: string | null; brand: string | null },
-  ): Promise<boolean> {
-    const checkKey = row.s_tag || row.brand || ''
-    const dedupeKey = (checkKey || row.final_url).toLowerCase()
-    if (seen.has(dedupeKey)) return false
+  ): Promise<void> {
+    const dedupeKey = (row.s_tag || row.brand || row.final_url).toLowerCase()
+    if (seen.has(dedupeKey)) return
     seen.add(dedupeKey)
     affiliateLinks++
 
-    let isKnown: boolean | null = null
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) {
-      hit = await checkMonday(checkKey)
-      isKnown = !!hit
-    }
     const { data: inserted } = await svc
       .from('youtube_channel_links')
       .insert({
@@ -1553,14 +1322,10 @@ export async function runYoutubeChannelAnalysis(
         s_tag: row.s_tag,
         s_tag_param: row.s_tag_param,
         brand: row.brand,
-        is_known_on_monday: isKnown,
-        monday_match_kind: hit?.kind ?? null,
-        monday_match_item_id: hit?.item_id ?? null,
       })
-      .select('id, youtube_channel_id, url, resolved_url, s_tag, is_known_on_monday')
+      .select('id, youtube_channel_id, url, resolved_url, s_tag')
       .maybeSingle()
     if (inserted) existing.push(inserted as unknown as LinkRow)
-    return isKnown === false
   }
 
   // Per-channel state we carry from the shallow pass into the bounded two-hop
@@ -1594,10 +1359,7 @@ export async function runYoutubeChannelAnalysis(
     for (const cand of candidates) resolved.push(await resolveCandidate(cand, denylist))
     const casino = resolved.filter(r => r.is_casino)
 
-    // Mine + store each casino link. storeLink computes the per-link
-    // is_known_on_monday badge shown in the "Affiliate links" column; its
-    // return value (link not on Monday) no longer drives the channel-level NEW
-    // flag — that's decided by channel identity below.
+    // Mine + store each casino link for the "Affiliate links" column.
     for (const r of casino) {
       await storeLink(c.id, channelLinks, seen, {
         url: r.source_url,
@@ -1624,37 +1386,13 @@ export async function runYoutubeChannelAnalysis(
       linkUrls,
     )
 
-    // New-lead check: the dedup unit is the CHANNEL, not the affiliate link it
-    // carries (Ryan, batch 1678). A channel is a new lead only when the channel
-    // itself isn't already on Monday — what matters is whether THIS channel has
-    // been captured before, regardless of whether its operator/S-tag is known.
-    // Key on the @handle: Monday stores the full youtube.com/@handle URL, so the
-    // @-prefixed form is precise enough to avoid matching a bare token inside an
-    // unrelated item. Only worth checking for likely affiliates (non-affiliate
-    // channels aren't leads). When the handle is missing/too short to verify, we
-    // leave the channel un-flagged rather than guess — it still shows as a likely
-    // affiliate, just without the NEW badge.
-    let channelIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (c.channel_handle ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 3) {
-        const known = await checkMonday(`@${handle}`)
-        channelIsNew = !known
-        handleChecked = true
-      }
-    }
-
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       is_not_relevant: result.isNotRelevant,
       niche_score: result.nicheScore,
-      is_new_lead_candidate: result.isLikelyAffiliate && channelIsNew,
-      // Channel-level Monday verdict, mirroring kick/twitch scorers: known
-      // only when we actually checked the @handle; null otherwise (non-
-      // affiliate or handle too short to verify). Feeds the "On Monday"
-      // column added across every platform table (commit 7934ae5).
-      is_known_on_monday: handleChecked ? !channelIsNew : null,
+      is_new_lead_candidate: result.isLikelyAffiliate,
     }
     if (!c.email && contacts.email) update.email = contacts.email
     if (!c.telegram_url && contacts.telegram_url) update.telegram_url = contacts.telegram_url
@@ -1666,8 +1404,10 @@ export async function runYoutubeChannelAnalysis(
     const { error: upErr } = await svc.from('youtube_channels').update(update).eq('id', c.id)
     if (upErr) continue
     scored++
-    if (result.isLikelyAffiliate) likelyAffiliates++
-    if (result.isLikelyAffiliate && channelIsNew) newCandidates++
+    if (result.isLikelyAffiliate) {
+      likelyAffiliates++
+      newCandidates++
+    }
     if (update.email || c.email || contacts.telegram_url || contacts.discord_url) withContacts++
 
     // A likely affiliate whose casino link is a landing/review PAGE with no
@@ -1693,10 +1433,9 @@ export async function runYoutubeChannelAnalysis(
   for (const p of twoHopTargets) {
     const stags = await twoHopStags(p.twoHopUrl as string, { maxLinks: 10 })
     for (const t of stags) {
-      // Mine + store the landing page's real S-tags (the per-link known/new
-      // badge is still useful intel). This no longer flips the channel-level
-      // NEW flag — that's decided solely by channel identity in pass 1, so a
-      // known channel surfacing a new operator stays "not new".
+      // Mine + store the landing page's real S-tags — still useful intel in
+      // the "Affiliate links" column; the channel-level flags were already
+      // written in pass 1.
       await storeLink(p.c.id, p.links, p.seen, {
         url: t.tracking_url,
         final_url: t.final_url,
@@ -1847,17 +1586,16 @@ export async function runXProfileEnrichment(
 }
 
 // ============================================================
-// X (x.com) Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// X (x.com) Phase 3 — affiliate scoring + S-tag extraction
 //
 // Pure data work (+ light HTTP to resolve shorteners / redirect chains), so it
 // runs INLINE like runKickStreamerAnalysis / runYoutubeChannelAnalysis. For
 // each creator it resolves the bio/pinned/website links Phase 2 captured,
-// parses any affiliate S-tag (or falls back to the operator brand), checks each
-// against Monday (search_s_tag_on_monday), scores affiliate likelihood, and
-// mines outreach contacts. A creator is flagged is_new_lead_candidate when it's
-// a likely affiliate carrying ≥1 affiliate ID NOT on Monday, OR whose @handle
-// isn't on Monday (X links are often redirectors with no in-URL stag — same
-// stag-later design as YouTube). No leads are created — operator reviews them.
+// parses any affiliate S-tag (or falls back to the operator brand — X links
+// are often redirectors with no in-URL stag, same stag-later design as
+// YouTube), scores affiliate likelihood, and mines outreach contacts. Every
+// likely affiliate is flagged is_new_lead_candidate. No leads are created —
+// operator reviews them.
 // ============================================================
 export async function runXCreatorAnalysis(
   _prev: StageRunState,
@@ -1914,11 +1652,10 @@ export async function runXCreatorAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('x_links')
-    .select('id, x_creator_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, x_creator_id, url, resolved_url, source, s_tag, brand')
     .in('x_creator_id', creatorIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load creator links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -1950,21 +1687,8 @@ export async function runXCreatorAnalysis(
     }
   }
 
-  // Monday "have we seen this affiliate ID / operator?" check, memoized so the
-  // same key across creators costs one RPC.
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday,
-  //    persisting the verdict on the x_links row (mirrors youtube_channel_links).
+  // 2. Parse S-tag / brand for each casino link, persisting it on the x_links
+  //    row (mirrors youtube_channel_links).
   const linksByCreator = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByCreator.get(l.x_creator_id) ?? []
@@ -1979,26 +1703,19 @@ export async function runXCreatorAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('x_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each creator + derive contacts + new-vs-known verdict.
+  // 3. Score each creator + derive contacts.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
@@ -2018,29 +1735,14 @@ export async function runXCreatorAnalysis(
     const linkUrls = creatorLinks.flatMap(l => [l.resolved_url, l.url].filter((u): u is string => !!u))
     const contacts = extractContacts([c.bio ?? '', c.pinned_tweet_text ?? ''], linkUrls)
 
-    // New-lead check: a casino link whose affiliate ID/operator isn't on
-    // Monday, OR the @handle itself isn't on Monday (only for likely affiliates).
-    const hasNewTag = creatorLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (c.username ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      // Only assert known/unknown when Monday was actually queried — a likely
-      // affiliate with a missing/too-short handle stays null (unknown) rather
-      // than defaulting to "known".
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -2179,17 +1881,16 @@ export async function runTiktokProfileEnrichment(
 }
 
 // ============================================================
-// TikTok Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// TikTok Phase 3 — affiliate scoring + S-tag extraction
 //
 // Pure data work (+ light HTTP to resolve shorteners), so it runs INLINE like
 // runXCreatorAnalysis. For each creator it resolves the bio-link + caption
 // links Phase 2 captured, parses any affiliate S-tag (or falls back to the
-// operator brand), checks each against Monday, scores affiliate likelihood
-// from the bio link (hub/shortener/casino) + bio/caption keywords + handle, and
-// mines outreach contacts. A creator is flagged is_new_lead_candidate when it's
-// a likely affiliate carrying ≥1 affiliate ID NOT on Monday, OR whose @handle
-// isn't on Monday (TikTok bio links are usually redirectors with no in-URL stag).
-// No leads are created — operator reviews them.
+// operator brand — TikTok bio links are usually redirectors with no in-URL
+// stag), scores affiliate likelihood from the bio link (hub/shortener/casino)
+// + bio/caption keywords + handle, and mines outreach contacts. Every likely
+// affiliate is flagged is_new_lead_candidate. No leads are created — operator
+// reviews them.
 // ============================================================
 export async function runTiktokCreatorAnalysis(
   _prev: StageRunState,
@@ -2239,11 +1940,10 @@ export async function runTiktokCreatorAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('tiktok_links')
-    .select('id, tiktok_creator_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, tiktok_creator_id, url, resolved_url, source, s_tag, brand')
     .in('tiktok_creator_id', creatorIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load creator links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -2275,19 +1975,7 @@ export async function runTiktokCreatorAnalysis(
     }
   }
 
-  // Monday "have we seen this affiliate ID / operator?" check, memoized.
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday.
+  // 2. Parse S-tag / brand for each casino link.
   const linksByCreator = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByCreator.get(l.tiktok_creator_id) ?? []
@@ -2302,26 +1990,19 @@ export async function runTiktokCreatorAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('tiktok_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each creator + derive contacts + new-vs-known verdict.
+  // 3. Score each creator + derive contacts.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
@@ -2342,29 +2023,14 @@ export async function runTiktokCreatorAnalysis(
     const linkUrls = creatorLinks.flatMap(l => [l.resolved_url, l.url].filter((u): u is string => !!u))
     const contacts = extractContacts([c.bio ?? '', ...(c.recent_video_captions ?? [])], linkUrls)
 
-    // New-lead check: a casino link whose affiliate ID/operator isn't on
-    // Monday, OR the @handle itself isn't on Monday (only for likely affiliates).
-    const hasNewTag = creatorLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (c.username ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      // Only assert known/unknown when Monday was actually queried — a likely
-      // affiliate with a missing/too-short handle stays null (unknown) rather
-      // than defaulting to "known".
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -2393,16 +2059,15 @@ export async function runTiktokCreatorAnalysis(
 }
 
 // ============================================================
-// Snapchat Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// Snapchat Phase 3 — affiliate scoring + S-tag extraction
 //
 // Snapchat is single-pass (snapchat_search.py discovers AND enriches), so there
 // is NO separate profile-enrichment action — only this inline scorer, like the
 // Facebook engine's score-only flow. For each creator it resolves the bio link
 // the scrape captured, parses any affiliate S-tag (or falls back to the operator
-// brand), checks each against Monday, scores affiliate likelihood from the bio
-// link (hub/shortener/casino) + bio keywords + handle, and mines contacts. A
-// creator is flagged is_new_lead_candidate when it's a likely affiliate carrying
-// ≥1 affiliate ID NOT on Monday, OR whose @handle isn't on Monday.
+// brand), scores affiliate likelihood from the bio link (hub/shortener/casino)
+// + bio keywords + handle, and mines contacts. Every likely affiliate is
+// flagged is_new_lead_candidate.
 // ============================================================
 export async function runSnapchatCreatorAnalysis(
   _prev: StageRunState,
@@ -2451,11 +2116,10 @@ export async function runSnapchatCreatorAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('snapchat_links')
-    .select('id, snapchat_creator_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, snapchat_creator_id, url, resolved_url, source, s_tag, brand')
     .in('snapchat_creator_id', creatorIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load creator links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -2485,18 +2149,7 @@ export async function runSnapchatCreatorAnalysis(
     }
   }
 
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday.
+  // 2. Parse S-tag / brand for each casino link.
   const linksByCreator = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByCreator.get(l.snapchat_creator_id) ?? []
@@ -2511,26 +2164,19 @@ export async function runSnapchatCreatorAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('snapchat_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each creator + derive contacts + new-vs-known verdict.
+  // 3. Score each creator + derive contacts.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
@@ -2547,28 +2193,15 @@ export async function runSnapchatCreatorAnalysis(
     const linkUrls = creatorLinks.flatMap(l => [l.resolved_url, l.url].filter((u): u is string => !!u))
     const contacts = extractContacts([c.bio ?? ''], linkUrls)
 
-    const hasNewTag = creatorLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (c.username ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       is_not_relevant: result.isNotRelevant,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      // Only assert known/unknown when Monday was actually queried — a likely
-      // affiliate with a missing/too-short handle stays null (unknown) rather
-      // than defaulting to "known".
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -2597,18 +2230,17 @@ export async function runSnapchatCreatorAnalysis(
 }
 
 // ============================================================
-// Twitch Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// Twitch Phase 3 — affiliate scoring + S-tag extraction
 //
 // Twitch is single-pass (twitch_search.py discovers via Helix AND enriches
 // VODs/clips/About-panels in one run), so — like Snapchat/Telegram — the only
 // operator action is this inline scorer. For each streamer it resolves the
 // captured links, parses any affiliate S-tag (or falls back to the operator
-// brand), checks each against Monday, scores affiliate likelihood from the
-// panel/bio casino links + title/bio keywords + gambling game/tags, and flags
-// is_new_lead_candidate when a likely affiliate carries an affiliate ID NOT on
-// Monday OR whose @login isn't on Monday. Contacts (email / Telegram / Discord)
-// are mined from the bio + panels at scrape time in twitch_search.py, so —
-// like Kick/Snapchat — there's no separate contact pass here.
+// brand), scores affiliate likelihood from the panel/bio casino links +
+// title/bio keywords + gambling game/tags, and flags every likely affiliate
+// as is_new_lead_candidate. Contacts (email / Telegram / Discord) are mined
+// from the bio + panels at scrape time in twitch_search.py, so — like
+// Kick/Snapchat — there's no separate contact pass here.
 // ============================================================
 export async function runTwitchStreamerAnalysis(
   _prev: StageRunState,
@@ -2660,11 +2292,10 @@ export async function runTwitchStreamerAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('twitch_links')
-    .select('id, twitch_streamer_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, twitch_streamer_id, url, resolved_url, source, s_tag, brand')
     .in('twitch_streamer_id', streamerIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load streamer links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -2694,18 +2325,7 @@ export async function runTwitchStreamerAnalysis(
     }
   }
 
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday.
+  // 2. Parse S-tag / brand for each casino link.
   const linksByStreamer = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByStreamer.get(l.twitch_streamer_id) ?? []
@@ -2720,26 +2340,19 @@ export async function runTwitchStreamerAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('twitch_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each streamer + derive the new-vs-known verdict.
+  // 3. Score each streamer.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
@@ -2757,24 +2370,14 @@ export async function runTwitchStreamerAnalysis(
       denylist,
     )
 
-    const hasNewTag = streamerLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (s.broadcaster_login ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
     }
 
     const { error: upErr } = await svc.from('twitch_streamers').update(update).eq('id', s.id)
@@ -2799,16 +2402,15 @@ export async function runTwitchStreamerAnalysis(
 }
 
 // ============================================================
-// Telegram Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// Telegram Phase 3 — affiliate scoring + S-tag extraction
 //
 // Telegram is single-pass (telegram_search.py discovers AND enriches via
 // t.me/s), so — like Snapchat/Facebook — the only operator action is this
 // inline scorer. For each channel it resolves the links it posts, parses any
-// affiliate S-tag (or falls back to the operator brand), checks each against
-// Monday, scores affiliate likelihood from the posted casino links + title/
-// description keywords + handle, and mines contacts. A channel is flagged
-// is_new_lead_candidate when it's a likely affiliate carrying ≥1 affiliate ID
-// NOT on Monday, OR whose @handle isn't on Monday.
+// affiliate S-tag (or falls back to the operator brand), scores affiliate
+// likelihood from the posted casino links + title/description keywords +
+// handle, and mines contacts. Every likely affiliate is flagged
+// is_new_lead_candidate.
 // ============================================================
 export async function runTelegramChannelAnalysis(
   _prev: StageRunState,
@@ -2857,11 +2459,10 @@ export async function runTelegramChannelAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('telegram_links')
-    .select('id, telegram_channel_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, telegram_channel_id, url, resolved_url, source, s_tag, brand')
     .in('telegram_channel_id', channelIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load channel links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -2891,18 +2492,7 @@ export async function runTelegramChannelAnalysis(
     }
   }
 
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday.
+  // 2. Parse S-tag / brand for each casino link.
   const linksByChannel = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByChannel.get(l.telegram_channel_id) ?? []
@@ -2917,26 +2507,19 @@ export async function runTelegramChannelAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('telegram_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each channel + derive contacts + new-vs-known verdict.
+  // 3. Score each channel + derive contacts.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
@@ -2953,27 +2536,14 @@ export async function runTelegramChannelAnalysis(
     const linkUrls = channelLinks.flatMap(l => [l.resolved_url, l.url].filter((u): u is string => !!u))
     const contacts = extractContacts([c.title ?? '', c.description ?? ''], linkUrls)
 
-    const hasNewTag = channelLinks.some(l => l.is_known_on_monday === false)
-    let handleIsNew = false
-    let handleChecked = false
-    if (result.isLikelyAffiliate) {
-      const handle = (c.username ?? '').replace(/^@/, '').trim()
-      if (handle.length >= 2) {
-        const known = await checkMonday(handle)
-        handleIsNew = !known
-        handleChecked = true
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || handleIsNew)
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      // Only assert known/unknown when Monday was actually queried — a likely
-      // affiliate with a missing/too-short handle stays null (unknown) rather
-      // than defaulting to "known".
-      is_known_on_monday: result.isLikelyAffiliate && handleChecked ? !handleIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -3002,16 +2572,15 @@ export async function runTelegramChannelAnalysis(
 }
 
 // ============================================================
-// Facebook Ad Library Phase 3 — affiliate scoring + S-tag / new-vs-known check
+// Facebook Ad Library Phase 3 — affiliate scoring + S-tag extraction
 //
 // Pure data work (+ light HTTP to resolve shorteners), so it runs INLINE like
 // runXCreatorAnalysis. For each advertiser it resolves the ad landing links
-// the discovery scrape captured, parses any affiliate S-tag (or falls back to the operator
-// brand), checks each against Monday (search_s_tag_on_monday), scores affiliate
-// likelihood from the casino links + ad copy + Page name, and mines outreach
-// contacts. An advertiser is flagged is_new_lead_candidate when it's a likely
-// affiliate carrying ≥1 affiliate ID NOT on Monday, OR whose page_name isn't on
-// Monday. No leads are created — the operator reviews them.
+// the discovery scrape captured, parses any affiliate S-tag (or falls back to
+// the operator brand), scores affiliate likelihood from the casino links + ad
+// copy + Page name, and mines outreach contacts. Every likely affiliate is
+// flagged is_new_lead_candidate. No leads are created — the operator reviews
+// them.
 // ============================================================
 export async function runFbAdvertiserAnalysis(
   _prev: StageRunState,
@@ -3062,11 +2631,10 @@ export async function runFbAdvertiserAnalysis(
     source: string
     s_tag: string | null
     brand: string | null
-    is_known_on_monday: boolean | null
   }
   const { data: links, error: lErr } = await svc
     .from('fb_links')
-    .select('id, fb_advertiser_id, url, resolved_url, source, s_tag, brand, is_known_on_monday')
+    .select('id, fb_advertiser_id, url, resolved_url, source, s_tag, brand')
     .in('fb_advertiser_id', advertiserIds)
   if (lErr) return { status: 'error', error: safeError(lErr, 'Failed to load advertiser links.') }
   const allLinks = (links ?? []) as unknown as LinkRow[]
@@ -3098,21 +2666,8 @@ export async function runFbAdvertiserAnalysis(
     }
   }
 
-  // Monday "have we seen this affiliate ID / operator?" check, memoized so the
-  // same key across advertisers costs one RPC.
-  const mondayCache = new Map<string, { kind: string; item_id: string } | null>()
-  async function checkMonday(key0: string): Promise<{ kind: string; item_id: string } | null> {
-    const key = key0.toLowerCase()
-    if (mondayCache.has(key)) return mondayCache.get(key) ?? null
-    const { data } = await svc.rpc('search_s_tag_on_monday', { p_tag: key0 })
-    const hit = (Array.isArray(data) ? data[0] : data) as { kind: string; item_id: string } | null | undefined
-    const val = hit?.item_id ? hit : null
-    mondayCache.set(key, val)
-    return val
-  }
-
-  // 2. Parse S-tag / brand for each casino link + check it against Monday,
-  //    persisting the verdict on the fb_links row (mirrors x_links).
+  // 2. Parse S-tag / brand for each casino link, persisting it on the
+  //    fb_links row (mirrors x_links).
   const linksByAdvertiser = new Map<string, LinkRow[]>()
   for (const l of allLinks) {
     const arr = linksByAdvertiser.get(l.fb_advertiser_id) ?? []
@@ -3127,26 +2682,19 @@ export async function runFbAdvertiserAnalysis(
     if (!isCasino) continue
     affiliateLinks++
     const brand = guessBrandFromUrl(dest)
-    const checkKey = parsed?.tag || brand || ''
-    let hit: { kind: string; item_id: string } | null = null
-    if (checkKey) hit = await checkMonday(checkKey)
     const update = {
       s_tag: parsed?.tag ?? null,
       s_tag_param: parsed?.param ?? null,
       brand,
-      is_known_on_monday: checkKey ? !!hit : null,
-      monday_match_kind: hit?.kind ?? null,
-      monday_match_item_id: hit?.item_id ?? null,
     }
     const { error: upErr } = await svc.from('fb_links').update(update).eq('id', l.id)
     if (!upErr) {
       l.s_tag = update.s_tag
       l.brand = update.brand
-      l.is_known_on_monday = update.is_known_on_monday
     }
   }
 
-  // 3. Score each advertiser + derive contacts + new-vs-known verdict.
+  // 3. Score each advertiser + derive contacts.
   const hostOf = (u: string): string => {
     try {
       return new URL(u).hostname.toLowerCase().replace(/^www\./, '')
@@ -3235,31 +2783,20 @@ export async function runFbAdvertiserAnalysis(
     }
   }
 
-  // Persist scores + contacts + new-vs-known verdict.
+  // Persist scores + contacts.
   let scored = 0
   let likelyAffiliates = 0
   let newCandidates = 0
   let withContacts = 0
-  for (const { a, result, advLinks, contacts } of prelim) {
-    // New-lead check: a casino link whose affiliate ID/operator isn't on
-    // Monday, OR the page_name itself isn't on Monday (only for likely
-    // affiliates — Page-level redirector links often carry no in-URL stag).
-    const hasNewTag = advLinks.some(l => l.is_known_on_monday === false)
-    let nameIsNew = false
-    if (result.isLikelyAffiliate) {
-      const name = (a.page_name ?? '').trim()
-      if (name.length >= 2) {
-        const known = await checkMonday(name)
-        nameIsNew = !known
-      }
-    }
-    const isNewCandidate = result.isLikelyAffiliate && (hasNewTag || nameIsNew)
+  for (const { a, result, contacts } of prelim) {
+    // No external dedup source any more — every likely affiliate counts as
+    // a new lead candidate until an operator reviews it.
+    const isNewCandidate = result.isLikelyAffiliate
 
     const update: Record<string, unknown> = {
       is_likely_affiliate: result.isLikelyAffiliate,
       niche_score: result.nicheScore,
       is_new_lead_candidate: isNewCandidate,
-      is_known_on_monday: result.isLikelyAffiliate ? !nameIsNew : null,
       contact_email: contacts.email,
       telegram_url: contacts.telegram_url,
       discord_url: contacts.discord_url,
@@ -3296,7 +2833,7 @@ export async function runFbAdvertiserAnalysis(
 // (e.g. between tracking-link redirects in the s-tag stage) and stops
 // early, leaving partial results intact.
 // ============================================================
-const CANCELLABLE_STAGES = ['affiliate', 'rooster', 'contact', 'stag'] as const
+const CANCELLABLE_STAGES = ['affiliate', 'contact', 'stag'] as const
 type CancellableStage = (typeof CANCELLABLE_STAGES)[number]
 
 export async function cancelEnrichmentStage(
@@ -3903,7 +3440,7 @@ export async function deleteScrapeJob(_prev: JobActionState, fd: FormData): Prom
 }
 
 // ============================================================
-// Epic 7.6 — S-Tag Duplicate Check (Monday mirror)
+// Epic 7.6 — S-Tag Duplicate Check
 // ============================================================
 export async function runStagDuplicateCheck(
   _prev: StageRunState,
@@ -3938,7 +3475,7 @@ export async function runStagDuplicateCheck(
     message:
       checked === 0
         ? 'No s-tags to check — run S-tag extraction first.'
-        : `Checked ${checked} s-tag${checked === 1 ? '' : 's'} — ${matched} already on Monday.`,
+        : `Checked ${checked} s-tag${checked === 1 ? '' : 's'} — ${matched} already known.`,
   }
 }
 
@@ -4201,17 +3738,14 @@ export async function bulkDeleteScrapeJobs(
 }
 
 // ============================================================
-// Bulk push: for every selected job, push each of its leads to
-// Monday's Not Relevant board + mark them locally not-relevant.
+// Bulk mark-not-relevant: for every selected job, flag each of its
+// leads is_not_relevant so they drop out of the default /leads view.
 //
 // Operators asked for this on /scrape so they don't have to open
-// each job, multi-select its leads, and push — one right-click on
-// the jobs row does the lot. Re-uses the same per-lead push pipeline
-// as the /leads context menu so the resulting Monday items get the
-// correct status/owner/date/comment columns.
+// each job, multi-select its leads, and mark them — one right-click
+// on the jobs row does the lot. Writes the same columns as the
+// /leads bulk action (is_not_relevant + marked at/by attribution).
 // ============================================================
-
-const PUSH_NR_LEAD_CAP = 500
 
 export async function bulkPushJobLeadsToNotRelevant(
   _prev: BulkScrapeActionState,
@@ -4229,23 +3763,14 @@ export async function bulkPushJobLeadsToNotRelevant(
 
   const svc = createServiceClient()
 
-  // Resolve the operator's Monday user id once — same fail-loud rule
-  // as the per-lead action so we never push un-owned items.
+  // Resolve a friendly attribution string — display_name → username → email.
   const { data: profileRow } = await svc
     .from('user_profiles')
-    .select('monday_user_id')
+    .select('username, display_name')
     .eq('id', user.id)
     .maybeSingle()
-  const pushedByMondayId =
-    (profileRow as { monday_user_id: number | null } | null)?.monday_user_id ?? null
-  if (pushedByMondayId == null) {
-    return {
-      status: 'error',
-      error:
-        'Your account is not linked to a Monday user yet. Ask an admin to set your Monday ID at /admin/users so pushes land under you.',
-    }
-  }
-  const pushedBy = user.email ?? 'unknown@local'
+  const profile = profileRow as { username: string | null; display_name: string | null } | null
+  const markedBy = profile?.display_name ?? profile?.username ?? user.email ?? user.id
 
   // Cohort gate — admin bypass, else every job in the list must be in
   // the caller's cohort. Mirrors requireLeadsAccess but on jobs.
@@ -4273,96 +3798,77 @@ export async function bulkPushJobLeadsToNotRelevant(
     }
   }
 
-  // Load every lead from the selected jobs that hasn't already been
-  // pushed to the not-relevant board. Skips the already-pushed ones
-  // (idempotency would noop them anyway, but skipping avoids 1k
-  // unnecessary Monday calls and tightens the count messaging).
+  // Count the leads that still need flagging — skipping the already-marked
+  // ones keeps the count messaging tight and the update idempotent.
   const { data: leadRows, error: leadErr } = await svc
     .from('google_lead_gen_table')
-    .select('id, scrape_job_id, monday_pushed_item_id, monday_board')
+    .select('id, is_not_relevant')
     .in('scrape_job_id', jobIds)
   if (leadErr) {
     return { status: 'error', error: safeError(leadErr, 'Failed to load leads.') }
   }
-  type LR = {
-    id: number
-    scrape_job_id: string
-    monday_pushed_item_id: string | null
-    monday_board: string | null
-  }
+  type LR = { id: number; is_not_relevant: boolean | null }
   const allLeads = (leadRows ?? []) as LR[]
-  const toPush = allLeads.filter(
-    l => !(l.monday_pushed_item_id && l.monday_board === 'not_relevant_leads'),
-  )
-  const alreadyOnBoard = allLeads.length - toPush.length
+  const toMark = allLeads.filter(l => l.is_not_relevant !== true)
+  const alreadyMarked = allLeads.length - toMark.length
 
-  if (toPush.length === 0) {
+  if (toMark.length === 0) {
     return {
       status: 'ok',
       message:
-        alreadyOnBoard > 0
-          ? `Nothing to push — all ${alreadyOnBoard} lead${alreadyOnBoard === 1 ? ' is' : 's are'} already on the Not Relevant board.`
-          : 'No leads to push — the selected jobs have no rows yet.',
-    }
-  }
-  if (toPush.length > PUSH_NR_LEAD_CAP) {
-    return {
-      status: 'error',
-      error: `That selection would push ${toPush.length} leads to Monday — over the ${PUSH_NR_LEAD_CAP} cap. Narrow your selection first.`,
+        alreadyMarked > 0
+          ? `Nothing to do — all ${alreadyMarked} lead${alreadyMarked === 1 ? ' is' : 's are'} already marked not relevant.`
+          : 'No leads to mark — the selected jobs have no rows yet.',
     }
   }
 
-  // Push one at a time — Monday's create_item is rate-limited and a
-  // burst would trip the throttle. The /leads bulk path also runs
-  // serial; users see the count tick up via the toast on the right.
-  const { pushLeadToMondayNotRelevant } = await import('@/lib/monday/push-not-relevant')
-  let pushed = 0
-  const errors: string[] = []
-  for (const l of toPush) {
-    const result = await pushLeadToMondayNotRelevant(l.id, {
-      pushedBy,
-      pushedByMondayId,
+  // One job-scoped update (no giant id list) — flags every not-yet-marked
+  // lead in the selected jobs. Same columns as the /leads bulk action.
+  const { error: updErr } = await svc
+    .from('google_lead_gen_table')
+    .update({
+      is_not_relevant: true,
+      not_relevant_marked_at: new Date().toISOString(),
+      not_relevant_marked_by: markedBy,
     })
-    if (result.ok) pushed += 1
-    else errors.push(`lead ${l.id}: ${result.error}`)
+    .in('scrape_job_id', jobIds)
+    .not('is_not_relevant', 'is', true)
+  if (updErr) {
+    return { status: 'error', error: safeError(updErr, 'Failed to mark leads not relevant.') }
   }
 
   await logActivity({
-    action: 'scrape.bulk_push_leads_not_relevant',
+    action: 'scrape.bulk_mark_leads_not_relevant',
     entity_type: 'scrape_jobs_bulk',
     details: {
       jobs: jobIds.length,
       leads_considered: allLeads.length,
-      leads_pushed: pushed,
-      already_on_board: alreadyOnBoard,
-      errors: errors.length,
+      leads_marked: toMark.length,
+      already_marked: alreadyMarked,
+      marked_by: markedBy,
     },
   })
 
   revalidatePath('/scrape')
   revalidatePath('/leads')
 
-  const summary =
-    `Pushed ${pushed}/${toPush.length} lead${toPush.length === 1 ? '' : 's'} ` +
-    `from ${jobIds.length} job${jobIds.length === 1 ? '' : 's'}` +
-    (alreadyOnBoard > 0 ? ` (skipped ${alreadyOnBoard} already on board)` : '') +
-    '.'
-  if (errors.length > 0) {
-    return {
-      status: 'error',
-      error: `${summary} Errors: ${errors.slice(0, 3).join(' · ')}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ''}`,
-    }
+  return {
+    status: 'ok',
+    message:
+      `Marked ${toMark.length} lead${toMark.length === 1 ? '' : 's'} not relevant ` +
+      `from ${jobIds.length} job${jobIds.length === 1 ? '' : 's'}` +
+      (alreadyMarked > 0 ? ` (skipped ${alreadyMarked} already marked)` : '') +
+      '.',
   }
-  return { status: 'ok', message: summary }
 }
 
 // ============================================================
 // Mark / unmark a scrape job as "reviewed" — a shared (team-wide) flag so
 // operators can see at a glance which scrapes have already been eyeballed
-// on the /scrape Recent-jobs table. Open to any signed-in user (like the
-// Monday duplicate check) — it's an informational flag, not a destructive
-// or proxy-spending action, so restricting it to the owner would just block
-// testers. Records who last toggled it.
+// on the /scrape Recent-jobs table. Open to any signed-in user — it's an
+// informational flag, not a destructive or proxy-spending action, so
+// restricting it to the owner would just block testers. Records who last
+// toggled it.
 // ============================================================
 
 export async function toggleJobReviewed(
@@ -4412,116 +3918,4 @@ export async function toggleJobReviewed(
     status: 'ok',
     message: reviewed ? 'Marked as reviewed.' : 'Marked as not reviewed.',
   }
-}
-
-// ============================================================
-// Push to Monday — job level. Sends every worth-pushing result of this
-// scrape (affiliate-flagged leads for Google/Bing, likely-affiliate
-// entities for the social engines) onto the Rooster Leads board in one
-// action. Reuses the proven per-lead push and the generic per-entity push.
-//
-// Gated owner-or-admin (via requireJobAccess) because it creates real
-// items on a shared external board — same trust level as the per-lead push
-// in the leads drawer.
-// ============================================================
-
-export type PushJobState =
-  | { status: 'ok'; message: string }
-  | { status: 'error'; error: string }
-  | null
-
-export async function pushJobToMondayAction(
-  _prev: PushJobState,
-  fd: FormData,
-): Promise<PushJobState> {
-  const jobId = jobIdFrom(fd)
-  if (!jobId) return { status: 'error', error: 'Missing job id.' }
-  const access = await requireJobAccess(jobId)
-  if (!access.ok) return { status: 'error', error: access.error }
-
-  const note = String(fd.get('note') ?? '').trim().slice(0, 5000)
-
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { status: 'error', error: 'Not signed in.' }
-
-  // Resolve the pushing user's Monday id so items land under their name —
-  // same rule as the per-lead push. Block when unlinked rather than
-  // silently impersonating a shared default owner.
-  const svc = createServiceClient()
-  const { data: profileRow } = await svc
-    .from('user_profiles')
-    .select('username, display_name, monday_user_id')
-    .eq('id', user.id)
-    .maybeSingle()
-  const profile = profileRow as
-    | { username: string | null; display_name: string | null; monday_user_id: number | null }
-    | null
-  const pushedByDisplay = profile?.display_name ?? profile?.username ?? user.email ?? user.id
-  const ownerId = profile?.monday_user_id ?? null
-  if (ownerId == null) {
-    return {
-      status: 'error',
-      error:
-        'Your account is not linked to a Monday user yet. Ask an admin to set your Monday ID at /admin/users so pushes land under you.',
-    }
-  }
-
-  let result: Awaited<ReturnType<typeof pushJobToMondayLib>>
-  try {
-    result = await pushJobToMondayLib(jobId, {
-      pushedBy: pushedByDisplay,
-      ownerId,
-      note,
-    })
-  } catch (err) {
-    return { status: 'error', error: safeError(err, 'Failed to push this scrape to Monday.') }
-  }
-  if (!result.ok) return { status: 'error', error: result.error }
-
-  await logActivity({
-    action: 'monday.push_job',
-    entity_type: 'scrape_job',
-    entity_id: jobId,
-    details: {
-      engine: result.engine,
-      kind: result.kind,
-      attempted: result.attempted,
-      pushed: result.pushed,
-      skipped_already_pushed: result.skippedAlreadyPushed,
-      failed: result.failed,
-      monday_owner_id: ownerId,
-    },
-  })
-
-  revalidatePath('/scrape')
-  revalidatePath(`/scrape/${jobId}`)
-  revalidatePath('/leads')
-
-  if (result.attempted === 0) {
-    const skipNote =
-      result.skippedAlreadyPushed > 0
-        ? ` (${result.skippedAlreadyPushed} already on Monday)`
-        : ''
-    return {
-      status: 'ok',
-      message: `No new affiliate leads to push for this scrape${skipNote}.`,
-    }
-  }
-  const tail = [
-    result.skippedAlreadyPushed > 0 ? `${result.skippedAlreadyPushed} already pushed` : '',
-    result.failed > 0 ? `${result.failed} failed` : '',
-  ]
-    .filter(Boolean)
-    .join(', ')
-  const errTail =
-    result.failed > 0 && result.errors.length > 0 ? ` — ${result.errors.slice(0, 2).join(' · ')}` : ''
-  return {
-    status: result.failed > 0 ? 'error' : 'ok',
-    ...(result.failed > 0
-      ? { error: `Pushed ${result.pushed}/${result.attempted} to Monday${tail ? ` (${tail})` : ''}${errTail}` }
-      : { message: `Pushed ${result.pushed} lead${result.pushed === 1 ? '' : 's'} to Monday${tail ? ` (${tail})` : ''}.` }),
-  } as PushJobState
 }

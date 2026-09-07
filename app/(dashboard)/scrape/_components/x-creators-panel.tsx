@@ -16,8 +16,8 @@ const initialState: StageRunState = null
  * jobs. Two operator-triggered ▶ actions:
  *   - Enrich profiles → Phase 2 browser scrape (runXProfileEnrichment,
  *     enqueues a scrape_queue job the GoLogin workers claim)
- *   - Score & check   → Phase 3 affiliate scoring + shortener resolution +
- *     Monday new-vs-known (runXCreatorAnalysis, runs inline)
+ *   - Score & check   → Phase 3 affiliate scoring + shortener resolution
+ *     (runXCreatorAnalysis, runs inline)
  *
  * Mirrors KickStreamersPanel / YoutubeChannelsPanel.
  */
@@ -132,13 +132,13 @@ export function XCreatorsPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score X creators and check Monday"
+              aria-label="Score X creators"
               title={
                 noCreators
                   ? 'No creators to score yet'
                   : scoreNeeded
-                    ? `${unscored > 0 ? `${unscored} creator${unscored === 1 ? '' : 's'} not yet scored` : 'Newly enriched creators'} — run scoring to flag affiliates, resolve links, mine contacts, and check Monday`
-                    : 'Re-score to refresh affiliate flags, contacts, resolved links, and Monday checks'
+                    ? `${unscored > 0 ? `${unscored} creator${unscored === 1 ? '' : 's'} not yet scored` : 'Newly enriched creators'} — run scoring to flag affiliates, resolve links, and mine contacts`
+                    : 'Re-score to refresh affiliate flags, contacts, and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -165,7 +165,7 @@ export function XCreatorsPanel({
         <strong className="font-medium">Enrich</strong> opens the discovered profiles in a real (X-logged-in) browser to
         backfill follower counts, bio, pinned tweet, website, socials, and affiliate links.{' '}
         <strong className="font-medium">Score &amp; check</strong> then flags likely affiliates (niche score), resolves
-        shortener links, mines contacts, and checks each affiliate ID / @handle against Monday. Both are re-runnable.
+        shortener links, and mines contacts. Both are re-runnable.
         {moreToEnrich && (
           <>
             {' '}

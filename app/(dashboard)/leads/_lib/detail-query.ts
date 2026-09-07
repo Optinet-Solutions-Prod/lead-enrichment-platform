@@ -29,14 +29,10 @@ export type StagDetail = {
   brand: string | null
   tracking_url: string | null
   final_url: string | null
-  is_existing_on_monday: boolean | null
-  monday_match_kind: string | null
-  monday_match_item_id: string | null
   redirect_chain: string[] | null
   screenshot_path: string | null
   /** Pre-signed URL for the per-tag landing-page screenshot. */
   screenshot_url?: string | null
-  is_rooster_brand: boolean | null
   /** 'desktop' | 'mobile' — which extraction pass produced this tag. */
   extracted_via: string | null
   /** 'system' (our extraction) | 'monday' (inherited from a matched item). */
@@ -51,7 +47,6 @@ export type CohortSibling = {
   domain: string | null
   url: string | null
   country_code: string | null
-  is_rooster_partner: boolean | null
   shared_count: number
   shared_tags: Array<{
     s_tag: string
@@ -75,36 +70,18 @@ export type LeadDetail = {
     /** Display name of the user who queued the scrape that produced this lead. */
     queued_by_display: string | null
     queued_by_username: string | null
-    is_on_monday: boolean | null
-    monday_board: string | null
-    monday_item_id: string | null
-    /** How the match was found: 'exact', 'registered' (subdomain
-     *  variant), 'exact_name' (Monday item title is the domain but
-     *  Website column was empty), 'registered_name' (subdomain variant
-     *  of a title-only Monday item), or 'mentioned_in_updates'
-     *  (domain found in a board comment/post). Null when the lead
-     *  isn't on Monday. */
-    monday_match_kind: string | null
     is_affiliate: boolean | null
     affiliate_score: number | null
     affiliate_casino_score: number | null
     affiliate_confidence: string | null
     affiliate_external_links: number | null
     affiliate_indicators: string[] | null
-    is_rooster_partner: boolean | null
-    brand: string | null
-    /** 'system' | 'monday' — who set is_affiliate / is_rooster_partner. */
+    /** 'system' | 'monday' — who set is_affiliate. */
     affiliate_source: string | null
-    rooster_source: string | null
-    monday_inherited_at: string | null
-    rooster_brands: Array<{ domain: string; brand_name: string | null; monday_item_id: string | null }> | null
     has_contact_details: boolean | null
     has_s_tags: boolean | null
     s_tags_checked_at: string | null
     screenshot_content_link: string | null
-    pushed_to_monday_at: string | null
-    monday_pushed_item_id: string | null
-    monday_pushed_by: string | null
     is_not_relevant: boolean
     not_relevant_marked_at: string | null
     not_relevant_marked_by: string | null
@@ -112,9 +89,9 @@ export type LeadDetail = {
      *  inherited from, if any (set by complete_scrape_job). */
     inherited_from_lead_id: number | null
     inherited_at: string | null
-    /** When true, this lead bypasses the is_on_monday / is_not_relevant
-     *  auto-skip in the enrichment chain. Operators flip it via the
-     *  drawer's Force-enrich button or the bulk action. */
+    /** When true, this lead bypasses the is_not_relevant auto-skip
+     *  in the enrichment chain. Operators flip it via the drawer's
+     *  Force-enrich button or the bulk action. */
     force_enrich: boolean
     serp_screenshot_path: string | null
     /** Which device view this lead was seen on:
@@ -128,8 +105,8 @@ export type LeadDetail = {
   stags: StagDetail[]
   /** Other affiliate sites that share at least one s-tag with this
    *  one — the operator workflow uses this to decide whether the
-   *  whole network should be pushed to Monday at once. Empty when
-   *  this lead has no s-tags yet or no siblings share its tags. */
+   *  whole network should be handled at once. Empty when this lead
+   *  has no s-tags yet or no siblings share its tags. */
   cohort: CohortSibling[]
   /** Pre-signed URL to the landing-page screenshot PNG (captured during
    *  enrichment), valid ~1h. Null when no screenshot exists or it's
@@ -139,21 +116,6 @@ export type LeadDetail = {
    *  (captured at scrape time, the small ad creative as seen on
    *  Google). Null for organic rows or when the capture failed. */
   serp_screenshot_url: string | null
-  /** Fuzzy "possible Monday matches" — partial/LIKE on the domain's brand stem
-   *  across item titles, websites, and the updates feed. Populated only when the
-   *  lead isn't already confirmed on Monday, so operators can validate a match
-   *  the exact matcher missed. Empty when on-Monday or nothing similar exists. */
-  monday_candidates: MondayCandidate[]
-}
-
-/** One fuzzy Monday-board candidate surfaced for operator validation. */
-export type MondayCandidate = {
-  board: string
-  item_id: string
-  item_name: string | null
-  website: string | null
-  matched_on: string
-  score: number
 }
 
 export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
@@ -167,14 +129,11 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
         [
           'id, url, domain, keyword, country, country_code, result_type, batch_id, created_at, seen_on',
           'scrape_job_id',
-          'is_on_monday, monday_board, monday_item_id, monday_match_kind',
           'is_affiliate, affiliate_score, affiliate_casino_score, affiliate_confidence',
           'affiliate_external_links, affiliate_indicators',
-          'is_rooster_partner, brand, rooster_brands',
-          'affiliate_source, rooster_source, monday_inherited_at',
+          'affiliate_source',
           'has_contact_details, has_s_tags, s_tags_checked_at',
           'screenshot_content_link, serp_screenshot_path',
-          'pushed_to_monday_at, monday_pushed_item_id, monday_pushed_by',
           'is_not_relevant, not_relevant_marked_at, not_relevant_marked_by',
           // Recognition memory + force-enrich override (added by
           // 20260618000000_memory_recognition).
@@ -202,8 +161,7 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
         [
           's_tag, source_param, brand',
           'tracking_url, final_url',
-          'is_existing_on_monday, monday_match_kind, monday_match_item_id',
-          'redirect_chain, screenshot_path, is_rooster_brand, extracted_via, origin',
+          'redirect_chain, screenshot_path, extracted_via, origin',
         ].join(', '),
       )
       .eq('lead_id', leadId)
@@ -290,8 +248,7 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
               [
                 's_tag, source_param, brand',
                 'tracking_url, final_url',
-                'is_existing_on_monday, monday_match_kind, monday_match_item_id',
-                'redirect_chain, screenshot_path, is_rooster_brand, extracted_via, origin',
+                'redirect_chain, screenshot_path, extracted_via, origin',
               ].join(', '),
             )
             .eq('lead_id', ancestorId)
@@ -340,8 +297,7 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
       // countries comes back as separate sibling rows. Operators want each
       // distinct website ONCE — country doesn't matter here. Dedup by host
       // (domain, falling back to the url's host), keeping the strongest match
-      // (highest shared_count) as the representative and OR-ing the Rooster
-      // flag so a site flagged in any country still shows the badge.
+      // (highest shared_count) as the representative.
       const hostKey = (sib: CohortSibling) => {
         const raw = (sib.domain || sib.url || '').trim().toLowerCase()
         return raw
@@ -357,28 +313,9 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
         .slice()
         .sort((a, b) => (b.shared_count ?? 0) - (a.shared_count ?? 0))) {
         const key = hostKey(sib)
-        const kept = byHost.get(key)
-        if (!kept) byHost.set(key, { ...sib })
-        else if (sib.is_rooster_partner && !kept.is_rooster_partner) kept.is_rooster_partner = true
+        if (!byHost.has(key)) byHost.set(key, { ...sib })
       }
       cohort = Array.from(byHost.values())
-    }
-  }
-
-  // Fuzzy "possible Monday matches" — only when this lead isn't already
-  // confirmed on Monday. We mirror the whole board locally, so surface partial
-  // matches the exact matcher missed for the operator to validate (confirming
-  // one sets a manual override that persists across future scrapes).
-  let mondayCandidates: MondayCandidate[] = []
-  if (lead && lead.is_on_monday !== true) {
-    const probe = (lead.domain || lead.url || '').trim()
-    if (probe) {
-      const { data: cands, error: candErr } = await svc.rpc('search_monday_candidates', {
-        p_domain: probe,
-        p_limit: 8,
-      })
-      if (candErr) console.error(`[loadLeadDetail/candidates/${leadId}]`, candErr)
-      else mondayCandidates = (cands ?? []) as MondayCandidate[]
     }
   }
 
@@ -387,7 +324,6 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
     contact,
     stags,
     cohort,
-    monday_candidates: mondayCandidates,
     screenshot_url: screenshotUrl,
     serp_screenshot_url: serpScreenshotUrl,
   }

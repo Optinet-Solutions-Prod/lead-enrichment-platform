@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
-  Database,
   Loader2,
   Mail,
   Play,
@@ -15,17 +14,13 @@ import {
 } from 'lucide-react'
 import {
   cancelEnrichmentStage,
-  checkMondayDuplicates,
   runAffiliateDetection,
   runContactExtraction,
-  runRoosterCheck,
   runStagExtraction,
-  type CheckMondayState,
   type StageRunState,
 } from '../actions'
 import type { StageStatus, StageSummary } from '../_lib/queries'
 
-const initialMonday: CheckMondayState = null
 const initialStage: StageRunState = null
 
 type StageKey = keyof StageSummary
@@ -34,15 +29,9 @@ function summaryLabel(key: StageKey, s: StageStatus): string {
   if (s.total === 0) return 'not yet'
   const parts: string[] = [`${s.total} processed`]
   switch (key) {
-    case 'monday':
-      parts.push(s.positive === 0 ? 'no matches' : `${s.positive} matched`)
-      break
     case 'affiliate':
       parts.push(s.positive === 0 ? 'no affiliates' : `${s.positive} affiliates`)
       if (s.errored > 0) parts.push(`${s.errored} errored`)
-      break
-    case 'rooster':
-      parts.push(s.positive === 0 ? 'no partners' : `${s.positive} Rooster partners`)
       break
     case 'contact':
       parts.push(s.positive === 0 ? 'no contacts' : `${s.positive} with contacts`)
@@ -51,7 +40,7 @@ function summaryLabel(key: StageKey, s: StageStatus): string {
       parts.push(s.positive === 0 ? 'no s-tags' : `${s.positive} with s-tags`)
       break
     case 'stagCheck':
-      parts.push(s.positive === 0 ? 'none on Monday' : `${s.positive} on Monday`)
+      parts.push(s.positive === 0 ? 'no matches' : `${s.positive} matched`)
       break
   }
   return parts.join(' · ')
@@ -72,9 +61,8 @@ function relativeTime(iso: string | null): string {
 }
 
 /** Cancellable stages map to the bare stage name in `process_stages` on
- *  enrichment_fetch_queue. `monday` runs purely in-DB and isn't queued, so
- *  it has no Cancel button. */
-type CancellableStage = 'affiliate' | 'rooster' | 'contact' | 'stag'
+ *  enrichment_fetch_queue. */
+type CancellableStage = 'affiliate' | 'contact' | 'stag'
 
 type StageRowProps = {
   index: number
@@ -263,12 +251,7 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
 
   // Each stage hosts its own useActionState — React will hydrate these idle
   // even while the containing details element is closed.
-  const [mondayState, mondayAction, mondayPending] = useActionState(
-    checkMondayDuplicates,
-    initialMonday,
-  )
   const [affState, affAction, affPending] = useActionState(runAffiliateDetection, initialStage)
-  const [roosterState, roosterAction, roosterPending] = useActionState(runRoosterCheck, initialStage)
   const [contactState, contactAction, contactPending] = useActionState(
     runContactExtraction,
     initialStage,
@@ -283,10 +266,6 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
     cancelEnrichmentStage,
     initialStage,
   )
-  const [roosterCancelState, roosterCancelAction, roosterCancelPending] = useActionState(
-    cancelEnrichmentStage,
-    initialStage,
-  )
   const [contactCancelState, contactCancelAction, contactCancelPending] = useActionState(
     cancelEnrichmentStage,
     initialStage,
@@ -297,7 +276,7 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
   )
 
   const doneCount = (
-    [summary.monday, summary.affiliate, summary.rooster, summary.contact, summary.stag] as StageStatus[]
+    [summary.affiliate, summary.contact, summary.stag] as StageStatus[]
   ).filter(s => s.total > 0).length
 
   return (
@@ -315,14 +294,14 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
           <span
             className={[
               'rounded-full px-2 py-0.5 text-[10px] font-medium',
-              doneCount === 5
+              doneCount === 3
                 ? 'bg-emerald-100 text-emerald-800'
                 : doneCount > 0
                   ? 'bg-amber-100 text-amber-800'
                   : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]',
             ].join(' ')}
           >
-            {doneCount} of 5 done
+            {doneCount} of 3 done
           </span>
           <ChevronDown
             className={['h-4 w-4 text-[color:var(--color-text-secondary)] transition-transform', open ? 'rotate-180' : ''].join(' ')}
@@ -334,19 +313,6 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
         <div className="flex flex-col gap-1.5 border-t border-[color:var(--color-border)] p-2">
           <StageRow
             index={1}
-            stageKey="monday"
-            title="Check Monday duplicates"
-            icon={<Database className="h-3 w-3" />}
-            status={summary.monday}
-            action={mondayAction}
-            pending={mondayPending}
-            message={mondayState?.status === 'ok' ? mondayState.message : null}
-            error={mondayState?.status === 'error' ? mondayState.error : null}
-            jobId={jobId}
-            auto
-          />
-          <StageRow
-            index={2}
             stageKey="affiliate"
             title="Detect affiliates"
             icon={<Search className="h-3 w-3" />}
@@ -363,29 +329,11 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
             cancelMessage={affCancelState?.status === 'ok' ? affCancelState.message : null}
             cancelError={affCancelState?.status === 'error' ? affCancelState.error : null}
           />
+          {/* Stages 2 & 3 are MANUAL — the auto chain stops after
+           *  Affiliate. Operators trigger these per-job from the ▶
+           *  button below. */}
           <StageRow
-            index={3}
-            stageKey="rooster"
-            title="Check Rooster brands"
-            icon={<CheckCircle2 className="h-3 w-3" />}
-            status={summary.rooster}
-            action={roosterAction}
-            pending={roosterPending}
-            message={roosterState?.status === 'ok' ? roosterState.message : null}
-            error={roosterState?.status === 'error' ? roosterState.error : null}
-            jobId={jobId}
-            auto
-            cancelStage="rooster"
-            cancelAction={roosterCancelAction}
-            cancelPending={roosterCancelPending}
-            cancelMessage={roosterCancelState?.status === 'ok' ? roosterCancelState.message : null}
-            cancelError={roosterCancelState?.status === 'error' ? roosterCancelState.error : null}
-          />
-          {/* Stages 4 & 5 are now MANUAL — auto-chain stops at Rooster
-           *  (see migration 20260505040000_chain_stops_at_rooster.sql).
-           *  Operators trigger these per-job from the ▶ button below. */}
-          <StageRow
-            index={4}
+            index={2}
             stageKey="stag"
             title="Extract s-tags (affiliates)"
             icon={<Tag className="h-3 w-3" />}
@@ -402,7 +350,7 @@ export function EnrichmentStages({ jobId, summary }: StagesProps) {
             cancelError={stagCancelState?.status === 'error' ? stagCancelState.error : null}
           />
           <StageRow
-            index={5}
+            index={3}
             stageKey="contact"
             title="Extract contacts"
             icon={<Mail className="h-3 w-3" />}

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { CheckCircle2, ExternalLink, Mail, MessageCircle, Send, Sparkles } from 'lucide-react'
 import type { TelegramChannelRow } from '../_lib/queries'
-import { MondayStatusCell } from './monday-status-cell'
 
 /**
  * Per-channel results table for Telegram jobs (Phase 3). New lead candidates
@@ -22,15 +21,9 @@ export function TelegramChannelsTable({ rows }: { rows: TelegramChannelRow[] }) 
             <th className="px-3 py-2 font-medium">Channel</th>
             <th
               className="cursor-help px-3 py-2 font-medium"
-              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 (or posts a casino link directly). NEW = a likely affiliate whose affiliate ID / @handle isn’t on Monday yet. Hover a badge for the breakdown."
+              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 (or posts a casino link directly). NEW = a likely affiliate flagged as a new lead candidate. Hover a badge for the breakdown."
             >
               Affiliate
-            </th>
-            <th
-              className="cursor-help px-3 py-2 font-medium"
-              title="Monday recognition. Green ✓ = the channel / affiliate ID / any of its posted links is already on a Monday board. Grey ✕ = we checked and found no match. Blank = scoring hasn’t run yet."
-            >
-              On Monday
             </th>
             <th
               className="cursor-help px-3 py-2 font-medium"
@@ -98,20 +91,13 @@ function TelegramChannelRowView({ r }: { r: TelegramChannelRow }) {
             {r.is_new_lead_candidate && (
               <span
                 className="inline-flex cursor-help items-center gap-1 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800"
-                title="New lead candidate — a likely affiliate whose affiliate ID / @handle isn’t on Monday yet. Worth reviewing for outreach."
+                title="New lead candidate — a likely affiliate worth reviewing for outreach."
               >
                 <Sparkles className="h-3 w-3" /> NEW
               </span>
             )}
           </div>
         )}
-      </td>
-
-      <td className="px-3 py-2">
-        <MondayStatusCell
-          isKnownOnMonday={r.is_known_on_monday}
-          links={r.links}
-        />
       </td>
 
       <td className="px-3 py-2">
@@ -129,7 +115,6 @@ function TelegramChannelRowView({ r }: { r: TelegramChannelRow }) {
               key={`l${i}`}
               href={l.resolved_url ?? l.url}
               label={l.brand || hostLabel(l.resolved_url ?? l.url)}
-              isNew={l.is_known_on_monday === false}
             />
           ))}
           {r.links.length === 0 && (
@@ -207,21 +192,16 @@ function ContactChip({
   )
 }
 
-function LinkChip({ href, label, isNew }: { href: string; label: string; isNew?: boolean }) {
+function LinkChip({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      title={isNew ? `${href} — not on Monday yet` : href}
-      className={[
-        'inline-flex max-w-[180px] items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-        isNew
-          ? 'bg-purple-100 text-purple-800 hover:bg-purple-200'
-          : 'bg-blue-100 text-blue-800 hover:bg-blue-200',
-      ].join(' ')}
+      title={href}
+      className="inline-flex max-w-[180px] items-center gap-1 truncate rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-800 hover:bg-blue-200"
     >
-      {isNew ? <Sparkles className="h-2.5 w-2.5 shrink-0" /> : <ExternalLink className="h-2.5 w-2.5 shrink-0" />}
+      <ExternalLink className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{label}</span>
     </a>
   )

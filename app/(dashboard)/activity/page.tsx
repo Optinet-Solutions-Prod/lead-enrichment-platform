@@ -275,22 +275,18 @@ function formatDetails(action: string, details: Record<string, unknown>): string
       return parts.join(' · ')
     }
     case 'enrichment.affiliate':
-    case 'enrichment.rooster':
     case 'enrichment.contact':
     case 'enrichment.stag': {
       const e = details.enqueued as number | undefined
       const s = details.skipped as number | undefined
       return `${e ?? 0} enqueued${s ? ` · ${s} skipped` : ''}`
     }
-    case 'enrichment.monday_dup_check':
     case 'enrichment.stag_dup_check': {
       const c = details.checked as number | undefined
       const m = details.matched as number | undefined
       return `${c ?? 0} checked · ${m ?? 0} matched`
     }
-    case 'override.monday':
     case 'override.affiliate':
-    case 'override.rooster':
     case 'override.contact':
     case 'override.stag':
     case 'override.stag_verified':

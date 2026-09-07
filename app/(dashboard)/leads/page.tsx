@@ -6,7 +6,7 @@ import type { ColumnDef } from '@/lib/filters/types'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getUserPreferences } from '@/lib/user-preferences'
-import { Pagination } from '../monday/_components/pagination'
+import { Pagination } from '../_components/pagination'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { LeadsTable } from './_components/leads-table'
 import {

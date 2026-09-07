@@ -3,13 +3,12 @@
 import { useState, type ReactNode } from 'react'
 import { CheckCircle2, ExternalLink, Eye, Filter, Globe, Mail, MessageCircle, Send, ShieldAlert, Sparkles } from 'lucide-react'
 import type { YoutubeChannelRow } from '../_lib/queries'
-import { MondayStatusCell } from './monday-status-cell'
 
 /**
  * Per-channel results table for YouTube jobs (Phase 3). New-lead candidates
  * first, showing the niche score, subscribers, contacts, socials, and the
- * affiliate S-tags mined from video descriptions (with a new/known badge per
- * tag). Mirrors KickStreamersTable / TiktokCreatorsTable.
+ * affiliate S-tags mined from video descriptions. Mirrors
+ * KickStreamersTable / TiktokCreatorsTable.
  *
  * Relevance filter (Darren 2026-06-09): YouTube pokie/slot-keyword scrapes
  * surface ~90% irrelevant channels — gameplay vloggers, land-based-casino
@@ -89,15 +88,9 @@ function YoutubeTable({ rows }: { rows: YoutubeChannelRow[] }) {
             <th className="px-3 py-2 font-medium">Channel</th>
             <th
               className="cursor-help px-3 py-2 font-medium"
-              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 or carrying a casino affiliate link. A NEW badge means a likely affiliate whose channel isn’t on Monday yet."
+              title="Affiliate likelihood + niche score (0–100). “affiliate” = scored ≥30 or carrying a casino affiliate link. A NEW badge means a likely affiliate flagged as a new lead candidate."
             >
               Affiliate
-            </th>
-            <th
-              className="cursor-help px-3 py-2 font-medium"
-              title="Monday recognition. Green ✓ = the channel / affiliate ID / any of its links is already on a Monday board. Grey ✕ = we checked and found no match (worth reviewing for outreach). Blank = scoring hasn’t run yet."
-            >
-              On Monday
             </th>
             <th
               className="cursor-help px-3 py-2 font-medium"
@@ -109,7 +102,7 @@ function YoutubeTable({ rows }: { rows: YoutubeChannelRow[] }) {
             <th className="px-3 py-2 font-medium">Socials</th>
             <th
               className="cursor-help px-3 py-2 font-medium"
-              title="Casino operators / affiliate links this channel promotes (from its video descriptions + landing page), checked against the company database. NEW = operator not found on Monday. (The classic stag/btag value sits behind a redirector — that's the 'stag later' follow-up.)"
+              title="Casino operators / affiliate links this channel promotes (from its video descriptions + landing page). (The classic stag/btag value sits behind a redirector — that's the 'stag later' follow-up.)"
             >
               Affiliate links
             </th>
@@ -187,19 +180,12 @@ function YoutubeChannelRowView({ r }: { r: YoutubeChannelRow }) {
           {r.is_new_lead_candidate && (
             <span
               className="inline-flex cursor-help items-center gap-1 rounded-full bg-fuchsia-100 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-800"
-              title="New lead candidate — a likely affiliate whose YouTube channel isn’t on Monday yet (matched by @handle). Review and add to outreach."
+              title="New lead candidate — a likely affiliate. Review and add to outreach."
             >
               <Sparkles className="h-3 w-3" /> NEW
             </span>
           )}
         </div>
-      </td>
-
-      <td className="px-3 py-2">
-        <MondayStatusCell
-          isKnownOnMonday={r.is_known_on_monday}
-          links={r.links}
-        />
       </td>
 
       <td className="px-3 py-2">
@@ -229,7 +215,6 @@ function YoutubeChannelRowView({ r }: { r: YoutubeChannelRow }) {
               key={`t${i}`}
               label={[l.brand, l.s_tag].filter(Boolean).join(' · ') || l.s_tag || hostLabel(l.resolved_url ?? '')}
               href={l.resolved_url}
-              isNew={l.is_known_on_monday === false}
             />
           ))}
           {r.links.length === 0 && (
@@ -347,21 +332,18 @@ function SocialChip({
   )
 }
 
-function TagChip({ label, href, isNew }: { label: string; href: string | null; isNew: boolean }) {
-  const cls = [
-    'inline-flex max-w-[200px] items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-    isNew ? 'bg-fuchsia-100 text-fuchsia-800 hover:bg-fuchsia-200' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]',
-  ].join(' ')
+function TagChip({ label, href }: { label: string; href: string | null }) {
+  const cls =
+    'inline-flex max-w-[200px] items-center gap-1 truncate rounded-full bg-[color:var(--color-bg-secondary)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--color-text-secondary)]'
   const inner = (
     <>
       <ExternalLink className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{label}</span>
-      {isNew && <span className="shrink-0 font-semibold">· new</span>}
     </>
   )
-  if (!href) return <span className={cls} title={isNew ? 'Not found on Monday' : 'Already on Monday'}>{inner}</span>
+  if (!href) return <span className={cls}>{inner}</span>
   return (
-    <a href={href} target="_blank" rel="noreferrer" title={`${href}${isNew ? ' — not on Monday' : ' — already on Monday'}`} className={cls}>
+    <a href={href} target="_blank" rel="noreferrer" title={href} className={cls}>
       {inner}
     </a>
   )

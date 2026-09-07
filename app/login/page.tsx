@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { LoginForm } from './_components/login-form'
@@ -7,10 +8,10 @@ type Props = {
 }
 
 function safeFrom(from: string | undefined): string {
-  if (!from || /[\r\n\\]/.test(from)) return '/monday/leads'
+  if (!from || /[\r\n\\]/.test(from)) return '/scrape'
   return from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login')
     ? from
-    : '/monday/leads'
+    : '/scrape'
 }
 
 export default async function LoginPage({ searchParams }: Props) {
@@ -39,7 +40,7 @@ export default async function LoginPage({ searchParams }: Props) {
           Sign in
         </h1>
         <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-          Rooster Partners internal dashboard.
+          Sign in to your workspace.
         </p>
         {sessionExpired && (
           <div
@@ -52,6 +53,15 @@ export default async function LoginPage({ searchParams }: Props) {
         <div className="mt-4">
           <LoginForm redirectTo={sp.from ?? ''} />
         </div>
+        <p className="mt-4 text-[12px] text-[color:var(--color-text-secondary)]">
+          New here?{' '}
+          <Link
+            href="/signup"
+            className="text-[color:var(--color-text-primary)] underline underline-offset-2"
+          >
+            Create an account
+          </Link>
+        </p>
       </div>
     </div>
   )

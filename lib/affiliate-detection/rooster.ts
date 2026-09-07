@@ -7,9 +7,9 @@
  *   3. <img src="…/logo-spinjo.svg"> — any asset URL whose path
  *      contains a brand stem as a whole token.
  *
- * Distinct from the Monday-duplicate check (Epic 7.1), which tells
- * you the lead's OWN domain is a Rooster brand. This tells you the
- * lead is ALREADY a partner promoting us.
+ * Distinct from the brand-duplicate check, which tells you the
+ * lead's OWN domain is a Rooster brand. This tells you the lead is
+ * ALREADY a partner promoting us.
  *
  * Stems shorter than 4 chars are skipped to avoid false positives on
  * generic words. Names are matched as whole tokens / whole alt values
@@ -24,13 +24,11 @@ const MIN_STEM = 4
 export type RoosterMatch = {
   domain: string
   brand_name: string | null
-  monday_item_id: string | null
 }
 
 type BrandRow = {
   domain: string
   brand_name: string | null
-  monday_item_id: string | null
 }
 
 export function findRoosterBrandLinks(
@@ -40,7 +38,7 @@ export function findRoosterBrandLinks(
   if (!html || html.length < 100) return []
   if (brandList.length === 0) return []
 
-  const brandsByDomain = new Map<string, { brand_name: string | null; monday_item_id: string | null }>()
+  const brandsByDomain = new Map<string, { brand_name: string | null }>()
   // Index keyed by both the brand_name (for alt-attr match) and the
   // domain stem (for image-filename token match). Lowercased.
   // Two separate indexes so a brand whose NAME equals another brand's
@@ -56,7 +54,7 @@ export function findRoosterBrandLinks(
     // `www.` removed at line 70, and without this the equality check
     // silently misses.
     const dom = b.domain.toLowerCase().replace(/^www\./, '')
-    brandsByDomain.set(dom, { brand_name: b.brand_name, monday_item_id: b.monday_item_id })
+    brandsByDomain.set(dom, { brand_name: b.brand_name })
     if (b.brand_name) {
       const name = b.brand_name.trim().toLowerCase()
       if (name.length >= MIN_STEM) brandsByName.set(name, b)
@@ -98,7 +96,6 @@ export function findRoosterBrandLinks(
         found.set(hit.domain, {
           domain: hit.domain,
           brand_name: hit.brand_name,
-          monday_item_id: hit.monday_item_id,
         })
       }
     }
@@ -116,7 +113,6 @@ export function findRoosterBrandLinks(
           found.set(hit.domain, {
             domain: hit.domain,
             brand_name: hit.brand_name,
-            monday_item_id: hit.monday_item_id,
           })
         }
       }

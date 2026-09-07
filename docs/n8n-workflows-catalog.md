@@ -71,7 +71,7 @@ The user has already rebuilt the entry webhook and the scrape-insert step in the
   3. Otherwise POST to `/webhook/add-proxy-proxyLite` to get country proxy string
   4. Call `ScrapingBee` node with `ownProxy, renderJs=true`
   5. On error → POST to `/webhook/add-proxy-enigma` → second Scraping Bee attempt
-  6. On second error → **3rd fallback** direct `https://app.scrapingbee.com/api/v1/` with `premium_proxy=true, country_code=<ISO2>` (API key literal: `28EOCIV4WPSKYXDS8GKC7Q5Y66RCFTDRWDN5PS7F6AUZQAWSHAJPTD9EH881YYFH0S8D1I1TP8523U4S`)
+  6. On second error → **3rd fallback** direct `https://app.scrapingbee.com/api/v1/` with `premium_proxy=true, country_code=<ISO2>` (API key was hard-coded in the fallback node — REDACTED here; that key must be rotated in the ScrapingBee dashboard since it lives in git history)
   7. Cache HTML back into `google_lead_gen_table.html_tags` (UPDATE by id)
   8. Respond `{ rendered_html_tags: "<html>…" }`
 - **Helper code**: Intl.DisplayNames to map country name → ISO-2 country code.

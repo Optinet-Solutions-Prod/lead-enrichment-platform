@@ -1,6 +1,6 @@
 /**
  * Shared page-size parser for paginated tables (/leads, /scrape,
- * /scrape/[id], /monday/*, /activity).
+ * /scrape/[id], /activity).
  *
  * Two valid shapes:
  *   - `0` is the "All rows" sentinel — the server-side query helpers

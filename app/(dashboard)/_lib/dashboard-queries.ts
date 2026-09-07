@@ -62,10 +62,6 @@ export type ContactCoverage = {
   affiliatesChecked: number
   affiliatesWithContact: number
   leadsWithContact: number
-  /** v3: how much of the coverage came from inheriting matched Monday
-   *  items vs. our own extraction. */
-  inheritedFromMonday: number
-  affiliatesViaMonday: number
 }
 
 export type ProfileWarning = {
@@ -169,7 +165,6 @@ export const EXPECTED_WORKERS: ReadonlyArray<{
 export type DashboardData = {
   kpiLeads: Kpi
   kpiAffiliates: Kpi
-  kpiRooster: Kpi
   scrape: ScrapeStats
   enrich: EnrichStats
   contactCoverage: ContactCoverage
@@ -251,7 +246,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const [
     leadsTotal, leadsCur, leadsPrev,
     affTotal, affCur, affPrev,
-    roosterTotal, roosterCur, roosterPrev,
   ] = await Promise.all([
     safe(shadowFilter(svc.from('google_lead_gen_table').select('*', headOpts), shadowCtx)),
     safe(
@@ -294,33 +288,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
           .eq('is_affiliate', true)
           .gte('affiliate_checked_at', prev14d)
           .lt('affiliate_checked_at', last7d),
-        shadowCtx,
-      ),
-    ),
-    safe(
-      shadowFilter(
-        svc.from('google_lead_gen_table').select('*', headOpts).eq('is_rooster_partner', true),
-        shadowCtx,
-      ),
-    ),
-    safe(
-      shadowFilter(
-        svc
-          .from('google_lead_gen_table')
-          .select('*', headOpts)
-          .eq('is_rooster_partner', true)
-          .gte('rooster_checked_at', last7d),
-        shadowCtx,
-      ),
-    ),
-    safe(
-      shadowFilter(
-        svc
-          .from('google_lead_gen_table')
-          .select('*', headOpts)
-          .eq('is_rooster_partner', true)
-          .gte('rooster_checked_at', prev14d)
-          .lt('rooster_checked_at', last7d),
         shadowCtx,
       ),
     ),
@@ -412,8 +379,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     affiliatesChecked,
     affiliatesWithContact,
     leadsWithContact,
-    inheritedFromMonday,
-    affiliatesViaMonday,
   ] = await Promise.all([
       safe(
         shadowFilter(
@@ -447,26 +412,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
             .from('google_lead_gen_table')
             .select('*', headOpts)
             .eq('has_contact_details', true),
-          shadowCtx,
-        ),
-      ),
-      // v3: leads whose data was inherited from a matched Monday item.
-      safe(
-        shadowFilter(
-          svc
-            .from('google_lead_gen_table')
-            .select('*', headOpts)
-            .not('monday_inherited_at', 'is', null),
-          shadowCtx,
-        ),
-      ),
-      safe(
-        shadowFilter(
-          svc
-            .from('google_lead_gen_table')
-            .select('*', headOpts)
-            .eq('is_affiliate', true)
-            .eq('affiliate_source', 'monday'),
           shadowCtx,
         ),
       ),
@@ -601,7 +546,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
   return {
     kpiLeads: makeKpi(leadsTotal, leadsCur, leadsPrev),
     kpiAffiliates: makeKpi(affTotal, affCur, affPrev),
-    kpiRooster: makeKpi(roosterTotal, roosterCur, roosterPrev),
     scrape: {
       pending: scrapePending,
       running: scrapeRunning,
@@ -619,8 +563,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
       affiliatesChecked,
       affiliatesWithContact,
       leadsWithContact,
-      inheritedFromMonday,
-      affiliatesViaMonday,
     },
     profileWarnings: (warnRows ?? []) as ProfileWarning[],
     recentBatches: (batchRows ?? []) as unknown as RecentBatch[],

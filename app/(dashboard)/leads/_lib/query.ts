@@ -8,7 +8,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 // 0 is the sentinel for "All rows" — substituted with a soft cap
 // in queryLeads so a multi-thousand-row table doesn't lock up the
 // browser. Keep the sentinel in sync with ALL_ROWS in
-// monday/_components/pagination.tsx.
+// _components/pagination.tsx.
 export const LEAD_PAGE_SIZES = [20, 50, 100, 0] as const
 export const DEFAULT_LEAD_PAGE_SIZE = 20
 /** Soft cap used when the user picks "All". */
@@ -29,19 +29,10 @@ export type LeadRow = {
   seen_on: string | null
   batch_id: number | null
   scrape_job_id: string | null
-  // Monday duplicate check (7.1)
-  is_on_monday: boolean | null
-  monday_board: string | null
-  monday_item_id: string | null
-  monday_overridden_at: string | null
   // Affiliate detection (7.2)
   is_affiliate: boolean | null
   affiliate_confidence: string | null
   is_affiliate_overridden_at: string | null
-  // Rooster partner (7.3)
-  is_rooster_partner: boolean | null
-  brand: string | null
-  is_rooster_overridden_at: string | null
   // Contacts (7.4)
   has_contact_details: boolean | null
   is_contact_overridden_at: string | null
@@ -111,9 +102,7 @@ export async function queryLeads(opts: LeadsQueryOptions): Promise<LeadsQueryRes
         'id, keyword, country, country_code, url, domain',
         'page_number, position_on_page, overall_position',
         'result_type, seen_on, batch_id, scrape_job_id',
-        'is_on_monday, monday_board, monday_item_id, monday_overridden_at',
         'is_affiliate, affiliate_confidence, is_affiliate_overridden_at',
-        'is_rooster_partner, brand, is_rooster_overridden_at',
         'has_contact_details, is_contact_overridden_at',
         'has_s_tags, is_stag_overridden_at',
         's_tags_checked_at, s_tag_id',
@@ -130,8 +119,8 @@ export async function queryLeads(opts: LeadsQueryOptions): Promise<LeadsQueryRes
   // viewer never even sees a count of shadow rows.
   query = applyShadowFilter(query, shadowCtx) as typeof query
 
-  // Default: hide not-relevant rows (Monday not_relevant board match
-  // OR user-flagged). `?show_hidden=1` flips includeNotRelevant=true.
+  // Default: hide not-relevant rows (user-flagged).
+  // `?show_hidden=1` flips includeNotRelevant=true.
   if (!opts.includeNotRelevant) {
     query = query.eq('is_not_relevant', false)
   }

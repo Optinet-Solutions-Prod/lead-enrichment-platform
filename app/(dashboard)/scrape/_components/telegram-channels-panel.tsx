@@ -13,8 +13,8 @@ const initialState: StageRunState = null
  * gambling-seed list + @mention snowball AND enriches each channel via t.me/s
  * in one pure-HTTP run), so — like Snapchat/Facebook — the
  * only operator action is Phase 3:
- *   - Score & check → affiliate scoring + shortener resolution + Monday
- *     new-vs-known (runTelegramChannelAnalysis, runs inline)
+ *   - Score & check → affiliate scoring + shortener resolution
+ *     (runTelegramChannelAnalysis, runs inline)
  */
 export function TelegramChannelsPanel({
   jobId,
@@ -72,13 +72,13 @@ export function TelegramChannelsPanel({
             <button
               type="submit"
               disabled={scoreDisabled}
-              aria-label="Score Telegram channels and check Monday"
+              aria-label="Score Telegram channels"
               title={
                 noChannels
                   ? 'No channels to score yet — run the Telegram scrape first'
                   : scoreNeeded
-                    ? 'Score the discovered channels — flag affiliates, resolve posted links, mine contacts, and check Monday'
-                    : 'Re-score to refresh affiliate flags, contacts, resolved links, and Monday checks'
+                    ? 'Score the discovered channels — flag affiliates, resolve posted links, and mine contacts'
+                    : 'Re-score to refresh affiliate flags, contacts, and resolved links'
               }
               className={[
                 'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
@@ -106,7 +106,7 @@ export function TelegramChannelsPanel({
         the @mentions they cross-promote — the keyword is recorded but doesn&apos;t drive discovery in this mode. It
         captures each channel&apos;s title, description, subscriber count, and the links it posts in one pure-HTTP pass.{' '}
         <strong className="font-medium">Score &amp; check</strong> flags likely casino affiliates (niche score), resolves
-        shortener / hub links, mines contacts, and checks each affiliate ID / @handle against Monday. Re-runnable.
+        shortener / hub links, and mines contacts. Re-runnable.
       </p>
 
       {(message || error) && (

@@ -5,8 +5,6 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { shouldSkipDomain } from '@/lib/affiliate-detection/scorer'
 import { logActivity } from '@/lib/activity-log'
-import { pushLeadToMonday, MAX_OPERATOR_NOTE_LEN } from '@/lib/monday/push-lead'
-import { pushLeadToMondayNotRelevant } from '@/lib/monday/push-not-relevant'
 import { requireLeadAccess, requireLeadsAccess } from '@/lib/auth/require-lead-access'
 
 /** Log the raw Supabase/Postgrest error server-side for debugging but
@@ -26,7 +24,7 @@ function safeError(err: unknown, fallback: string): string {
 
 /**
  * Force-enrich a set of leads — override the auto-skip that fires
- * when a domain is already known on Monday or marked not-relevant.
+ * when a domain is already marked not-relevant.
  * Calls the force_enrich_leads RPC which flips the flag, clears
  * the checked_at timestamps so the chain re-enqueues, and resets
  * the parent job's enrichment_status so the chain comes off
@@ -58,76 +56,6 @@ export async function forceEnrichLeadsAction(leadIds: number[]): Promise<ForceEn
   revalidatePath('/leads')
   revalidatePath('/scrape', 'layout')
   return { ok: true, queued }
-}
-
-/**
- * Push a lead to Monday's Not Relevant board AND mark it
- * not-relevant locally in one action. Used by the drawer's
- * "Push to Monday Not Relevant" button and by the
- * mark-not-relevant prompt's "Also push to Monday" branch.
- */
-export type PushNotRelevantState =
-  | { status: 'ok'; message: string }
-  | { status: 'error'; error: string }
-  | null
-
-export async function pushLeadToMondayNotRelevantAction(
-  _prev: PushNotRelevantState,
-  fd: FormData,
-): Promise<PushNotRelevantState> {
-  const leadId = Number(fd.get('lead_id'))
-  if (!Number.isInteger(leadId) || leadId <= 0) {
-    return { status: 'error', error: 'Missing lead id.' }
-  }
-  const access = await requireLeadAccess(leadId)
-  if (!access.ok) return { status: 'error', error: access.error }
-
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { status: 'error', error: 'Not signed in.' }
-
-  const note = String(fd.get('note') ?? '').trim().slice(0, MAX_OPERATOR_NOTE_LEN)
-  const pushedBy = user.email ?? 'unknown@local'
-
-  // Look up the operator's Monday user id so the new item gets
-  // assigned to them. Same pattern + same fail-loud-if-missing rule
-  // as the regular Push-to-Monday action below.
-  const svc = createServiceClient()
-  const { data: profileRow } = await svc
-    .from('user_profiles')
-    .select('monday_user_id')
-    .eq('id', user.id)
-    .maybeSingle()
-  const pushedByMondayId =
-    (profileRow as { monday_user_id: number | null } | null)?.monday_user_id ?? null
-  if (pushedByMondayId == null) {
-    return {
-      status: 'error',
-      error:
-        'Your account is not linked to a Monday user yet. Ask an admin to set your Monday ID at /admin/users so pushes land under you.',
-    }
-  }
-
-  const result = await pushLeadToMondayNotRelevant(leadId, {
-    pushedBy,
-    pushedByMondayId,
-    ...(note ? { note } : {}),
-  })
-  if (!result.ok) return { status: 'error', error: result.error }
-
-  await logActivity({
-    action: 'leads.push_monday_not_relevant',
-    entity_type: 'lead',
-    entity_id: String(leadId),
-    details: { monday_item_id: result.monday_item_id, has_note: note.length > 0 },
-  })
-
-  revalidatePath('/leads')
-  revalidatePath('/scrape', 'layout')
-  return {
-    status: 'ok',
-    message: `Pushed to Monday Not Relevant board (item ${result.monday_item_id}). Lead is now hidden by default; force-enrich to override.`,
-  }
 }
 
 /**
@@ -171,132 +99,6 @@ export async function deleteLeadScreenshot(formData: FormData): Promise<void> {
     entity_type: 'lead',
     entity_id: leadId,
     details: { had_path: path !== null },
-  })
-
-  revalidatePath('/leads')
-  revalidatePath('/scrape', 'layout')
-}
-
-export type MondayLabelValue =
-  | 'no'
-  | 'clear'
-  | 'affiliates'
-  | 'affiliates_updates'
-  | 'leads'
-  | 'leads_updates'
-  | 'not_relevant_leads'
-  | 'not_relevant_leads_updates'
-  | 'email_undelivered_leads'
-  | 'email_undelivered_leads_updates'
-
-const VALID: ReadonlySet<string> = new Set([
-  'no',
-  'clear',
-  'affiliates',
-  'affiliates_updates',
-  'leads',
-  'leads_updates',
-  'not_relevant_leads',
-  'not_relevant_leads_updates',
-  'email_undelivered_leads',
-  'email_undelivered_leads_updates',
-])
-
-/**
- * Set the Monday match label for a single lead row.
- *
- * - 'clear' — reverts to the not-yet-checked state (auto re-run will pick it up again)
- * - 'no'    — explicitly marks the row as not on Monday
- * - 'leads' / 'affiliate' / 'updates' — manual override; auto re-runs leave it alone
- */
-export async function setMondayLabel(formData: FormData): Promise<void> {
-  const leadId = Number(formData.get('lead_id'))
-  const rawValue = String(formData.get('value') ?? '')
-  if (!Number.isInteger(leadId) || leadId <= 0) throw new Error('Missing lead id.')
-  if (!VALID.has(rawValue)) throw new Error(`Invalid value: ${rawValue}`)
-  const value = rawValue as MondayLabelValue
-
-  const access = await requireLeadAccess(leadId)
-  if (!access.ok) throw new Error(access.error)
-
-  const svc = createServiceClient()
-
-  let patch: Record<string, unknown>
-  switch (value) {
-    case 'clear':
-      patch = {
-        is_on_monday: null,
-        monday_board: null,
-        monday_item_id: null,
-        monday_overridden_at: null,
-      }
-      break
-    case 'no':
-      patch = {
-        is_on_monday: false,
-        monday_board: null,
-        monday_item_id: null,
-        monday_overridden_at: new Date().toISOString(),
-      }
-      break
-    default:
-      // One of the 8 granular categories
-      patch = {
-        is_on_monday: true,
-        monday_board: value,
-        monday_overridden_at: new Date().toISOString(),
-      }
-  }
-
-  const { error } = await svc.from('google_lead_gen_table').update(patch).eq('id', leadId)
-  if (error) throw new Error(safeError(error, 'Failed to save override.'))
-
-  await logActivity({
-    action: 'override.monday',
-    entity_type: 'lead',
-    entity_id: leadId,
-    details: { value },
-  })
-
-  revalidatePath('/leads')
-  revalidatePath('/scrape', 'layout')
-}
-
-// ============================================================
-// Confirm a fuzzy "possible Monday match" (from search_monday_candidates).
-// The operator eyeballed a candidate and validated it, so we set the Monday
-// verdict as a MANUAL override (monday_overridden_at) — which now carries
-// forward to future scrapes of the same URL (20260820120000) and is skipped by
-// the nightly rematch. Records the specific item so the drawer links to it.
-// ============================================================
-export async function confirmMondayCandidate(formData: FormData): Promise<void> {
-  const leadId = Number(formData.get('lead_id'))
-  const board = String(formData.get('board') ?? '').trim()
-  const itemId = String(formData.get('item_id') ?? '').trim()
-  if (!Number.isInteger(leadId) || leadId <= 0) throw new Error('Missing lead id.')
-  if (!board) throw new Error('Missing board.')
-
-  const access = await requireLeadAccess(leadId)
-  if (!access.ok) throw new Error(access.error)
-
-  const svc = createServiceClient()
-  const { error } = await svc
-    .from('google_lead_gen_table')
-    .update({
-      is_on_monday: true,
-      monday_board: board,
-      monday_item_id: itemId || null,
-      monday_match_kind: 'operator_confirmed',
-      monday_overridden_at: new Date().toISOString(),
-    })
-    .eq('id', leadId)
-  if (error) throw new Error(safeError(error, 'Failed to confirm the match.'))
-
-  await logActivity({
-    action: 'override.monday_candidate',
-    entity_type: 'lead',
-    entity_id: leadId,
-    details: { board, item_id: itemId },
   })
 
   revalidatePath('/leads')
@@ -361,16 +163,6 @@ export async function setAffiliateLabel(formData: FormData): Promise<void> {
   })
 }
 
-export async function setRoosterLabel(formData: FormData): Promise<void> {
-  await setBooleanFlag({
-    leadId: Number(formData.get('lead_id')),
-    value: String(formData.get('value') ?? ''),
-    valueColumn: 'is_rooster_partner',
-    overrideColumn: 'is_rooster_overridden_at',
-    logAction: 'override.rooster',
-  })
-}
-
 export async function setContactLabel(formData: FormData): Promise<void> {
   await setBooleanFlag({
     leadId: Number(formData.get('lead_id')),
@@ -389,111 +181,6 @@ export async function setStagLabel(formData: FormData): Promise<void> {
     overrideColumn: 'is_stag_overridden_at',
     logAction: 'override.stag',
   })
-}
-
-// ============================================================
-// Push to Monday — manual, per-lead.
-//
-// Distinct from the Monday duplicate-check stage (which only READS the
-// Monday replica). This actively CREATES a new item on the Leads board
-// using the legacy column-id mapping from the n8n workflow. Triggered
-// from the lead detail drawer so the user explicitly chooses which
-// leads land on Monday.
-// ============================================================
-
-export type PushToMondayState =
-  | { status: 'ok'; message: string; monday_item_id: string }
-  | { status: 'error'; error: string }
-  | null
-
-export async function pushLeadToMondayAction(
-  _prev: PushToMondayState,
-  formData: FormData,
-): Promise<PushToMondayState> {
-  const leadId = Number(formData.get('lead_id'))
-  if (!Number.isInteger(leadId) || leadId <= 0) return { status: 'error', error: 'Missing lead id.' }
-
-  // Optional free-text note the operator typed in the Push dialog. Posted
-  // to the new Monday item's Updates/comment box. Trim + cap here too so
-  // an oversized body never reaches Monday (the lib re-caps defensively).
-  const note = String(formData.get('note') ?? '').trim().slice(0, MAX_OPERATOR_NOTE_LEN)
-
-  const access = await requireLeadAccess(leadId)
-  if (!access.ok) return { status: 'error', error: access.error }
-
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { status: 'error', error: 'Not signed in.' }
-
-  // Resolve the pushing user's display name + Monday user id so the
-  // new item lands under their name on the Leads board. Block the push
-  // when monday_user_id is null instead of silently falling back to a
-  // shared default owner — that fallback was the source of the QA
-  // complaint where every pushed item showed up under Charisse.
-  const svc = createServiceClient()
-  const { data: profileRow } = await svc
-    .from('user_profiles')
-    .select('username, display_name, monday_user_id')
-    .eq('id', user.id)
-    .maybeSingle()
-  const profile = profileRow as
-    | { username: string | null; display_name: string | null; monday_user_id: number | null }
-    | null
-  const pushedByDisplay =
-    profile?.display_name ?? profile?.username ?? user.email ?? user.id
-  const pushedByMondayId = profile?.monday_user_id ?? null
-  if (pushedByMondayId == null) {
-    return {
-      status: 'error',
-      error:
-        'Your account is not linked to a Monday user yet. Ask an admin to set your Monday ID at /admin/users so pushes land under you.',
-    }
-  }
-
-  const result = await pushLeadToMonday(leadId, {
-    pushedBy: pushedByDisplay,
-    pushedByMondayId,
-    note,
-  })
-  if (!result.ok) {
-    return { status: 'error', error: result.error }
-  }
-
-  await logActivity({
-    action: 'monday.push_lead',
-    entity_type: 'lead',
-    entity_id: leadId,
-    details: {
-      monday_item_id: result.monday_item_id,
-      attached_file: result.attached_file,
-      s_tag_update_posted: result.s_tag_update_posted,
-      comment_set: result.comment_set,
-      monday_owner_id: pushedByMondayId,
-      stamp_warning: result.stamp_warning,
-    },
-  })
-
-  revalidatePath('/leads')
-  revalidatePath('/scrape', 'layout')
-  // stamp_warning means the Monday item is on the board but the local
-  // "already pushed" flag didn't save. Tell the operator NOT to retry —
-  // refreshing won't help (the stamp will still be missing) and another
-  // click would create a duplicate. An admin needs to set
-  // pushed_to_monday_at + monday_pushed_item_id manually.
-  const warning = result.stamp_warning
-    ? ` ⚠ Local state didn't save (${result.stamp_warning}) — do NOT click Push again, this lead is on Monday. Tell an admin to stamp it manually.`
-    : ''
-  return {
-    status: 'ok',
-    message: `Pushed to Monday (item ${result.monday_item_id}).${
-      result.attached_file ? ' Screenshot attached.' : ''
-    }${result.s_tag_update_posted ? ' S-tags posted as update.' : ''}${
-      result.comment_set ? ' Comment added.' : ''
-    }${warning}`,
-    monday_item_id: result.monday_item_id,
-  }
 }
 
 // ============================================================
@@ -594,7 +281,7 @@ export type BulkActionState =
   | { status: 'error'; error: string }
   | null
 
-const VALID_STAGES = new Set(['affiliate', 'rooster', 'contact', 'stag'])
+const VALID_STAGES = new Set(['affiliate', 'contact', 'stag'])
 
 /** Max lead IDs accepted per bulk submit. Mirrors the 200 cap used by
  *  `bulkRerunScrapeJobs` in scrape/actions.ts so all non-admin bulk
