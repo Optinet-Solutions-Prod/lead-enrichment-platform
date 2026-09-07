@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
+import { applyFilters, applySorts } from '@/lib/filters/apply'
+import { AIRBNB_LISTINGS_COLUMNS } from '@/lib/filters/columns-airbnb'
+import { parseFilters, parseSorts } from '@/lib/filters/serialize'
+import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
+import { AdvancedFilters } from '../_components/advanced-filters'
+import { Pagination } from '../_components/pagination'
+import { SortHeader } from '../_components/sort-header'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,32 +23,83 @@ type ListingRow = {
   scraped_at: string
 }
 
-type SearchParams = Promise<{ loc?: string }>
+type SearchParams = Record<string, string | string[] | undefined>
 
-const MAX_ROWS = 600
+const DEFAULT_PAGE_SIZE = 50
+/** Soft cap when the pagination UI's "All" (size=0) sentinel is picked. */
+const ALL_ROWS_CAP = 10_000
 const MAX_CHIPS = 20
+
+const SEARCHABLE_COLUMNS = ['title', 'host_name', 'locality']
+
+/** Strip PostgREST `.or()` syntax chars plus ILIKE wildcards so user input
+ *  is treated literally (mirrors /leads). */
+function sanitize(q: string): string {
+  return q.replace(/[,()*%_\\]/g, '').trim()
+}
 
 export default async function AirbnbListingsPage({
   searchParams,
 }: {
-  searchParams: SearchParams
+  searchParams: Promise<SearchParams>
 }) {
   const sp = await searchParams
-  const locFilter = (sp.loc ?? '').trim()
+  const locFilter = typeof sp.loc === 'string' ? sp.loc.trim() : ''
+  const q = typeof sp.q === 'string' ? sp.q : ''
+  const filters = parseFilters(sp.f)
+  const sorts = parseSorts(sp.s)
+  const sort = typeof sp.sort === 'string' ? sp.sort : ''
+  const order: 'asc' | 'desc' = sp.order === 'desc' ? 'desc' : 'asc'
+  const page = clampInt(sp.page, 1, 1_000_000, 1)
+  const size = clampPageSize(sp.size, DEFAULT_PAGE_SIZE)
 
   const svc = createServiceClient()
-  let query = svc
-    .from('airbnb_listings')
-    .select('id, airbnb_id, url, title, host_name, locality, price_text, room_type, scraped_at')
-    .order('locality', { ascending: true })
-    .order('id', { ascending: true })
-    .limit(MAX_ROWS)
+  // Typed as plain `string` so supabase-js doesn't parse the literal into a
+  // deep generic (TS2589 when the builder is threaded through applyFilters).
+  const cols: string =
+    'id, airbnb_id, url, title, host_name, locality, price_text, room_type, scraped_at'
+  let query = svc.from('airbnb_listings').select(cols, { count: 'exact' })
   if (locFilter) query = query.eq('locality', locFilter)
-  const { data, error } = await query
-  if (error) throw new Error(`Failed to load Airbnb listings: ${error.message}`)
-  const rows = (data ?? []) as ListingRow[]
 
-  const { data: locRows } = await svc.from('airbnb_listings').select('locality')
+  const cleanQ = sanitize(q)
+  if (cleanQ.length > 0) {
+    const or = SEARCHABLE_COLUMNS.map(c => `${c}.ilike.%${cleanQ}%`).join(',')
+    query = query.or(or)
+  }
+
+  // Advanced filter rows (`?f=col:op:val`). Validated against the registry.
+  if (filters.length > 0) {
+    query = applyFilters(query, filters, AIRBNB_LISTINGS_COLUMNS)
+  }
+
+  // Sort priority: multi-sort popover (`?s=`) beats the single-column
+  // header sort (`?sort=&order=`), which beats the page default.
+  if (sorts.length > 0) {
+    query = applySorts(query, sorts, AIRBNB_LISTINGS_COLUMNS)
+  } else if (sort) {
+    query = applySorts(query, [{ col: sort, dir: order }], AIRBNB_LISTINGS_COLUMNS)
+  } else {
+    query = query.order('locality', { ascending: true })
+  }
+  // Stable tiebreaker so `.range()` pagination never shuffles equal rows.
+  query = query.order('id', { ascending: true })
+
+  if (size === 0) {
+    query = query.range(0, ALL_ROWS_CAP - 1)
+  } else {
+    const from = Math.max(0, (page - 1) * size)
+    query = query.range(from, from + size - 1)
+  }
+
+  const [{ data, count, error }, { data: locRows }] = await Promise.all([
+    query,
+    // Locality chips (always across the FULL table, not the filtered view).
+    svc.from('airbnb_listings').select('locality'),
+  ])
+  if (error) throw new Error(`Failed to load Airbnb listings: ${error.message}`)
+  const rows = (data ?? []) as unknown as ListingRow[]
+  const filteredTotal = count ?? 0
+
   const locCounts = new Map<string, number>()
   for (const r of (locRows ?? []) as { locality: string | null }[]) {
     const key = r.locality ?? '—'
@@ -90,15 +148,17 @@ export default async function AirbnbListingsPage({
         ))}
       </div>
 
+      <AdvancedFilters columns={AIRBNB_LISTINGS_COLUMNS} preserve={['loc']} />
+
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
         <table className="w-full text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-              <th className="px-3 py-2">Listing</th>
-              <th className="px-3 py-2">Host</th>
-              <th className="px-3 py-2">Locality</th>
-              <th className="px-3 py-2">Price</th>
-              <th className="px-3 py-2">Room type</th>
+              <th className="px-3 py-2"><SortHeader columnKey="title" label="Listing" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="host_name" label="Host" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="locality" label="Locality" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="price_text" label="Price" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="room_type" label="Room type" sortable /></th>
             </tr>
           </thead>
           <tbody>
@@ -143,11 +203,20 @@ export default async function AirbnbListingsPage({
           </tbody>
         </table>
       </div>
-      {rows.length === MAX_ROWS && (
-        <p className="text-[12px] text-[color:var(--color-text-secondary)]">
-          Showing the first {MAX_ROWS} — narrow by locality to see the rest.
-        </p>
-      )}
+
+      <Pagination page={page} size={size} total={filteredTotal} />
     </div>
   )
+}
+
+function clampInt(
+  raw: string | string[] | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (typeof raw !== 'string') return fallback
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(Math.max(n, min), max)
 }

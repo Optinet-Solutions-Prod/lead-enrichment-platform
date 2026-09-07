@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { ExternalLink, Mail, Phone } from 'lucide-react'
+import { applyFilters, applySorts } from '@/lib/filters/apply'
+import { PROPERTY_LEADS_COLUMNS } from '@/lib/filters/columns-property-leads'
+import { parseFilters, parseSorts } from '@/lib/filters/serialize'
+import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
+import { AdvancedFilters } from '../_components/advanced-filters'
+import { Pagination } from '../_components/pagination'
+import { SortHeader } from '../_components/sort-header'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,42 +28,113 @@ type LeadRow = {
   airbnb_match_basis: string | null
 }
 
-type SearchParams = Promise<{ site?: string }>
+type SearchParams = Record<string, string | string[] | undefined>
 
-const MAX_ROWS = 500
+const DEFAULT_PAGE_SIZE = 50
+/** Soft cap when the pagination UI's "All" (size=0) sentinel is picked. */
+const ALL_ROWS_CAP = 10_000
+
+const SEARCHABLE_COLUMNS = [
+  'title',
+  'location',
+  'owner_name',
+  'contact_phone',
+  'contact_email',
+  'source_site',
+]
+
+/** Strip PostgREST `.or()` syntax chars plus ILIKE wildcards so user input
+ *  is treated literally (mirrors /leads). */
+function sanitize(q: string): string {
+  return q.replace(/[,()*%_\\]/g, '').trim()
+}
 
 export default async function PropertyLeadsPage({
   searchParams,
 }: {
-  searchParams: SearchParams
+  searchParams: Promise<SearchParams>
 }) {
   const sp = await searchParams
-  const siteFilter = (sp.site ?? '').trim().toLowerCase()
+  const siteFilter =
+    typeof sp.site === 'string' ? sp.site.trim().toLowerCase() : ''
+  const q = typeof sp.q === 'string' ? sp.q : ''
+  const filters = parseFilters(sp.f)
+  const sorts = parseSorts(sp.s)
+  const sort = typeof sp.sort === 'string' ? sp.sort : ''
+  const order: 'asc' | 'desc' = sp.order === 'desc' ? 'desc' : 'asc'
+  const page = clampInt(sp.page, 1, 1_000_000, 1)
+  const size = clampPageSize(sp.size, DEFAULT_PAGE_SIZE)
 
   const svc = createServiceClient()
-  let query = svc
-    .from('property_leads')
-    .select(
-      'id, source_site, listing_url, title, price_text, location, owner_name, contact_phone, contact_email, contact_type, notes, scraped_at, airbnb_url, airbnb_match_basis',
-    )
-    .order('source_site', { ascending: true })
-    .order('id', { ascending: true })
-    .limit(MAX_ROWS)
+  // Typed as plain `string` so supabase-js doesn't parse the literal into a
+  // deep generic (TS2589 when the builder is threaded through applyFilters).
+  const cols: string =
+    'id, source_site, listing_url, title, price_text, location, owner_name, contact_phone, contact_email, contact_type, notes, scraped_at, airbnb_url, airbnb_match_basis'
+  let query = svc.from('property_leads').select(cols, { count: 'exact' })
   if (siteFilter) query = query.eq('source_site', siteFilter)
-  const { data, error } = await query
-  if (error) throw new Error(`Failed to load property leads: ${error.message}`)
-  const rows = (data ?? []) as LeadRow[]
 
-  // Per-site chips (always across the FULL table, not the filtered view).
-  const { data: siteRows } = await svc.from('property_leads').select('source_site')
+  const cleanQ = sanitize(q)
+  if (cleanQ.length > 0) {
+    const or = SEARCHABLE_COLUMNS.map(c => `${c}.ilike.%${cleanQ}%`).join(',')
+    query = query.or(or)
+  }
+
+  // Advanced filter rows (`?f=col:op:val`). Validated against the registry.
+  if (filters.length > 0) {
+    query = applyFilters(query, filters, PROPERTY_LEADS_COLUMNS)
+  }
+
+  // Sort priority: multi-sort popover (`?s=`) beats the single-column
+  // header sort (`?sort=&order=`), which beats the page default.
+  if (sorts.length > 0) {
+    query = applySorts(query, sorts, PROPERTY_LEADS_COLUMNS)
+  } else if (sort) {
+    query = applySorts(query, [{ col: sort, dir: order }], PROPERTY_LEADS_COLUMNS)
+  } else {
+    query = query.order('source_site', { ascending: true })
+  }
+  // Stable tiebreaker so `.range()` pagination never shuffles equal rows.
+  query = query.order('id', { ascending: true })
+
+  if (size === 0) {
+    query = query.range(0, ALL_ROWS_CAP - 1)
+  } else {
+    const from = Math.max(0, (page - 1) * size)
+    query = query.range(from, from + size - 1)
+  }
+
+  const [
+    { data, count, error },
+    { data: siteRows },
+    { count: phoneCount },
+    { count: emailCount },
+  ] = await Promise.all([
+    query,
+    // Per-site chips (always across the FULL table, not the filtered view).
+    svc.from('property_leads').select('source_site'),
+    svc
+      .from('property_leads')
+      .select('id', { head: true, count: 'exact' })
+      .not('contact_phone', 'is', null)
+      .neq('contact_phone', ''),
+    svc
+      .from('property_leads')
+      .select('id', { head: true, count: 'exact' })
+      .not('contact_email', 'is', null)
+      .neq('contact_email', ''),
+  ])
+  if (error) throw new Error(`Failed to load property leads: ${error.message}`)
+  const rows = (data ?? []) as unknown as LeadRow[]
+  const filteredTotal = count ?? 0
+
   const siteCounts = new Map<string, number>()
   for (const r of (siteRows ?? []) as { source_site: string }[]) {
     siteCounts.set(r.source_site, (siteCounts.get(r.source_site) ?? 0) + 1)
   }
   const sites = [...siteCounts.entries()].sort((a, b) => b[1] - a[1])
   const total = (siteRows ?? []).length
-  const withPhone = rows.filter(r => r.contact_phone).length
-  const withEmail = rows.filter(r => r.contact_email).length
+  const withPhone = phoneCount ?? 0
+  const withEmail = emailCount ?? 0
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -67,7 +145,7 @@ export default async function PropertyLeadsPage({
         <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
           Harvested Malta property-owner leads across{' '}
           {sites.length.toLocaleString()} sources · {total.toLocaleString()} leads
-          {siteFilter && ` · showing ${rows.length.toLocaleString()} from ${siteFilter}`}
+          {siteFilter && ` · showing ${filteredTotal.toLocaleString()} from ${siteFilter}`}
           {!siteFilter && ` · ${withPhone} with phone · ${withEmail} with email`}
         </p>
       </header>
@@ -100,19 +178,21 @@ export default async function PropertyLeadsPage({
         ))}
       </div>
 
+      <AdvancedFilters columns={PROPERTY_LEADS_COLUMNS} preserve={['site']} />
+
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
         <table className="w-full text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-              <th className="px-3 py-2">Source</th>
-              <th className="px-3 py-2">Listing</th>
-              <th className="px-3 py-2">Price</th>
-              <th className="px-3 py-2">Location</th>
-              <th className="px-3 py-2">Owner / Lister</th>
-              <th className="px-3 py-2">Phone</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Airbnb</th>
+              <th className="px-3 py-2"><SortHeader columnKey="source_site" label="Source" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="title" label="Listing" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="price_text" label="Price" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="location" label="Location" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="owner_name" label="Owner / Lister" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="contact_phone" label="Phone" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="contact_email" label="Email" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="contact_type" label="Type" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="airbnb_match_basis" label="Airbnb" sortable /></th>
             </tr>
           </thead>
           <tbody>
@@ -222,6 +302,20 @@ export default async function PropertyLeadsPage({
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} size={size} total={filteredTotal} />
     </div>
   )
+}
+
+function clampInt(
+  raw: string | string[] | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (typeof raw !== 'string') return fallback
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(Math.max(n, min), max)
 }

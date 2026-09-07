@@ -45,6 +45,10 @@ type NavItem = {
    *  stays visible to everyone. Route-level guards on those pages back
    *  this up (nav-hiding alone isn't security). */
   adminOnly?: boolean
+  /** Hidden from the sidebar entirely (2026-09-07 — property-leads pivot):
+   *  the route stays deployed and URL-accessible, it just isn't offered in
+   *  the nav. Flip back to false to restore. */
+  hidden?: boolean
 }
 
 type NavGroup = {
@@ -65,12 +69,14 @@ const NAV_GROUPS: NavGroup[] = [
         // Renamed from "Dashboard" now that Dashboards is a category —
         // avoids the "Dashboards > Dashboard" awkwardness.
         label: 'Overview',
+        hidden: true,
         href: '/',
         icon: LayoutDashboard,
         match: (p: string) => p === '/',
       },
       {
         label: 'Operations',
+        hidden: true,
         href: '/operations',
         icon: Cpu,
         match: (p: string) => p.startsWith('/operations'),
@@ -82,13 +88,21 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Tools',
     items: [
       {
+        label: 'Property Scrape',
+        href: '/property-scrape',
+        icon: Search,
+        match: (p: string) => p.startsWith('/property-scrape'),
+      },
+      {
         label: 'Scrape',
+        hidden: true,
         href: '/scrape',
         icon: Search,
         match: (p: string) => p.startsWith('/scrape'),
       },
       {
         label: 'Leads',
+        hidden: true,
         href: '/leads',
         icon: ListChecks,
         match: (p: string) => p.startsWith('/leads'),
@@ -122,18 +136,21 @@ const NAV_GROUPS: NavGroup[] = [
         // captchas, not just the admin. URL keeps the /admin/ prefix for
         // backwards-compat (banner deep links, browser history).
         label: 'Interactive Checkpoints',
+        hidden: true,
         href: '/admin/interactive',
         icon: Hand,
         match: (p: string) => p.startsWith('/admin/interactive'),
       },
       {
         label: 'Country Profiles',
+        hidden: true,
         href: '/profiles',
         icon: Globe,
         match: (p: string) => p.startsWith('/profiles'),
       },
       {
         label: 'Activity Log',
+        hidden: true,
         href: '/activity',
         icon: Clock,
         match: (p: string) => p.startsWith('/activity'),
@@ -145,12 +162,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         label: 'Onboarding',
+        hidden: true,
         href: '/onboarding',
         icon: BookOpen,
         match: (p: string) => p.startsWith('/onboarding'),
       },
       {
         label: 'Help & Docs',
+        hidden: true,
         href: '/help',
         icon: HelpCircle,
         match: (p: string) => p.startsWith('/help'),
@@ -162,6 +181,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         label: 'Organization',
+        hidden: true,
         href: '/settings/organization',
         icon: Building2,
         match: (p: string) => p.startsWith('/settings/organization'),
@@ -171,6 +191,7 @@ const NAV_GROUPS: NavGroup[] = [
         // entries, deep links). Page is now open to all signed-in users
         // for reveal; admin-only for add/replace/remove.
         label: 'Google Login',
+        hidden: true,
         href: '/admin/google-login',
         icon: KeyRound,
         match: (p: string) => p.startsWith('/admin/google-login'),
@@ -188,18 +209,21 @@ const NAV_GROUPS: NavGroup[] = [
 const ADMIN_NAV_ITEMS: ReadonlyArray<NavItem> = [
   {
     label: 'Ops (Admin)',
+        hidden: true,
     href: '/admin/ops',
     icon: Gauge,
     match: (p: string) => p.startsWith('/admin/ops'),
   },
   {
     label: 'Users (Admin)',
+        hidden: true,
     href: '/admin/users',
     icon: Users,
     match: (p: string) => p.startsWith('/admin/users'),
   },
   {
     label: 'Alert Recipients (Admin)',
+        hidden: true,
     href: '/admin/alerts',
     icon: Bell,
     match: (p: string) => p.startsWith('/admin/alerts'),
@@ -214,6 +238,7 @@ const ADMIN_NAV_ITEMS: ReadonlyArray<NavItem> = [
   },
   {
     label: 'Operations (Admin)',
+        hidden: true,
     href: '/admin/operations',
     icon: DollarSign,
     match: (p: string) => p.startsWith('/admin/operations'),
@@ -337,7 +362,7 @@ export function DashboardShell({
             // left with no visible items (so no empty "Dashboards" header).
             .map(group => ({
               ...group,
-              items: group.items.filter(item => isAdmin || !item.adminOnly),
+              items: group.items.filter(item => !item.hidden && (isAdmin || !item.adminOnly)),
             }))
             .filter(group => group.items.length > 0)
             .map((group, gi) => (

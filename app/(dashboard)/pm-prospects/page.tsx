@@ -1,5 +1,12 @@
 import { ExternalLink, Sparkles } from 'lucide-react'
+import { applyFilters, applySorts } from '@/lib/filters/apply'
+import { PM_PROSPECTS_COLUMNS } from '@/lib/filters/columns-pm-prospects'
+import { parseFilters, parseSorts } from '@/lib/filters/serialize'
+import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
+import { AdvancedFilters } from '../_components/advanced-filters'
+import { Pagination } from '../_components/pagination'
+import { SortHeader } from '../_components/sort-header'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +20,17 @@ type ProspectRow = {
   host_profile_url: string
 }
 
-const MAX_ROWS = 600
+type SearchParams = Record<string, string | string[] | undefined>
+
+const DEFAULT_PAGE_SIZE = 50
+/** Soft cap when the pagination UI's "All" (size=0) sentinel is picked. */
+const ALL_ROWS_CAP = 10_000
+
+/** Strip ILIKE wildcards (and PostgREST syntax chars) so user input is
+ *  treated literally (mirrors /leads). */
+function sanitize(q: string): string {
+  return q.replace(/[,()*%_\\]/g, '').trim()
+}
 
 /** Normalize Maltese town spellings so the register (SAN PAWL IL BAHAR) and
  *  Airbnb (St Paul's Bay) aggregate into one market row. */
@@ -49,23 +66,72 @@ function titleCase(s: string): string {
   return s.replace(/\b[a-z]/g, c => c.toUpperCase())
 }
 
-export default async function PmProspectsPage() {
-  const svc = createServiceClient()
+export default async function PmProspectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}) {
+  const sp = await searchParams
+  const q = typeof sp.q === 'string' ? sp.q : ''
+  const filters = parseFilters(sp.f)
+  const sorts = parseSorts(sp.s)
+  const sort = typeof sp.sort === 'string' ? sp.sort : ''
+  const order: 'asc' | 'desc' = sp.order === 'desc' ? 'desc' : 'asc'
+  const page = clampInt(sp.page, 1, 1_000_000, 1)
+  const size = clampPageSize(sp.size, DEFAULT_PAGE_SIZE)
 
-  const [{ data: prospectsRaw, error }, { data: hfpsTowns }, { data: abLocs }] =
-    await Promise.all([
-      svc
-        .from('airbnb_pm_prospects')
-        .select('*')
-        .order('listings_count', { ascending: false })
-        .order('host_name', { ascending: true })
-        .limit(MAX_ROWS),
-      svc.from('hfps_register').select('town'),
-      svc.from('airbnb_listings').select('locality'),
-    ])
+  const svc = createServiceClient()
+  let query = svc.from('airbnb_pm_prospects').select('*', { count: 'exact' })
+
+  const cleanQ = sanitize(q)
+  if (cleanQ.length > 0) {
+    query = query.ilike('host_name', `%${cleanQ}%`)
+  }
+
+  // Advanced filter rows (`?f=col:op:val`). Validated against the registry.
+  if (filters.length > 0) {
+    query = applyFilters(query, filters, PM_PROSPECTS_COLUMNS)
+  }
+
+  // Sort priority: multi-sort popover (`?s=`) beats the single-column
+  // header sort (`?sort=&order=`), which beats the page default.
+  if (sorts.length > 0) {
+    query = applySorts(query, sorts, PM_PROSPECTS_COLUMNS)
+  } else if (sort) {
+    query = applySorts(query, [{ col: sort, dir: order }], PM_PROSPECTS_COLUMNS)
+  } else {
+    query = query
+      .order('listings_count', { ascending: false })
+      .order('host_name', { ascending: true })
+  }
+  // Stable tiebreaker so `.range()` pagination never shuffles equal rows.
+  query = query.order('host_id', { ascending: true })
+
+  if (size === 0) {
+    query = query.range(0, ALL_ROWS_CAP - 1)
+  } else {
+    const from = Math.max(0, (page - 1) * size)
+    query = query.range(from, from + size - 1)
+  }
+
+  const [
+    { data: prospectsRaw, count, error },
+    { count: purestTotal },
+    { data: hfpsTowns },
+    { data: abLocs },
+  ] = await Promise.all([
+    query,
+    svc
+      .from('airbnb_pm_prospects')
+      .select('host_id', { head: true, count: 'exact' })
+      .eq('purest', true),
+    svc.from('hfps_register').select('town'),
+    svc.from('airbnb_listings').select('locality'),
+  ])
   if (error) throw new Error(`Failed to load PM prospects: ${error.message}`)
   const prospects = (prospectsRaw ?? []) as ProspectRow[]
-  const purestCount = prospects.filter(p => p.purest).length
+  const total = count ?? 0
+  const purestCount = purestTotal ?? 0
 
   // Town-level market map: licensed short-let supply vs harvested Airbnb activity.
   const market = new Map<string, { licensed: number; airbnb: number }>()
@@ -95,80 +161,86 @@ export default async function PmProspectsPage() {
         </h1>
         <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
           Self-managing Airbnb hosts (1–4 listings, lettings brands filtered out) — the
-          audience for a property-management offer. {prospects.length.toLocaleString()}{' '}
+          audience for a property-management offer. {total.toLocaleString()}{' '}
           prospects · {purestCount.toLocaleString()} solo hosts (1–2 listings). Contact
           channel: their Airbnb profile. Recomputes automatically as the Airbnb harvest grows.
         </p>
       </header>
 
-      <section className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-        <table className="w-full text-left text-[13px]">
-          <thead>
-            <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-              <th className="px-3 py-2">Host</th>
-              <th className="px-3 py-2">Listings</th>
-              <th className="px-3 py-2">Localities</th>
-              <th className="px-3 py-2">Links</th>
-            </tr>
-          </thead>
-          <tbody>
-            {prospects.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-[color:var(--color-text-secondary)]">
-                  No prospects yet — run an Airbnb harvest first.
-                </td>
+      <div className="flex flex-col gap-4">
+        <AdvancedFilters columns={PM_PROSPECTS_COLUMNS} />
+
+        <section className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+                <th className="px-3 py-2"><SortHeader columnKey="host_name" label="Host" sortable /></th>
+                <th className="px-3 py-2"><SortHeader columnKey="listings_count" label="Listings" sortable /></th>
+                <th className="px-3 py-2">Localities</th>
+                <th className="px-3 py-2">Links</th>
               </tr>
-            )}
-            {prospects.map(p => (
-              <tr key={p.host_id} className="border-t border-[color:var(--color-border)] align-top">
-                <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 text-[color:var(--color-text-primary)]">
-                    {p.host_name}
-                    {p.purest && (
-                      <span
-                        title="1–2 listings — clearest self-managed owner"
-                        className="inline-flex items-center gap-0.5 rounded-full border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
-                      >
-                        <Sparkles className="h-2.5 w-2.5" />
-                        solo host
-                      </span>
+            </thead>
+            <tbody>
+              {prospects.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-[color:var(--color-text-secondary)]">
+                    No prospects yet — run an Airbnb harvest first.
+                  </td>
+                </tr>
+              )}
+              {prospects.map(p => (
+                <tr key={p.host_id} className="border-t border-[color:var(--color-border)] align-top">
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1.5 text-[color:var(--color-text-primary)]">
+                      {p.host_name}
+                      {p.purest && (
+                        <span
+                          title="1–2 listings — clearest self-managed owner"
+                          className="inline-flex items-center gap-0.5 rounded-full border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" />
+                          solo host
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-[color:var(--color-text-primary)]">
+                    {p.listings_count}
+                  </td>
+                  <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">
+                    {p.localities.filter(Boolean).join(', ') || '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <a
+                      href={p.host_profile_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
+                    >
+                      profile <ExternalLink className="h-3 w-3 text-[color:var(--color-text-secondary)]" />
+                    </a>
+                    {p.sample_listing_url && (
+                      <>
+                        {' · '}
+                        <a
+                          href={p.sample_listing_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[color:var(--color-text-secondary)] underline-offset-2 hover:underline"
+                        >
+                          listing <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </>
                     )}
-                  </span>
-                </td>
-                <td className="px-3 py-2 tabular-nums text-[color:var(--color-text-primary)]">
-                  {p.listings_count}
-                </td>
-                <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">
-                  {p.localities.filter(Boolean).join(', ') || '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2">
-                  <a
-                    href={p.host_profile_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
-                  >
-                    profile <ExternalLink className="h-3 w-3 text-[color:var(--color-text-secondary)]" />
-                  </a>
-                  {p.sample_listing_url && (
-                    <>
-                      {' · '}
-                      <a
-                        href={p.sample_listing_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[color:var(--color-text-secondary)] underline-offset-2 hover:underline"
-                      >
-                        listing <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <Pagination page={page} size={size} total={total} />
+      </div>
 
       <section>
         <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">
@@ -216,4 +288,16 @@ export default async function PmProspectsPage() {
       </section>
     </div>
   )
+}
+
+function clampInt(
+  raw: string | string[] | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (typeof raw !== 'string') return fallback
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(Math.max(n, min), max)
 }

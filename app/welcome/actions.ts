@@ -25,5 +25,5 @@ export async function createOrganizationAction(
 
   // Refresh so the new JWT carries the org_id / org_role claims.
   await supabase.auth.refreshSession()
-  redirect('/scrape')
+  redirect('/property-scrape')
 }

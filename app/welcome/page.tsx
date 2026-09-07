@@ -9,7 +9,7 @@ import { CreateOrgForm } from './_components/create-org-form'
  */
 export default async function WelcomePage() {
   const ctx = await getOrgContext()
-  if (ctx) redirect('/scrape')
+  if (ctx) redirect('/property-scrape')
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[color:var(--color-bg-secondary)] px-4 py-10">

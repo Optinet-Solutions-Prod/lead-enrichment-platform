@@ -56,7 +56,7 @@ export async function signInAction(
     }
   }
 
-  const safeRedirect = isSafePath(from) ? from : '/scrape'
+  const safeRedirect = isSafePath(from) ? from : '/property-scrape'
   redirect(safeRedirect)
 }
 

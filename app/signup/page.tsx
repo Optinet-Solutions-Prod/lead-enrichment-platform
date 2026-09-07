@@ -19,7 +19,7 @@ export default async function SignupPage({ searchParams }: Props) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (user) redirect(inviteToken ? `/invite/${inviteToken}` : '/scrape')
+    if (user) redirect(inviteToken ? `/invite/${inviteToken}` : '/property-scrape')
   } catch {
     // Auth server unreachable — fall through to the form.
   }
