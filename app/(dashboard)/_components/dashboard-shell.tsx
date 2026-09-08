@@ -49,6 +49,11 @@ type NavItem = {
    *  the route stays deployed and URL-accessible, it just isn't offered in
    *  the nav. Flip back to false to restore. */
   hidden?: boolean
+  /** Vertical module this item belongs to. Only shown when the signed-in
+   *  org has the module in org_settings.enabled_modules — so e.g. the
+   *  Property Management workspace never sees affiliate pages and vice
+   *  versa. Untagged items show for every org. */
+  module?: 'property' | 'affiliate'
 }
 
 type NavGroup = {
@@ -91,18 +96,21 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         label: 'Collect Data',
+        module: 'property',
         href: '/property-scrape',
         icon: Search,
         match: (p: string) => p.startsWith('/property-scrape'),
       },
       {
         label: 'Owner Leads',
+        module: 'property',
         href: '/property-leads',
         icon: Building2,
         match: (p: string) => p.startsWith('/property-leads'),
       },
       {
         label: 'PM Prospects',
+        module: 'property',
         href: '/pm-prospects',
         icon: Handshake,
         match: (p: string) => p.startsWith('/pm-prospects'),
@@ -115,12 +123,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         label: 'Airbnb Listings',
+        module: 'property',
         href: '/airbnb-listings',
         icon: BedDouble,
         match: (p: string) => p.startsWith('/airbnb-listings'),
       },
       {
         label: 'Short-Let Register',
+        module: 'property',
         href: '/hfps-register',
         icon: MapPinned,
         match: (p: string) => p.startsWith('/hfps-register'),
@@ -132,14 +142,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         label: 'Scrape',
-        hidden: true,
+        module: 'affiliate',
         href: '/scrape',
         icon: Search,
         match: (p: string) => p.startsWith('/scrape'),
       },
       {
         label: 'Leads',
-        hidden: true,
+        module: 'affiliate',
         href: '/leads',
         icon: ListChecks,
         match: (p: string) => p.startsWith('/leads'),
@@ -278,6 +288,8 @@ type Props = {
   username: string
   /** The signed-in user's organization name (sidebar brand line). */
   orgName?: string
+  /** The org's enabled vertical modules (drives module-tagged nav items). */
+  modules?: string[]
   isAdmin?: boolean
   proxyBandwidth?: ProxyBandwidth | null
   openFeedbackCount?: number
@@ -287,6 +299,7 @@ export function DashboardShell({
   children,
   username,
   orgName,
+  modules = ['property'],
   isAdmin = false,
   proxyBandwidth = null,
   openFeedbackCount = 0,
@@ -378,7 +391,12 @@ export function DashboardShell({
             // left with no visible items (so no empty "Dashboards" header).
             .map(group => ({
               ...group,
-              items: group.items.filter(item => !item.hidden && (isAdmin || !item.adminOnly)),
+              items: group.items.filter(
+                item =>
+                  !item.hidden &&
+                  (!item.module || modules.includes(item.module)) &&
+                  (isAdmin || !item.adminOnly),
+              ),
             }))
             .filter(group => group.items.length > 0)
             .map((group, gi) => (

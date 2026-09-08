@@ -72,6 +72,16 @@ function normEmail(v: unknown): string | null {
 
 async function main() {
   const svc = createClient(URL, SERVICE, { auth: { persistSession: false } })
+  // Harvest data belongs to the Property Management workspace.
+  const { data: pmOrg } = await svc
+    .from('organizations')
+    .select('id')
+    .eq('slug', 'property-management')
+    .maybeSingle()
+  if (!pmOrg) {
+    console.error('property-management organization not found — run migrations first.')
+    process.exit(1)
+  }
   const files = readdirSync(dir).filter(f => f.endsWith('.json'))
   if (files.length === 0) {
     console.error(`No .json files in ${dir}`)
@@ -106,6 +116,7 @@ async function main() {
       seenKeys.add(key)
       const ct = lead.contact_type
       rows.push({
+        org_id: pmOrg.id,
         source_site: site,
         listing_url: url,
         title: clean(lead.title),
@@ -122,7 +133,7 @@ async function main() {
     }
 
     // Replace this site's rows so re-harvests stay idempotent.
-    const { error: delErr } = await svc.from('property_leads').delete().eq('source_site', site)
+    const { error: delErr } = await svc.from('property_leads').delete().eq('org_id', pmOrg.id).eq('source_site', site)
     if (delErr) {
       console.log(`FAIL  ${site} — delete: ${delErr.message}`)
       continue

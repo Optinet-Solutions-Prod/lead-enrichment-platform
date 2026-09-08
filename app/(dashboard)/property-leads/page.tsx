@@ -1,9 +1,11 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ExternalLink, Mail, Phone } from 'lucide-react'
 import { applyFilters, applySorts } from '@/lib/filters/apply'
 import { PROPERTY_LEADS_COLUMNS } from '@/lib/filters/columns-property-leads'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
+import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { PageIntro } from '../_components/page-intro'
@@ -55,6 +57,8 @@ export default async function PropertyLeadsPage({
 }: {
   searchParams: Promise<SearchParams>
 }) {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/welcome')
   const sp = await searchParams
   const siteFilter =
     typeof sp.site === 'string' ? sp.site.trim().toLowerCase() : ''
@@ -71,7 +75,7 @@ export default async function PropertyLeadsPage({
   // deep generic (TS2589 when the builder is threaded through applyFilters).
   const cols: string =
     'id, source_site, listing_url, title, price_text, location, owner_name, contact_phone, contact_email, contact_type, notes, scraped_at, airbnb_url, airbnb_match_basis'
-  let query = svc.from('property_leads').select(cols, { count: 'exact' })
+  let query = svc.from('property_leads').select(cols, { count: 'exact' }).eq('org_id', ctx.orgId)
   if (siteFilter) query = query.eq('source_site', siteFilter)
 
   const cleanQ = sanitize(q)
@@ -112,19 +116,22 @@ export default async function PropertyLeadsPage({
   ] = await Promise.all([
     query,
     // Per-site chips (always across the FULL table, not the filtered view).
-    svc.from('property_leads').select('source_site'),
+    svc.from('property_leads').select('source_site').eq('org_id', ctx.orgId),
     svc
       .from('property_leads')
       .select('id', { head: true, count: 'exact' })
+      .eq('org_id', ctx.orgId)
       .not('contact_phone', 'is', null)
       .neq('contact_phone', ''),
     svc
       .from('property_leads')
       .select('id', { head: true, count: 'exact' })
+      .eq('org_id', ctx.orgId)
       .not('contact_email', 'is', null)
       .neq('contact_email', ''),
   ])
-  if (error) throw new Error(`Failed to load property leads: ${error.message}`)
+  // PGRST103 = requested page is past the last row (e.g. an empty org) — render empty.
+  if (error && error.code !== 'PGRST103') throw new Error(`Failed to load property leads: ${error.message}`)
   const rows = (data ?? []) as unknown as LeadRow[]
   const filteredTotal = count ?? 0
 

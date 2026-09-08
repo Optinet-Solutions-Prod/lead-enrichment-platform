@@ -11,6 +11,9 @@ export type OrgContext = {
   orgName: string
   orgSlug: string
   orgRole: OrgRole
+  /** Vertical modules enabled for this org (org_settings.enabled_modules) —
+   *  drives which nav sections/pages the workspace sees. */
+  modules: string[]
 }
 
 const ROLE_RANK: Record<OrgRole, number> = { owner: 3, admin: 2, member: 1 }
@@ -49,6 +52,13 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   } | null
   if (!org) return null
 
+  const { data: settings } = await svc
+    .from('org_settings')
+    .select('enabled_modules')
+    .eq('org_id', org.id)
+    .maybeSingle()
+  const modules = (settings?.enabled_modules as string[] | null) ?? ['property']
+
   return {
     userId: user.id,
     email: user.email ?? null,
@@ -56,6 +66,7 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     orgName: org.name,
     orgSlug: org.slug,
     orgRole: data.role as OrgRole,
+    modules,
   }
 }
 

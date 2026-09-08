@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 
 /**
@@ -62,6 +62,7 @@ type LeadRow = {
  *  replace — the bulk harvest loader replaces; this incremental path adds). */
 async function mergeLeads(
   svc: ReturnType<typeof createServiceClient>,
+  orgId: string,
   site: string,
   rows: LeadRow[],
 ): Promise<{ added: number; seen: number }> {
@@ -70,6 +71,7 @@ async function mergeLeads(
   const { data: existing } = await svc
     .from('property_leads')
     .select('listing_url')
+    .eq('org_id', orgId)
     .eq('source_site', site)
   const known = new Set(
     ((existing ?? []) as { listing_url: string | null }[]).map(r => r.listing_url),
@@ -77,7 +79,7 @@ async function mergeLeads(
   const fresh = withContact
     .filter(r => !known.has(r.listing_url))
     .slice(0, MAX_NEW_PER_RUN)
-    .map(r => ({ ...r, source_site: site, keyword: 'properties in malta' }))
+    .map(r => ({ ...r, org_id: orgId, source_site: site, keyword: 'properties in malta' }))
   if (fresh.length > 0) {
     const { error } = await svc.from('property_leads').insert(fresh)
     if (error) throw new Error(error.message)
@@ -91,7 +93,7 @@ async function mergeLeads(
 
 /** homesinmalta.com — open WordPress/Houzez REST API; owner name + phone are
  *  first-class meta fields. Newest 30 listings per run. */
-async function runHomesInMalta(svc: ReturnType<typeof createServiceClient>): Promise<string> {
+async function runHomesInMalta(svc: ReturnType<typeof createServiceClient>, orgId: string): Promise<string> {
   const res = await fetchWithTimeout(
     'https://homesinmalta.com/wp-json/wp/v2/properties?per_page=30&orderby=date&order=desc&_fields=id,link,title,property_meta',
   )
@@ -122,7 +124,7 @@ async function runHomesInMalta(svc: ReturnType<typeof createServiceClient>): Pro
         notes: 'On-demand scrape via homesinmalta WP REST API.',
       }
     })
-  const { added, seen } = await mergeLeads(svc, 'homesinmalta.com', rows)
+  const { added, seen } = await mergeLeads(svc, orgId, 'homesinmalta.com', rows)
   return `${seen} newest listings checked, ${added} new lead(s) added`
 }
 
@@ -130,6 +132,7 @@ async function runHomesInMalta(svc: ReturnType<typeof createServiceClient>): Pro
  *  listing including the owner's mobile in one call. */
 async function runPropertiesFromOwner(
   svc: ReturnType<typeof createServiceClient>,
+  orgId: string,
 ): Promise<string> {
   const res = await fetchWithTimeout('https://www.propertiesfromowner.com/api/map')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -155,7 +158,7 @@ async function runPropertiesFromOwner(
       contact_type: 'owner',
       notes: 'On-demand scrape via propertiesfromowner /api/map.',
     }))
-  const { added, seen } = await mergeLeads(svc, 'propertiesfromowner.com', rows)
+  const { added, seen } = await mergeLeads(svc, orgId, 'propertiesfromowner.com', rows)
   return `${seen} active listings checked, ${added} new lead(s) added`
 }
 
@@ -164,6 +167,7 @@ async function runPropertiesFromOwner(
  *  reCAPTCHA-gated, but sellers write numbers in descriptions). */
 async function runMaltapark(
   svc: ReturnType<typeof createServiceClient>,
+  orgId: string,
   keyword: string,
 ): Promise<string> {
   const res = await fetchWithTimeout(
@@ -209,7 +213,7 @@ async function runMaltapark(
     })
     await new Promise(r => setTimeout(r, 250))
   }
-  const { added, seen } = await mergeLeads(svc, 'maltapark.com', rows)
+  const { added, seen } = await mergeLeads(svc, orgId, 'maltapark.com', rows)
   const withPhone = rows.filter(r => r.contact_phone).length
   return `${seen} listings checked (${withPhone} with phone in ad text), ${added} new lead(s) added`
 }
@@ -303,7 +307,7 @@ async function runMtaRegister(svc: ReturnType<typeof createServiceClient>): Prom
 }
 
 /** Airbnb via Apify — asynchronous: this only STARTS the browser crawl. */
-async function startAirbnb(svc: ReturnType<typeof createServiceClient>): Promise<string> {
+async function startAirbnb(svc: ReturnType<typeof createServiceClient>, orgId: string): Promise<string> {
   const token = process.env.APIFY_TOKEN
   if (!token) throw new Error('APIFY_TOKEN is not set in this deployment — add it to the environment to enable Airbnb scrapes')
   const start = await fetch(`https://api.apify.com/v2/acts/tri_angle~airbnb-scraper/runs?token=${token}`, {
@@ -321,7 +325,7 @@ async function startAirbnb(svc: ReturnType<typeof createServiceClient>): Promise
   const body = (await start.json()) as { data?: { id?: string; defaultDatasetId?: string } }
   if (!body.data?.id) throw new Error('Apify did not return a run id')
   await svc.from('system_settings').upsert({
-    key: 'airbnb_last_run',
+    key: `airbnb_last_run:${orgId}`,
     value: { runId: body.data.id, datasetId: body.data.defaultDatasetId, startedAt: new Date().toISOString() },
   })
   return `Apify run ${body.data.id} started (~300 listings) — use “Ingest last Airbnb run” in a few minutes`
@@ -331,20 +335,19 @@ async function startAirbnb(svc: ReturnType<typeof createServiceClient>): Promise
 // Actions
 // ---------------------------------------------------------------------------
 
-async function requireUser(): Promise<string | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user ? null : 'Not signed in.'
+/** Every scrape writes into the CALLER'S org — resolve it once per action. */
+async function requireOrg(): Promise<{ orgId: string } | { error: string }> {
+  const ctx = await getOrgContext()
+  if (!ctx) return { error: 'No organization — sign in and create/join one first.' }
+  return { orgId: ctx.orgId }
 }
 
 export async function runPropertyScrapeAction(
   _prev: RunState,
   formData: FormData,
 ): Promise<RunState> {
-  const authErr = await requireUser()
-  if (authErr) return { error: authErr }
+  const org = await requireOrg()
+  if ('error' in org) return { error: org.error }
 
   const sources = formData.getAll('sources').map(String)
   const keyword = String(formData.get('keyword') ?? '').trim() || 'apartment'
@@ -361,12 +364,12 @@ export async function runPropertyScrapeAction(
     }
   }
 
-  if (sources.includes('homesinmalta')) await run('homesinmalta.com', () => runHomesInMalta(svc))
+  if (sources.includes('homesinmalta')) await run('homesinmalta.com', () => runHomesInMalta(svc, org.orgId))
   if (sources.includes('propertiesfromowner'))
-    await run('propertiesfromowner.com', () => runPropertiesFromOwner(svc))
-  if (sources.includes('maltapark')) await run('maltapark.com', () => runMaltapark(svc, keyword))
+    await run('propertiesfromowner.com', () => runPropertiesFromOwner(svc, org.orgId))
+  if (sources.includes('maltapark')) await run('maltapark.com', () => runMaltapark(svc, org.orgId, keyword))
   if (sources.includes('mta')) await run('mta.com.mt', () => runMtaRegister(svc))
-  if (sources.includes('airbnb')) await run('airbnb.com', () => startAirbnb(svc), true)
+  if (sources.includes('airbnb')) await run('airbnb.com', () => startAirbnb(svc, org.orgId), true)
 
   return { results }
 }
@@ -374,8 +377,8 @@ export async function runPropertyScrapeAction(
 /** Poll the last Apify run; when finished, REPLACE airbnb_listings with its
  *  dataset (the PM-prospects view recomputes automatically). */
 export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
-  const authErr = await requireUser()
-  if (authErr) return { error: authErr }
+  const org = await requireOrg()
+  if ('error' in org) return { error: org.error }
   const token = process.env.APIFY_TOKEN
   if (!token) return { error: 'APIFY_TOKEN is not set in this deployment.' }
 
@@ -383,7 +386,7 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
   const { data: settingRow } = await svc
     .from('system_settings')
     .select('value')
-    .eq('key', 'airbnb_last_run')
+    .eq('key', `airbnb_last_run:${org.orgId}`)
     .maybeSingle()
   const setting = (settingRow?.value ?? null) as {
     runId?: string
@@ -420,6 +423,7 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
       const lic = licRe.exec(`${desc} ${String(it.title ?? '')}`)?.[0] ?? null
       const coords = (it.coordinates ?? {}) as { latitude?: number; longitude?: number }
       return {
+        org_id: org.orgId,
         airbnb_id: String(it.id),
         url: `https://www.airbnb.com/rooms/${it.id}`,
         title: (it.title as string) ?? null,
@@ -436,7 +440,7 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
     })
   if (rows.length === 0) return { error: 'Run succeeded but the dataset is empty.' }
 
-  const { error: delErr } = await svc.from('airbnb_listings').delete().gt('id', 0)
+  const { error: delErr } = await svc.from('airbnb_listings').delete().eq('org_id', org.orgId)
   if (delErr) return { error: delErr.message }
   for (let i = 0; i < rows.length; i += 100) {
     const { error } = await svc.from('airbnb_listings').insert(rows.slice(i, i + 100))

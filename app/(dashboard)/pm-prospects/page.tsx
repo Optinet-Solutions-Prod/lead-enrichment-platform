@@ -1,8 +1,10 @@
+import { redirect } from 'next/navigation'
 import { ExternalLink, Sparkles } from 'lucide-react'
 import { applyFilters, applySorts } from '@/lib/filters/apply'
 import { PM_PROSPECTS_COLUMNS } from '@/lib/filters/columns-pm-prospects'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
+import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { PageIntro } from '../_components/page-intro'
@@ -72,6 +74,8 @@ export default async function PmProspectsPage({
 }: {
   searchParams: Promise<SearchParams>
 }) {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/welcome')
   const sp = await searchParams
   const q = typeof sp.q === 'string' ? sp.q : ''
   const filters = parseFilters(sp.f)
@@ -82,7 +86,7 @@ export default async function PmProspectsPage({
   const size = clampPageSize(sp.size, DEFAULT_PAGE_SIZE)
 
   const svc = createServiceClient()
-  let query = svc.from('airbnb_pm_prospects').select('*', { count: 'exact' })
+  let query = svc.from('airbnb_pm_prospects').select('*', { count: 'exact' }).eq('org_id', ctx.orgId)
 
   const cleanQ = sanitize(q)
   if (cleanQ.length > 0) {
@@ -125,11 +129,13 @@ export default async function PmProspectsPage({
     svc
       .from('airbnb_pm_prospects')
       .select('host_id', { head: true, count: 'exact' })
+      .eq('org_id', ctx.orgId)
       .eq('purest', true),
     svc.from('hfps_register').select('town'),
-    svc.from('airbnb_listings').select('locality'),
+    svc.from('airbnb_listings').select('locality').eq('org_id', ctx.orgId),
   ])
-  if (error) throw new Error(`Failed to load PM prospects: ${error.message}`)
+  // PGRST103 = requested page is past the last row (e.g. an empty org) — render empty.
+  if (error && error.code !== 'PGRST103') throw new Error(`Failed to load PM prospects: ${error.message}`)
   const prospects = (prospectsRaw ?? []) as ProspectRow[]
   const total = count ?? 0
   const purestCount = purestTotal ?? 0

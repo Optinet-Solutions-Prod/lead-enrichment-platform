@@ -1,9 +1,11 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ExternalLink } from 'lucide-react'
 import { applyFilters, applySorts } from '@/lib/filters/apply'
 import { AIRBNB_LISTINGS_COLUMNS } from '@/lib/filters/columns-airbnb'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
+import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { PageIntro } from '../_components/page-intro'
@@ -44,6 +46,8 @@ export default async function AirbnbListingsPage({
 }: {
   searchParams: Promise<SearchParams>
 }) {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/welcome')
   const sp = await searchParams
   const locFilter = typeof sp.loc === 'string' ? sp.loc.trim() : ''
   const q = typeof sp.q === 'string' ? sp.q : ''
@@ -59,7 +63,7 @@ export default async function AirbnbListingsPage({
   // deep generic (TS2589 when the builder is threaded through applyFilters).
   const cols: string =
     'id, airbnb_id, url, title, host_name, locality, price_text, room_type, scraped_at'
-  let query = svc.from('airbnb_listings').select(cols, { count: 'exact' })
+  let query = svc.from('airbnb_listings').select(cols, { count: 'exact' }).eq('org_id', ctx.orgId)
   if (locFilter) query = query.eq('locality', locFilter)
 
   const cleanQ = sanitize(q)
@@ -95,9 +99,10 @@ export default async function AirbnbListingsPage({
   const [{ data, count, error }, { data: locRows }] = await Promise.all([
     query,
     // Locality chips (always across the FULL table, not the filtered view).
-    svc.from('airbnb_listings').select('locality'),
+    svc.from('airbnb_listings').select('locality').eq('org_id', ctx.orgId),
   ])
-  if (error) throw new Error(`Failed to load Airbnb listings: ${error.message}`)
+  // PGRST103 = requested page is past the last row (e.g. an empty org) — render empty.
+  if (error && error.code !== 'PGRST103') throw new Error(`Failed to load Airbnb listings: ${error.message}`)
   const rows = (data ?? []) as unknown as ListingRow[]
   const filteredTotal = count ?? 0
 

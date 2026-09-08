@@ -72,6 +72,7 @@ export default async function DashboardLayout({
     <DashboardShell
       username={username}
       orgName={org.orgName}
+      modules={org.modules}
       isAdmin={isAdmin}
       proxyBandwidth={proxyBandwidth}
       openFeedbackCount={openFeedbackCount}

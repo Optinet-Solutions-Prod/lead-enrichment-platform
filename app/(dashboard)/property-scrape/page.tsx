@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2, Circle, ShieldCheck } from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 import { RunForm } from './_components/run-form'
 
@@ -21,6 +23,8 @@ const FLOW = [
 ]
 
 export default async function PropertyScrapePage() {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/welcome')
   const svc = createServiceClient()
   const [
     { count: leads },
@@ -29,14 +33,15 @@ export default async function PropertyScrapePage() {
     { count: register },
     { count: prospects },
   ] = await Promise.all([
-    svc.from('property_leads').select('id', { count: 'exact', head: true }),
+    svc.from('property_leads').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
     svc
       .from('property_leads')
       .select('id', { count: 'exact', head: true })
+      .eq('org_id', ctx.orgId)
       .not('contact_phone', 'is', null),
-    svc.from('airbnb_listings').select('id', { count: 'exact', head: true }),
+    svc.from('airbnb_listings').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
     svc.from('hfps_register').select('ref', { count: 'exact', head: true }),
-    svc.from('airbnb_pm_prospects').select('host_id', { count: 'exact', head: true }),
+    svc.from('airbnb_pm_prospects').select('host_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
   ])
 
   const phoneLeads = leadsWithPhone ?? 0

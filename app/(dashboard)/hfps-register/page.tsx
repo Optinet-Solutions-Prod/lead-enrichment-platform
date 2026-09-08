@@ -94,7 +94,8 @@ export default async function HfpsRegisterPage({
     // Whole-register count for the header, independent of any filter.
     svc.from('hfps_register').select('ref', { count: 'exact', head: true }),
   ])
-  if (error) throw new Error(`Failed to load HFPS register: ${error.message}`)
+  // PGRST103 = requested page is past the last row — render empty.
+  if (error && error.code !== 'PGRST103') throw new Error(`Failed to load HFPS register: ${error.message}`)
   const rows = (data ?? []) as unknown as RegRow[]
   const filteredTotal = count ?? 0
 
