@@ -114,6 +114,25 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   property_leads↔HFPS = 0 (none of our leads are licensed short-lets — conclusive negative);
   8 Airbnb listings displaying licence numbers were resolved to exact register addresses
   (licence→address de-anonymization works). Migrations `20260907150000` + `160000` + `170000`.
+- ✅ **Property-first UX + deploy (2026-09-07):** live on Vercel at
+  lead-enrichment-platform-nine.vercel.app (crons removed — Hobby plan; recurring-schedules
+  feature deleted with them, `20260907180000`). Home = `/property-scrape` collect hub built on
+  Meny's research deck (checked into repo root); PageIntro explainers on every data page;
+  scrape-table filter/sort/search/pagination retrofitted onto all four data pages.
+- ✅ **Verticals became organizations (2026-09-08, migration `20260908120000`, applied live):**
+  three orgs, all owned by admin@optinetsolutions.com (ownership transfer = future feature):
+  **Property Management** (owns the harvest — property_leads + airbnb_listings gained NOT NULL
+  `org_id` + RLS member-read, per-org `airbnb_pm_prospects`; admin's ACTIVE org via backdated
+  membership — no switcher yet), **Optinet Solutions** (platform org, modules
+  {property,affiliate}), **Rooster Partners** (affiliate shell). `org_settings.enabled_modules`
+  drives per-org nav: property pages tagged `property`; the old Scrape/Leads pages are now
+  `affiliate`-module items (visible only to orgs with that module). `hfps_register` stays
+  GLOBAL reference data. All page queries + Collect Data actions org-scoped; Apify run record
+  per-org (`airbnb_last_run:<org_id>`); out-of-range pagination on empty orgs renders empty
+  (PGRST103) instead of 500.
+- ⬜ Not started: full Milestone C (org_id + RLS on the legacy affiliate tables + tenant-client
+  migration), D (integrations vault), E (source/country toggles), org switcher + ownership
+  transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
 
 ## The plan in one screen
 
