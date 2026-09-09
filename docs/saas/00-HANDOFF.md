@@ -130,9 +130,20 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   GLOBAL reference data. All page queries + Collect Data actions org-scoped; Apify run record
   per-org (`airbnb_last_run:<org_id>`); out-of-range pagination on empty orgs renders empty
   (PGRST103) instead of 500.
+- ✅ **Org switcher + integrations vault v1 (2026-09-09, migration `20260909120000`):**
+  `user_profiles.active_org_id` + `set_active_org()` RPC; the JWT hook and app context prefer
+  the chosen org (fallback: earliest membership). Sidebar org name is now a workspace
+  dropdown for anyone with 2+ memberships. Scraping infra pages (Interactive Checkpoints,
+  Country Profiles) joined the affiliate module — visible in Optinet Solutions / Rooster
+  Partners, never in Property Management. Integrations (Milestone D v1): YAML catalog at
+  `lib/integrations/catalog.yaml` (adding an integration = adding a block: fields + one
+  declarative HTTP connection test), per-org storage in `org_integrations` (RLS deny-all →
+  service-role only, secrets never reach the browser; Vault = upgrade path),
+  `/settings/integrations` page (Save & test, masked secrets, disconnect), and the Airbnb
+  scraper resolves the org's connected Apify account before the platform env token.
+  next.config traces the YAML into serverless bundles (`outputFileTracingIncludes`).
 - ⬜ Not started: full Milestone C (org_id + RLS on the legacy affiliate tables + tenant-client
-  migration), D (integrations vault), E (source/country toggles), org switcher + ownership
-  transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
+  migration), D (integrations vault), E (source/country toggles), org ownership transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
 
 ## The plan in one screen
 

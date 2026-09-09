@@ -4,6 +4,13 @@ import { createServiceClient } from '@/lib/supabase/service'
 
 export type OrgRole = 'owner' | 'admin' | 'member'
 
+export type Membership = {
+  orgId: string
+  orgName: string
+  orgSlug: string
+  role: OrgRole
+}
+
 export type OrgContext = {
   userId: string
   email: string | null
@@ -14,6 +21,8 @@ export type OrgContext = {
   /** Vertical modules enabled for this org (org_settings.enabled_modules) —
    *  drives which nav sections/pages the workspace sees. */
   modules: string[]
+  /** All of the user's org memberships (drives the workspace switcher). */
+  memberships: Membership[]
 }
 
 const ROLE_RANK: Record<OrgRole, number> = { owner: 3, admin: 2, member: 1 }
@@ -36,37 +45,46 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   if (!user) return null
 
   const svc = createServiceClient()
-  const { data, error } = await svc
-    .from('org_members')
-    .select('org_id, role, joined_at, organizations ( id, name, slug )')
-    .eq('user_id', user.id)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  if (error || !data) return null
+  const [{ data: rows, error }, { data: profile }] = await Promise.all([
+    svc
+      .from('org_members')
+      .select('org_id, role, joined_at, organizations ( id, name, slug )')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: true }),
+    svc.from('user_profiles').select('active_org_id').eq('id', user.id).maybeSingle(),
+  ])
+  if (error || !rows || rows.length === 0) return null
 
-  const org = data.organizations as unknown as {
-    id: string
-    name: string
-    slug: string
-  } | null
-  if (!org) return null
+  const memberships: Membership[] = rows
+    .map(r => {
+      const org = r.organizations as unknown as { id: string; name: string; slug: string } | null
+      if (!org) return null
+      return { orgId: org.id, orgName: org.name, orgSlug: org.slug, role: r.role as OrgRole }
+    })
+    .filter((m): m is Membership => m !== null)
+  if (memberships.length === 0) return null
+
+  // Active org: the user's explicit choice (when still a member), else the
+  // earliest membership — mirrors custom_access_token_hook exactly.
+  const activeId = (profile?.active_org_id as string | null) ?? null
+  const active = memberships.find(m => m.orgId === activeId) ?? memberships[0]!
 
   const { data: settings } = await svc
     .from('org_settings')
     .select('enabled_modules')
-    .eq('org_id', org.id)
+    .eq('org_id', active.orgId)
     .maybeSingle()
   const modules = (settings?.enabled_modules as string[] | null) ?? ['property']
 
   return {
     userId: user.id,
     email: user.email ?? null,
-    orgId: org.id,
-    orgName: org.name,
-    orgSlug: org.slug,
-    orgRole: data.role as OrgRole,
+    orgId: active.orgId,
+    orgName: active.orgName,
+    orgSlug: active.orgSlug,
+    orgRole: active.role,
     modules,
+    memberships,
   }
 }
 

@@ -37,6 +37,7 @@ const PAGES = [
   '/onboarding',
   '/help',
   '/settings/organization',
+  '/settings/integrations',
   '/account/password',
   '/admin/interactive',
   '/admin/google-login',

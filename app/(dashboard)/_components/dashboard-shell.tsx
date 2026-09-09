@@ -25,12 +25,14 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Plug,
   Search,
   Settings,
   Users,
   X,
 } from 'lucide-react'
 import { signOutAction } from '../_actions/auth'
+import { OrgSwitcher } from './org-switcher'
 import { type ProxyBandwidth } from '../_lib/dashboard-queries'
 import { FeedbackWidget } from './feedback-widget'
 
@@ -159,14 +161,14 @@ const NAV_GROUPS: NavGroup[] = [
         // captchas, not just the admin. URL keeps the /admin/ prefix for
         // backwards-compat (banner deep links, browser history).
         label: 'Interactive Checkpoints',
-        hidden: true,
+        module: 'affiliate',
         href: '/admin/interactive',
         icon: Hand,
         match: (p: string) => p.startsWith('/admin/interactive'),
       },
       {
         label: 'Country Profiles',
-        hidden: true,
+        module: 'affiliate',
         href: '/profiles',
         icon: Globe,
         match: (p: string) => p.startsWith('/profiles'),
@@ -218,6 +220,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/admin/google-login',
         icon: KeyRound,
         match: (p: string) => p.startsWith('/admin/google-login'),
+      },
+      {
+        label: 'Integrations',
+        href: '/settings/integrations',
+        icon: Plug,
+        match: (p: string) => p.startsWith('/settings/integrations'),
       },
       {
         label: 'My Account',
@@ -290,6 +298,9 @@ type Props = {
   orgName?: string
   /** The org's enabled vertical modules (drives module-tagged nav items). */
   modules?: string[]
+  /** All the user's org memberships (workspace switcher, 2+ shows dropdown). */
+  orgs?: Array<{ id: string; name: string; role: string }>
+  activeOrgId?: string
   isAdmin?: boolean
   proxyBandwidth?: ProxyBandwidth | null
   openFeedbackCount?: number
@@ -300,6 +311,8 @@ export function DashboardShell({
   username,
   orgName,
   modules = ['property'],
+  orgs = [],
+  activeOrgId = '',
   isAdmin = false,
   proxyBandwidth = null,
   openFeedbackCount = 0,
@@ -348,9 +361,13 @@ export function DashboardShell({
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-[color:var(--color-border)] px-4">
           {showLabels ? (
-            <span className="truncate text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]">
-              {brand}
-            </span>
+            orgs.length > 0 ? (
+              <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} showLabels={showLabels} />
+            ) : (
+              <span className="truncate text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]">
+                {brand}
+              </span>
+            )
           ) : (
             <span className="text-base font-bold text-[color:var(--color-accent)]">
               {brand.charAt(0).toUpperCase()}

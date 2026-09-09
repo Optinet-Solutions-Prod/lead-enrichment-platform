@@ -1,5 +1,6 @@
 'use server'
 
+import { getConnectedConfig } from '@/lib/integrations/store'
 import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
 
@@ -306,11 +307,28 @@ async function runMtaRegister(svc: ReturnType<typeof createServiceClient>): Prom
   return `register refreshed — ${all.length.toLocaleString()} licensed premises`
 }
 
+/** The org's connected Apify account wins; the platform env token is the
+ *  fallback so existing setups keep working. */
+async function resolveApify(orgId: string): Promise<{ token: string; base: string; source: 'your org' | 'platform' } | null> {
+  const cfg = await getConnectedConfig(orgId, 'apify')
+  if (cfg?.api_token) {
+    return {
+      token: cfg.api_token,
+      base: (cfg.api_url ?? 'https://api.apify.com').replace(/\/$/, ''),
+      source: 'your org',
+    }
+  }
+  if (process.env.APIFY_TOKEN) {
+    return { token: process.env.APIFY_TOKEN, base: 'https://api.apify.com', source: 'platform' }
+  }
+  return null
+}
+
 /** Airbnb via Apify — asynchronous: this only STARTS the browser crawl. */
 async function startAirbnb(svc: ReturnType<typeof createServiceClient>, orgId: string): Promise<string> {
-  const token = process.env.APIFY_TOKEN
-  if (!token) throw new Error('APIFY_TOKEN is not set in this deployment — add it to the environment to enable Airbnb scrapes')
-  const start = await fetch(`https://api.apify.com/v2/acts/tri_angle~airbnb-scraper/runs?token=${token}`, {
+  const apify = await resolveApify(orgId)
+  if (!apify) throw new Error('No Apify account available — connect one under Account → Integrations')
+  const start = await fetch(`${apify.base}/v2/acts/tri_angle~airbnb-scraper/runs?token=${apify.token}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -328,7 +346,7 @@ async function startAirbnb(svc: ReturnType<typeof createServiceClient>, orgId: s
     key: `airbnb_last_run:${orgId}`,
     value: { runId: body.data.id, datasetId: body.data.defaultDatasetId, startedAt: new Date().toISOString() },
   })
-  return `Apify run ${body.data.id} started (~300 listings) — use “Ingest last Airbnb run” in a few minutes`
+  return `Apify run ${body.data.id} started on the ${apify.source} account (~300 listings) — use “Ingest last Airbnb run” in a few minutes`
 }
 
 // ---------------------------------------------------------------------------
@@ -379,8 +397,8 @@ export async function runPropertyScrapeAction(
 export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
   const org = await requireOrg()
   if ('error' in org) return { error: org.error }
-  const token = process.env.APIFY_TOKEN
-  if (!token) return { error: 'APIFY_TOKEN is not set in this deployment.' }
+  const apify = await resolveApify(org.orgId)
+  if (!apify) return { error: 'No Apify account available — connect one under Account → Integrations.' }
 
   const svc = createServiceClient()
   const { data: settingRow } = await svc
@@ -397,7 +415,7 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
   }
 
   const runRes = await fetchWithTimeout(
-    `https://api.apify.com/v2/actor-runs/${setting.runId}?token=${token}`,
+    `${apify.base}/v2/actor-runs/${setting.runId}?token=${apify.token}`,
   )
   const runBody = (await runRes.json()) as { data?: { status?: string } }
   const status = runBody.data?.status ?? 'UNKNOWN'
@@ -409,7 +427,7 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
   }
 
   const dsRes = await fetchWithTimeout(
-    `https://api.apify.com/v2/datasets/${setting.datasetId}/items?token=${token}&clean=true&format=json`,
+    `${apify.base}/v2/datasets/${setting.datasetId}/items?token=${apify.token}&clean=true&format=json`,
     45_000,
   )
   const items = (await dsRes.json()) as Array<Record<string, unknown>>

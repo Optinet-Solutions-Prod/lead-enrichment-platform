@@ -1,0 +1,52 @@
+# ============================================================================
+# Integration catalog — one entry per third-party provider an organization
+# can connect. Adding an integration = adding a block here; the
+# /settings/integrations page renders the form, runs the connection test,
+# and stores the config per-org automatically. No code changes needed as
+# long as the connection test is a single HTTP request.
+#
+# Field types:  secret (masked, never echoed back)  |  text
+# Test spec:    {field_key} placeholders are substituted into url/headers.
+#               2xx = connected. `success_path` (dot-path into the JSON
+#               response) extracts a display value, e.g. the account name.
+# ============================================================================
+integrations:
+  - key: apify
+    name: Apify
+    category: Scraping
+    description: >-
+      Real-browser scraping platform. Powers the Airbnb market crawls and can
+      crack bot-walled sites. Connecting your own account makes all Apify runs
+      bill to it instead of the platform default.
+    docs_url: https://console.apify.com/account/integrations
+    fields:
+      - key: api_token
+        label: API token
+        type: secret
+        required: true
+        placeholder: apify_api_...
+      - key: api_url
+        label: API URL
+        type: text
+        required: false
+        default: https://api.apify.com
+    test:
+      method: GET
+      url: "{api_url}/v2/users/me?token={api_token}"
+      success_path: data.username
+
+  # --- Template for the next integration (copy, uncomment, adjust) ---------
+  # - key: twocaptcha
+  #   name: 2Captcha
+  #   category: Scraping
+  #   description: Automatic captcha solving for browser scrapes.
+  #   docs_url: https://2captcha.com/setting
+  #   fields:
+  #     - key: api_key
+  #       label: API key
+  #       type: secret
+  #       required: true
+  #   test:
+  #     method: GET
+  #     url: "https://2captcha.com/res.php?key={api_key}&action=getbalance&json=1"
+  #     success_path: request

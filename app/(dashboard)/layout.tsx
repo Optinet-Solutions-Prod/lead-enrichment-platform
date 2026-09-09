@@ -73,6 +73,8 @@ export default async function DashboardLayout({
       username={username}
       orgName={org.orgName}
       modules={org.modules}
+      orgs={org.memberships.map(m => ({ id: m.orgId, name: m.orgName, role: m.role }))}
+      activeOrgId={org.orgId}
       isAdmin={isAdmin}
       proxyBandwidth={proxyBandwidth}
       openFeedbackCount={openFeedbackCount}
