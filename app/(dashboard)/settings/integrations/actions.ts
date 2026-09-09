@@ -1,7 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getIntegrationDef, runIntegrationTest } from '@/lib/integrations/catalog'
+import { runIntegrationTest } from '@/lib/integrations/catalog'
+import {
+  getEffectiveDef,
+  removeCustomDef,
+  upsertCustomDefsFromYaml,
+} from '@/lib/integrations/custom'
 import {
   deleteOrgIntegration,
   getOrgIntegration,
@@ -25,8 +30,6 @@ export async function saveAndTestIntegrationAction(
   formData: FormData,
 ): Promise<IntegrationActionState> {
   const provider = String(formData.get('provider') ?? '').trim()
-  const def = getIntegrationDef(provider)
-  if (!def) return { provider, error: 'Unknown integration.' }
 
   let ctx
   try {
@@ -34,6 +37,9 @@ export async function saveAndTestIntegrationAction(
   } catch (e) {
     return { provider, error: (e as Error).message }
   }
+
+  const def = await getEffectiveDef(ctx.orgId, provider)
+  if (!def) return { provider, error: 'Unknown integration.' }
 
   const existing = await getOrgIntegration(ctx.orgId, provider)
   const config: Record<string, string> = {}
@@ -82,4 +88,55 @@ export async function disconnectIntegrationAction(
   if (err) return { provider, error: err }
   revalidatePath(PAGE)
   return { provider, ok: 'Disconnected — the saved credentials were deleted.' }
+}
+
+
+/** Upload a YAML file defining one or more custom integrations for the org. */
+export async function uploadIntegrationYamlAction(
+  _prev: IntegrationActionState,
+  formData: FormData,
+): Promise<IntegrationActionState> {
+  let ctx
+  try {
+    ctx = await requireOrgRole('admin')
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+
+  const file = formData.get('yaml_file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: 'Pick a .yaml file to upload.' }
+  }
+  if (file.size > 32_768) {
+    return { error: 'File is too large (max 32 KB).' }
+  }
+  const raw = await file.text()
+
+  const result = await upsertCustomDefsFromYaml(ctx.orgId, ctx.userId, raw)
+  revalidatePath(PAGE)
+  if (result.added.length === 0) {
+    return { error: result.errors.join(' · ') || 'Nothing valid found in the file.' }
+  }
+  const okMsg = `Added/updated: ${result.added.join(', ')} — fill in the credentials below and hit Save & test.`
+  return result.errors.length > 0
+    ? { ok: okMsg, error: `Skipped: ${result.errors.join(' · ')}` }
+    : { ok: okMsg }
+}
+
+/** Delete a custom integration definition (and its saved credentials). */
+export async function removeIntegrationDefAction(
+  _prev: IntegrationActionState,
+  formData: FormData,
+): Promise<IntegrationActionState> {
+  const provider = String(formData.get('provider') ?? '').trim()
+  let ctx
+  try {
+    ctx = await requireOrgRole('admin')
+  } catch (e) {
+    return { provider, error: (e as Error).message }
+  }
+  const err = await removeCustomDef(ctx.orgId, provider)
+  if (err) return { provider, error: err }
+  revalidatePath(PAGE)
+  return { provider, ok: 'Integration removed (definition + saved credentials).' }
 }

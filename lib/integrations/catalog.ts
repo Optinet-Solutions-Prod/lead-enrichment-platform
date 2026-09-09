@@ -29,6 +29,76 @@ export type IntegrationDef = {
   docs_url?: string
   fields: IntegrationField[]
   test?: IntegrationTest
+  /** True for org-uploaded definitions (org_integration_defs). */
+  custom?: boolean
+}
+
+export type DefValidation = { ok: true; def: IntegrationDef } | { ok: false; error: string }
+
+/** Strict validation for a single integration definition — used for the
+ *  built-in catalog AND for org-uploaded YAML (which drives server-side
+ *  HTTP, so the shape is enforced hard). */
+export function validateDef(raw: unknown): DefValidation {
+  const d = raw as Partial<IntegrationDef> | null
+  if (!d || typeof d !== 'object') return { ok: false, error: 'entry is not a mapping' }
+  if (typeof d.key !== 'string' || !/^[a-z0-9_-]{2,40}$/.test(d.key)) {
+    return { ok: false, error: 'key must be 2-40 chars of a-z 0-9 _ -' }
+  }
+  if (typeof d.name !== 'string' || d.name.trim().length < 2 || d.name.length > 60) {
+    return { ok: false, error: `${d.key}: name must be 2-60 characters` }
+  }
+  if (!Array.isArray(d.fields) || d.fields.length < 1 || d.fields.length > 10) {
+    return { ok: false, error: `${d.key}: fields must list 1-10 entries` }
+  }
+  for (const f of d.fields) {
+    if (typeof f?.key !== 'string' || !/^[a-z0-9_]{1,40}$/.test(f.key)) {
+      return { ok: false, error: `${d.key}: field keys must be a-z 0-9 _` }
+    }
+    if (typeof f.label !== 'string' || f.label.length < 1 || f.label.length > 60) {
+      return { ok: false, error: `${d.key}: every field needs a label (≤60 chars)` }
+    }
+    if (f.type !== 'secret' && f.type !== 'text') {
+      return { ok: false, error: `${d.key}.${f.key}: type must be "secret" or "text"` }
+    }
+  }
+  if (d.test != null) {
+    const t = d.test
+    if (typeof t.url !== 'string' || !t.url.startsWith('https://')) {
+      return { ok: false, error: `${d.key}: test.url must be a literal https:// URL template` }
+    }
+    if (t.method != null && t.method !== 'GET' && t.method !== 'POST') {
+      return { ok: false, error: `${d.key}: test.method must be GET or POST` }
+    }
+    if (t.success_path != null && !/^[a-zA-Z0-9_.]{1,100}$/.test(t.success_path)) {
+      return { ok: false, error: `${d.key}: test.success_path must be a dot-path` }
+    }
+    if (t.headers != null) {
+      if (typeof t.headers !== 'object' || Array.isArray(t.headers)) {
+        return { ok: false, error: `${d.key}: test.headers must be a mapping` }
+      }
+      for (const [hk, hv] of Object.entries(t.headers)) {
+        if (!/^[A-Za-z0-9-]{1,60}$/.test(hk) || typeof hv !== 'string' || hv.length > 500) {
+          return { ok: false, error: `${d.key}: invalid test header "${hk}"` }
+        }
+      }
+    }
+  }
+  const category = typeof d.category === 'string' ? d.category.slice(0, 40) : null
+  const description = typeof d.description === 'string' ? d.description.slice(0, 400) : null
+  const docsUrl =
+    typeof d.docs_url === 'string' && /^https:\/\//.test(d.docs_url) ? d.docs_url.slice(0, 300) : null
+  return {
+    ok: true,
+    def: {
+      key: d.key,
+      name: d.name.trim(),
+      ...(category ? { category } : {}),
+      ...(description ? { description } : {}),
+      ...(docsUrl ? { docs_url: docsUrl } : {}),
+      fields: d.fields as IntegrationField[],
+      ...(d.test ? { test: d.test as IntegrationTest } : {}),
+    },
+  }
 }
 
 let cached: IntegrationDef[] | null = null
@@ -38,15 +108,11 @@ export function getCatalog(): IntegrationDef[] {
   if (cached) return cached
   const raw = readFileSync(join(process.cwd(), 'lib', 'integrations', 'catalog.yaml'), 'utf-8')
   const doc = parse(raw) as { integrations?: unknown }
-  const list = Array.isArray(doc?.integrations) ? (doc.integrations as IntegrationDef[]) : []
-  cached = list.filter(
-    d =>
-      typeof d?.key === 'string' &&
-      /^[a-z0-9_-]+$/.test(d.key) &&
-      typeof d?.name === 'string' &&
-      Array.isArray(d?.fields) &&
-      d.fields.every(f => typeof f?.key === 'string' && /^[a-z0-9_]+$/.test(f.key)),
-  )
+  const list = Array.isArray(doc?.integrations) ? (doc.integrations as unknown[]) : []
+  cached = list
+    .map(validateDef)
+    .filter((v): v is Extract<DefValidation, { ok: true }> => v.ok)
+    .map(v => v.def)
   return cached
 }
 
@@ -86,6 +152,28 @@ export async function runIntegrationTest(
   const url = substitute(def.test.url, config)
   if (!/^https:\/\//.test(url)) {
     return { ok: false, detail: 'Test URL did not resolve to https — check the field values.', testedValue: null }
+  }
+  // Guard: definitions (incl. org-uploaded ones) must only reach the public
+  // internet — never loopback/private ranges/metadata endpoints.
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    const privateHost =
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      host === '0.0.0.0' ||
+      host.startsWith('[')
+    if (privateHost) {
+      return { ok: false, detail: 'Test URL points at a private/internal address — not allowed.', testedValue: null }
+    }
+  } catch {
+    return { ok: false, detail: 'Test URL is not a valid URL after substitution.', testedValue: null }
   }
   const headers: Record<string, string> = {}
   for (const [k, v] of Object.entries(def.test.headers ?? {})) {

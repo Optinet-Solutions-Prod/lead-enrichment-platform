@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { CheckCircle2, ExternalLink, Loader2, XCircle } from 'lucide-react'
 import {
   disconnectIntegrationAction,
+  removeIntegrationDefAction,
   saveAndTestIntegrationAction,
   type IntegrationActionState,
 } from '../actions'
@@ -31,6 +32,8 @@ type Props = {
   statusDetail: string | null
   fields: FieldView[]
   canManage: boolean
+  /** Org-uploaded (YAML) definition — shows the badge + download/remove. */
+  isCustom: boolean
 }
 
 function StatusBadge({ status, detail }: { status: Props['status']; detail: string | null }) {
@@ -73,12 +76,14 @@ export function IntegrationCard({
   statusDetail,
   fields,
   canManage,
+  isCustom,
 }: Props) {
   const [state, formAction, pending] = useActionState(saveAndTestIntegrationAction, initialState)
   const [delState, delAction, delPending] = useActionState(
     disconnectIntegrationAction,
     initialState,
   )
+  const [rmState, rmAction, rmPending] = useActionState(removeIntegrationDefAction, initialState)
   const mine = state?.provider === provider ? state : null
   const delMine = delState?.provider === provider ? delState : null
 
@@ -92,6 +97,14 @@ export function IntegrationCard({
           {category && (
             <span className="rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               {category}
+            </span>
+          )}
+          {isCustom && (
+            <span
+              title="Added via YAML upload — download or remove it below"
+              className="rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800"
+            >
+              custom
             </span>
           )}
         </div>
@@ -160,6 +173,25 @@ export function IntegrationCard({
                 {delPending ? 'Removing…' : 'Disconnect'}
               </button>
             )}
+            {isCustom && (
+              <>
+                <a
+                  href={`/settings/integrations/export?key=${encodeURIComponent(provider)}`}
+                  download
+                  className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-[13px] text-[color:var(--color-text-secondary)] transition-colors hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
+                >
+                  Download YAML
+                </a>
+                <button
+                  type="submit"
+                  formAction={rmAction}
+                  disabled={rmPending}
+                  className="rounded-md border border-[color:var(--color-border)] px-3 py-2 text-[13px] text-[color:var(--color-text-secondary)] transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                >
+                  {rmPending ? 'Removing…' : 'Remove integration'}
+                </button>
+              </>
+            )}
           </div>
 
           {mine?.ok && (
@@ -178,6 +210,16 @@ export function IntegrationCard({
           {delMine?.error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">
               {delMine.error}
+            </p>
+          )}
+          {rmState?.provider === provider && rmState.ok && (
+            <p className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-2 text-[12px] text-[color:var(--color-text-secondary)]">
+              {rmState.ok}
+            </p>
+          )}
+          {rmState?.provider === provider && rmState.error && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              {rmState.error}
             </p>
           )}
         </form>

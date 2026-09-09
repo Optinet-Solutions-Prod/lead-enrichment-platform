@@ -205,10 +205,11 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Account',
     items: [
       {
-        label: 'Organization',
-        hidden: true,
+        // User management: members, roles, invite links (org admins see
+        // the management controls; members see the roster).
+        label: 'Team & Users',
         href: '/settings/organization',
-        icon: Building2,
+        icon: Users,
         match: (p: string) => p.startsWith('/settings/organization'),
       },
       {

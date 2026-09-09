@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
-import { getCatalog } from '@/lib/integrations/catalog'
+import { getEffectiveCatalog } from '@/lib/integrations/custom'
+import { INTEGRATION_TEMPLATE_YAML } from '@/lib/integrations/template'
 import { listOrgIntegrations } from '@/lib/integrations/store'
 import { getOrgContext } from '@/lib/orgs/context'
 import { IntegrationCard, type FieldView } from './_components/integration-card'
+import { UploadYaml } from './_components/upload-yaml'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +17,7 @@ export default async function IntegrationsPage() {
   if (!ctx) redirect('/welcome')
   const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
 
-  const catalog = getCatalog()
+  const catalog = await getEffectiveCatalog(ctx.orgId)
   const rows = await listOrgIntegrations(ctx.orgId)
   const byProvider = new Map(rows.map(r => [r.provider, r]))
 
@@ -32,6 +34,8 @@ export default async function IntegrationsPage() {
           connection check passes, the tools that need it use YOUR account automatically.
         </p>
       </header>
+
+      {canManage && <UploadYaml templateYaml={INTEGRATION_TEMPLATE_YAML} />}
 
       {catalog.map(def => {
         const row = byProvider.get(def.key)
@@ -72,16 +76,17 @@ export default async function IntegrationsPage() {
             statusDetail={statusDetail}
             fields={fields}
             canManage={canManage}
+            isCustom={def.custom === true}
           />
         )
       })}
 
       <p className="text-[12px] text-[color:var(--color-text-secondary)]">
-        Need another integration? They&apos;re defined one at a time in{' '}
+        Built-in integrations ship with the platform ({' '}
         <code className="rounded bg-[color:var(--color-bg-secondary)] px-1">
           lib/integrations/catalog.yaml
-        </code>{' '}
-        — a new block there (name, fields, connection test) is all it takes.
+        </code>
+        ); everything you upload above lives only in your organization.
       </p>
     </div>
   )
