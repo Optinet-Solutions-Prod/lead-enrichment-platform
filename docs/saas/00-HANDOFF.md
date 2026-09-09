@@ -142,8 +142,41 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   `/settings/integrations` page (Save & test, masked secrets, disconnect), and the Airbnb
   scraper resolves the org's connected Apify account before the platform env token.
   next.config traces the YAML into serverless bundles (`outputFileTracingIncludes`).
-- ⬜ Not started: full Milestone C (org_id + RLS on the legacy affiliate tables + tenant-client
-  migration), D (integrations vault), E (source/country toggles), org ownership transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
+- ✅ **YAML uploads for integrations (2026-09-09, migration `20260909130000`):** the
+  integrations catalog is now catalog.yaml built-ins + per-org uploaded defs
+  (`org_integration_defs`, RLS deny-all). `/settings/integrations`: template download +
+  inline format viewer, YAML upload (32KB / 10 entries, built-in keys reserved, SSRF-guarded
+  test URLs), per-def re-download + remove. Custom defs behave exactly like built-ins
+  (Save & test, org-scoped credentials).
+- ✅ **Custom sources + workflows + credits (2026-09-09, migration `20260909140000`, applied
+  live):** the approved feature trio (#2 #4 #5).
+  **Custom YAML scrape sources** — orgs upload a YAML describing any JSON API
+  (`lib/sources/template.ts` format: https GET url, `list_path`, field mapping via dot-paths
+  or `{dot.path}` templates, `listing_url` = dedupe key) → stored in `org_source_defs`
+  (PK org_id+key, RLS deny-all), validated hard (https-only, private hosts blocked, ≤10
+  entries/32KB), runnable from Collect Data as a "Your sources" tier and inside workflows
+  (`lib/sources/custom.ts`). Template/export routes under `/property-scrape/source-*`.
+  **Workflows (`/pipeline`, nav "Workflows")** — saved recipes in `org_recipes.steps` jsonb
+  `{sources[], keyword, crossmatch}`; one-click run executes the shared dispatcher
+  (`lib/sources/execute.ts` — same code path as Collect Data) then optionally the Airbnb
+  cross-match, a TS port of the harvest matcher (`lib/sources/crossmatch.ts`: STOP-words,
+  town aliases, first-name+locality → patches `airbnb_url`/`airbnb_match_basis`); last run
+  result stored on the recipe card. Source runners extracted from the page action into
+  `lib/sources/runners.ts` (shared by form + recipes).
+  **Credits (`/settings/billing`, nav "Billing & Credits")** — `org_settings.credits_balance`
+  (default 100; existing orgs seeded 1,000 via `launch_grant`), atomic `spend_credits` /
+  `grant_credits` SECURITY DEFINER RPCs (service-role only; spend returns -1 when short,
+  nothing deducted — verified live incl. overspend rejection), `org_credit_ledger` audit
+  trail. Prices in `lib/credits.ts` `CREDIT_COSTS`: source run 1, MTA refresh 1, Airbnb
+  crawl 5, cross-match free. Every Collect Data / workflow run debits up-front and errors
+  politely (naming Billing & Credits) when short. Billing page: balance, price list, ledger,
+  platform-admin manual grant form (`is_admin` RPC gate — org owners can't mint credits).
+  **Stripe checkout is the missing piece** — user confirmed Stripe; wire it to
+  `grant_credits` once keys are provided. Gate: tsc ✓, build ✓, smoke 23/23 (incl.
+  /pipeline + /settings/billing) ✓, verify-tenancy 19/19 ✓, live credit RPC check ✓.
+- ⬜ Not started: Stripe checkout (needs keys from user), full Milestone C (org_id + RLS on
+  the legacy affiliate tables + tenant-client migration), E (source/country toggles), org
+  ownership transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
 
 ## The plan in one screen
 

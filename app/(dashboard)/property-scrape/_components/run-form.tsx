@@ -1,7 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useState } from 'react'
-import { CheckCircle2, CircleDashed, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Coins, Loader2, XCircle } from 'lucide-react'
 import {
   ingestAirbnbAction,
   runPropertyScrapeAction,
@@ -10,6 +11,8 @@ import {
 } from '../actions'
 
 const initialState: RunState = null
+
+export type CustomSourceView = { key: string; name: string; blurb: string }
 
 type Source = {
   key: string
@@ -109,7 +112,14 @@ function ResultRow({ r }: { r: SourceResult }) {
   )
 }
 
-export function RunForm() {
+type RunFormProps = {
+  /** Org-uploaded YAML sources — render as an extra tier of checkboxes. */
+  customSources: CustomSourceView[]
+  /** Current org credit balance (runs are debited up-front). */
+  balance: number
+}
+
+export function RunForm({ customSources, balance }: RunFormProps) {
   const [state, formAction, pending] = useActionState(runPropertyScrapeAction, initialState)
   const [ingestState, ingestAction, ingestPending] = useActionState(
     async (prev: RunState) => ingestAirbnbAction(prev),
@@ -184,14 +194,54 @@ export function RunForm() {
           </fieldset>
         ))}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex w-fit items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-4 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-50"
-        >
-          {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {pending ? 'Scraping…' : 'Scrape selected sources'}
-        </button>
+        {customSources.length > 0 && (
+          <fieldset className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3">
+            <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+              Your sources · uploaded YAML
+            </legend>
+            <p className="mb-2 text-[12px] text-[color:var(--color-text-secondary)]">
+              Custom JSON-API sources your organization added below. They merge into Owner
+              Leads like the built-ins and cost 1 credit per run.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {customSources.map(s => (
+                <label
+                  key={s.key}
+                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3 hover:bg-[color:var(--color-bg-secondary)]"
+                >
+                  <input type="checkbox" name="sources" value={`custom:${s.key}`} className="mt-0.5" />
+                  <span>
+                    <span className="text-[13px] font-medium text-[color:var(--color-text-primary)]">
+                      {s.name}
+                    </span>
+                    <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+                      {s.blurb}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="inline-flex w-fit items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-4 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-50"
+          >
+            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {pending ? 'Scraping…' : 'Scrape selected sources'}
+          </button>
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--color-text-secondary)]">
+            <Coins className="h-3.5 w-3.5" />
+            1 credit per source · Airbnb 5 · balance{' '}
+            <strong className="tabular-nums text-[color:var(--color-text-primary)]">{balance.toLocaleString()}</strong>
+            <Link href="/settings/billing" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
+              Billing &amp; Credits
+            </Link>
+          </span>
+        </div>
 
         {state && 'error' in state && state.error && (
           <p className="rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">{state.error}</p>

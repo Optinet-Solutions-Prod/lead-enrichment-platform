@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2, Circle, ShieldCheck } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { getCreditsBalance } from '@/lib/credits'
 import { getOrgContext } from '@/lib/orgs/context'
+import { listSourceDefs } from '@/lib/sources/custom'
+import { SOURCE_TEMPLATE_YAML } from '@/lib/sources/template'
 import { createServiceClient } from '@/lib/supabase/service'
+import { ManageSources } from './_components/manage-sources'
 import { RunForm } from './_components/run-form'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +47,17 @@ export default async function PropertyScrapePage() {
     svc.from('hfps_register').select('ref', { count: 'exact', head: true }),
     svc.from('airbnb_pm_prospects').select('host_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
   ])
+
+  const [customDefs, balance] = await Promise.all([
+    listSourceDefs(ctx.orgId),
+    getCreditsBalance(ctx.orgId),
+  ])
+  const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
+  const customSources = customDefs.map(d => ({
+    key: d.key,
+    name: d.definition.name,
+    blurb: d.definition.description ?? new URL(d.definition.request.url).hostname,
+  }))
 
   const phoneLeads = leadsWithPhone ?? 0
   const pilotReady = phoneLeads >= 30
@@ -168,9 +183,20 @@ export default async function PropertyScrapePage() {
           datasets — re-running only adds listings you haven&apos;t seen.
         </p>
         <div className="mt-3">
-          <RunForm />
+          <RunForm customSources={customSources} balance={balance} />
         </div>
       </section>
+
+      {/* Bring-your-own JSON-API sources (org-scoped YAML defs) */}
+      <ManageSources
+        templateYaml={SOURCE_TEMPLATE_YAML}
+        sources={customDefs.map(d => ({
+          key: d.key,
+          name: d.definition.name,
+          description: d.definition.description ?? null,
+        }))}
+        canManage={canManage}
+      />
     </div>
   )
 }

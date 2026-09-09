@@ -22,6 +22,7 @@ const svc = createClient(URL, SERVICE, { auth: { persistSession: false } })
 const PAGES = [
   '/',
   '/property-scrape',
+  '/pipeline',
   '/property-leads',
   '/property-leads?q=malta&sort=owner_name&order=desc&f=contact_type%3Ais%3Aowner',
   '/pm-prospects',
@@ -38,6 +39,7 @@ const PAGES = [
   '/help',
   '/settings/organization',
   '/settings/integrations',
+  '/settings/billing',
   '/account/password',
   '/admin/interactive',
   '/admin/google-login',

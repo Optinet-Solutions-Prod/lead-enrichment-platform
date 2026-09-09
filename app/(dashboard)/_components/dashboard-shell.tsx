@@ -13,6 +13,7 @@ import {
   MapPinned,
   Clock,
   Cpu,
+  CreditCard,
   DollarSign,
   Gauge,
   Globe,
@@ -29,6 +30,7 @@ import {
   Search,
   Settings,
   Users,
+  Workflow,
   X,
 } from 'lucide-react'
 import { signOutAction } from '../_actions/auth'
@@ -102,6 +104,15 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/property-scrape',
         icon: Search,
         match: (p: string) => p.startsWith('/property-scrape'),
+      },
+      {
+        // Saved scrape recipes — run a whole data-collection sequence in
+        // one click (sources + keyword + Airbnb cross-match).
+        label: 'Workflows',
+        module: 'property',
+        href: '/pipeline',
+        icon: Workflow,
+        match: (p: string) => p.startsWith('/pipeline'),
       },
       {
         label: 'Owner Leads',
@@ -227,6 +238,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/settings/integrations',
         icon: Plug,
         match: (p: string) => p.startsWith('/settings/integrations'),
+      },
+      {
+        label: 'Billing & Credits',
+        href: '/settings/billing',
+        icon: CreditCard,
+        match: (p: string) => p.startsWith('/settings/billing'),
       },
       {
         label: 'My Account',
