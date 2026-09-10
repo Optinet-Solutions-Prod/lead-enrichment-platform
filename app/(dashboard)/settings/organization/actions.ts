@@ -1,8 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { requireOrgRole } from '@/lib/orgs/context'
+import { getOrgContext, requireOrgRole } from '@/lib/orgs/context'
 
 const PAGE = '/settings/organization'
 
@@ -125,4 +126,43 @@ export async function setMemberRoleAction(
   if (error) return { error: error.message }
   revalidatePath(PAGE)
   return { ok: 'Role updated.' }
+}
+
+/** Hand the org to another member; the caller steps down to admin. The RPC
+ *  enforces owner-only + target-must-be-member; the session refresh re-mints
+ *  the JWT so the demoted org_role claim takes effect immediately. */
+export async function transferOwnershipAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    await requireOrgRole('owner')
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const userId = String(formData.get('user_id') ?? '')
+  if (!userId) return { error: 'Pick the member to hand ownership to.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('transfer_org_ownership', { p_user_id: userId })
+  if (error) return { error: error.message }
+  await supabase.auth.refreshSession()
+  revalidatePath(PAGE)
+  return { ok: 'Ownership transferred — you are now an admin of this organization.' }
+}
+
+/** Self-service exit (non-owners; the RPC blocks owners). Lands wherever the
+ *  user still has a workspace, or /welcome when this was their only org. */
+export async function leaveOrgAction(
+  _prev: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('leave_organization')
+  if (error) return { error: error.message }
+  await supabase.auth.refreshSession()
+
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/welcome')
+  redirect(ctx.modules.includes('property') ? '/property-scrape' : '/scrape')
 }

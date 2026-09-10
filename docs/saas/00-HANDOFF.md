@@ -174,9 +174,22 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   **Stripe checkout is the missing piece** — user confirmed Stripe; wire it to
   `grant_credits` once keys are provided. Gate: tsc ✓, build ✓, smoke 23/23 (incl.
   /pipeline + /settings/billing) ✓, verify-tenancy 19/19 ✓, live credit RPC check ✓.
+- ✅ **User management round-out (2026-09-10, migration `20260910120000`, applied live):**
+  feature-queue #1 finished. **Ownership transfer** — `transfer_org_ownership(p_user_id)`
+  RPC (owner-only, target must be a member; new owner promoted, old owner steps down to
+  admin) + "Danger zone" section on Team & Users (owner picks the new owner from a dropdown,
+  confirm dialog, session refresh re-mints the demoted JWT). **Leave organization** —
+  `leave_organization()` RPC (owners blocked until they transfer; clears active_org_id) +
+  self-service button in the same section for non-owners (lands on the next workspace or
+  /welcome). **Multi-org membership unlocked** — `accept_org_invite` guard relaxed from
+  "already in ANY org" to per-org, so one user can be invited into several orgs (the
+  workspace switcher already handles it); accepting an invite now also sets the new org as
+  the active workspace. Create-org via /welcome still allows only one owned org.
+  verify-tenancy grew to **27 checks** (multi-org join, active-org-on-accept, leave, owner
+  can't leave, member can't transfer, role swap, demoted JWT) — all green live; smoke 23/23.
 - ⬜ Not started: Stripe checkout (needs keys from user), full Milestone C (org_id + RLS on
-  the legacy affiliate tables + tenant-client migration), E (source/country toggles), org
-  ownership transfer, outreach tracker, repointing hardcoded prod refs, VM fleet.
+  the legacy affiliate tables + tenant-client migration), E (source/country toggles),
+  outreach tracker, repointing hardcoded prod refs, VM fleet.
 
 ## The plan in one screen
 

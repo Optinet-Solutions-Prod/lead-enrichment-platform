@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getOrgContext } from '@/lib/orgs/context'
+import { DangerZone } from './_components/danger-zone'
 import { InviteForm } from './_components/invite-form'
 import { InviteRow } from './_components/invite-row'
 import { MemberRow } from './_components/member-row'
@@ -156,6 +157,14 @@ export default async function OrganizationSettingsPage() {
           )}
         </section>
       )}
+
+      <DangerZone
+        orgName={ctx.orgName}
+        isOwner={ctx.orgRole === 'owner'}
+        targets={members
+          .filter(m => m.userId !== ctx.userId)
+          .map(m => ({ userId: m.userId, label: m.displayName || m.email }))}
+      />
     </div>
   )
 }

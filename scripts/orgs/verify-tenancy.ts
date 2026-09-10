@@ -185,6 +185,72 @@ async function main() {
     const anonRes = await fetch(`${URL}/rest/v1/organizations?select=id`, { headers: { apikey: ANON } })
     const anonRows = anonRes.ok ? ((await anonRes.json()) as unknown[]) : []
     check('RLS: anonymous sees zero organizations', anonRows.length === 0)
+
+    // -- multi-org membership (2026-09-10): join a second org by invite ------
+    const invC = await rpc(a2.token, 'create_org_invite', {
+      p_email: emailFor('c'),
+      p_role: 'member',
+    })
+    const invCRow = Array.isArray(invC.data) ? (invC.data[0] as { token?: string }) : null
+    const acceptC = await rpc(c2.token, 'accept_org_invite', { p_token: invCRow?.token ?? '' })
+    check(
+      'multi-org: an existing org owner can accept an invite to a second org',
+      acceptC.ok && acceptC.data === orgA,
+      JSON.stringify(acceptC.data),
+    )
+    const { data: cMemberships } = await svc
+      .from('org_members')
+      .select('org_id')
+      .eq('user_id', created.userIds[2]!)
+    check('multi-org: C now belongs to two organizations', (cMemberships ?? []).length === 2)
+
+    const c3 = await signIn(emailFor('c'))
+    check(
+      'accepting an invite switches the active workspace',
+      c3.claims.org_id === orgA,
+      `got ${c3.claims.org_id}`,
+    )
+
+    // -- leave_organization ---------------------------------------------------
+    const cLeave = await rpc(c3.token, 'leave_organization', {})
+    const { data: cAfterLeave } = await svc
+      .from('org_members')
+      .select('org_id')
+      .eq('user_id', created.userIds[2]!)
+    check(
+      'member can leave an organization',
+      cLeave.ok && (cAfterLeave ?? []).length === 1 && (cAfterLeave?.[0] as { org_id: string }).org_id === orgC,
+      JSON.stringify(cAfterLeave),
+    )
+    const aLeave = await rpc(a2.token, 'leave_organization', {})
+    check('the owner cannot leave their org', !aLeave.ok)
+
+    // -- transfer_org_ownership -------------------------------------------------
+    const badTransfer = await rpc(b2.token, 'transfer_org_ownership', {
+      p_user_id: created.userIds[0]!,
+    })
+    check('member cannot transfer ownership', !badTransfer.ok)
+
+    const transfer = await rpc(a2.token, 'transfer_org_ownership', {
+      p_user_id: created.userIds[1]!,
+    })
+    const { data: orgARoles } = await svc
+      .from('org_members')
+      .select('user_id, role')
+      .eq('org_id', orgA)
+    const roleOf = (uid: string) =>
+      (orgARoles ?? []).find(r => (r as { user_id: string }).user_id === uid) as
+        | { role: string }
+        | undefined
+    check(
+      'transfer_org_ownership swaps owner/admin roles',
+      transfer.ok &&
+        roleOf(created.userIds[1]!)?.role === 'owner' &&
+        roleOf(created.userIds[0]!)?.role === 'admin',
+      JSON.stringify(orgARoles),
+    )
+    const a3 = await signIn(emailFor('a'))
+    check('demoted owner JWT shows org_role=admin', a3.claims.org_role === 'admin', `got ${a3.claims.org_role}`)
   } finally {
     // -- cleanup -------------------------------------------------------------
     for (const orgId of created.orgIds) {
