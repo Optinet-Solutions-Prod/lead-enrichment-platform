@@ -187,9 +187,38 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   the active workspace. Create-org via /welcome still allows only one owned org.
   verify-tenancy grew to **27 checks** (multi-org join, active-org-on-accept, leave, owner
   can't leave, member can't transfer, role swap, demoted JWT) — all green live; smoke 23/23.
-- ⬜ Not started: Stripe checkout (needs keys from user), full Milestone C (org_id + RLS on
-  the legacy affiliate tables + tenant-client migration), E (source/country toggles),
-  outreach tracker, repointing hardcoded prod refs, VM fleet.
+- ✅ **Onboarding + monetization Phase A (2026-09-10, migration `20260910130000`, applied
+  live):** docs/saas/05 built end-to-end with all decisions taken as proposed.
+  **Tour** — driver.js (~5KB) TourController on Collect Data: 7 skippable steps over
+  `data-tour` anchors (org switcher, sources, credits, nav items, bell), auto-starts once
+  per user (`user_profiles.tour_state` jsonb), restart via `/property-scrape?tour=1` from
+  the Help page. **Getting-started checklist** — server-computed from real org state
+  (leads/recipes/members/integrations), collapses and retires itself when done.
+  **Billing page v2** — EUR/$ toggle (org_settings.currency, EUR default), 3 credit packs
+  (€25/100 · €99/500 popular · €299/2,000; $29/$115/$345) with Buy disabled until Stripe,
+  voucher redeem box, BYO-vs-platform Airbnb price list. **Credits engine** —
+  `chargeCredits()` wrapper (all actions use it): honors global kill-switch + per-org
+  unlimited, debits atomically, low-balance (<20) notification;
+  `CREDIT_COSTS.airbnb_start_byo=5 / airbnb_start_platform=15` resolved per-org by
+  connected Apify integration. **Admin levers** — billing kill-switch
+  (system_settings.billing_enabled, seeded ON for review; OFF hides all pricing +. stops
+  debits), per-org billing_mode credits|unlimited, gift credits to ANY org (dropdown or
+  member-email lookup), voucher codes (create/list/delete; `redeem_voucher` RPC:
+  row-locked, once per org, expiry + max-uses — admin-only redeem). **Notifications** —
+  `notifications` table + bell (sidebar header + mobile top bar, unread badge, mark-all-
+  read); emitters: scrape/workflow finished, Airbnb ingested, low credits, gift, voucher,
+  member joined, ownership transferred, welcome. **Welcome** — vertical picker (property/
+  affiliate radio → enabled_modules) + 100-free-credits welcome note. **Help** — rebuilt
+  user-facing (journey, credits paragraph, YAML how-tos, tour restart, contact), un-hidden
+  in nav. **Mobile** — sticky scrape CTA, 44px targets on new surfaces, full-width file
+  inputs, stacking pack cards. verify-tenancy now **30 checks** (voucher redeem/dupe/role)
+  — all green; smoke 23/23; tsc + build clean. Pricing/copy = owner reviewing (comments
+  expected).
+- ⬜ Not started: Stripe checkout (Phase B — needs keys from user; packs render, Buy
+  disabled), SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still has
+  no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
+  tenant-client migration), E (source/country toggles), outreach tracker, repointing
+  hardcoded prod refs, VM fleet.
 
 ## The plan in one screen
 

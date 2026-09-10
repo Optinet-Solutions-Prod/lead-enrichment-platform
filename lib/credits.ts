@@ -1,18 +1,26 @@
 import 'server-only'
+import { getBillingEnabled, getOrgBilling } from '@/lib/billing'
+import { notifyOrg } from '@/lib/notifications'
 import { createServiceClient } from '@/lib/supabase/service'
 
 /**
  * Org credits. 1 credit ≈ one source-scrape run; Airbnb browser crawls cost
- * more because they spend real Apify compute. Spend/grant go through atomic
- * SECURITY DEFINER functions (service-role only) that keep the ledger and
- * balance in lockstep. Stripe purchasing bolts onto grant_credits later.
+ * more because they spend real Apify compute — and 3× more again on the
+ * PLATFORM Apify key (our bill) than on an org's own connected key (their
+ * bill). Spend/grant go through atomic SECURITY DEFINER functions
+ * (service-role only) that keep the ledger and balance in lockstep. Stripe
+ * purchasing bolts onto grant_credits later.
  */
 
 export const CREDIT_COSTS = {
   source_run: 1, // one built-in or custom source scrape
   mta_refresh: 1, // full licence-register re-download
-  airbnb_start: 5, // Apify browser crawl (~300 listings)
+  airbnb_start_byo: 5, // Apify crawl on the org's OWN connected key
+  airbnb_start_platform: 15, // Apify crawl on the platform key (covers ~$1 compute)
 } as const
+
+/** Balance under this after a spend triggers the low-credits notification. */
+const LOW_BALANCE_THRESHOLD = 20
 
 export async function getCreditsBalance(orgId: string): Promise<number> {
   const svc = createServiceClient()
@@ -42,6 +50,39 @@ export async function spendCredits(
   })
   if (error) throw new Error(`credits: ${error.message}`)
   return data === -1 ? null : (data as number)
+}
+
+export type ChargeResult =
+  | { charged: true; balance: number }
+  | { charged: false } // billing disabled globally, org is unlimited, or amount 0
+  | { insufficient: true; balance: number; needed: number }
+
+/** The one entry point actions should use: respects the global billing
+ *  kill-switch and per-org unlimited mode, debits atomically otherwise, and
+ *  fires the low-balance notification when a spend crosses the threshold. */
+export async function chargeCredits(
+  orgId: string,
+  amount: number,
+  reason: string,
+  meta?: Record<string, unknown>,
+): Promise<ChargeResult> {
+  if (amount <= 0) return { charged: false }
+  const [enabled, orgBilling] = await Promise.all([getBillingEnabled(), getOrgBilling(orgId)])
+  if (!enabled || orgBilling.mode === 'unlimited') return { charged: false }
+
+  const balance = await spendCredits(orgId, amount, reason, meta)
+  if (balance === null) {
+    return { insufficient: true, balance: await getCreditsBalance(orgId), needed: amount }
+  }
+  if (balance < LOW_BALANCE_THRESHOLD && balance + amount >= LOW_BALANCE_THRESHOLD) {
+    await notifyOrg(orgId, {
+      kind: 'low_credits',
+      title: `Credits are running low — ${balance} left`,
+      body: 'Top up so scrapes and workflows keep running.',
+      href: '/settings/billing',
+    })
+  }
+  return { charged: true, balance }
 }
 
 export async function grantCredits(

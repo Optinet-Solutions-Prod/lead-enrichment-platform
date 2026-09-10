@@ -37,6 +37,7 @@ import { signOutAction } from '../_actions/auth'
 import { OrgSwitcher } from './org-switcher'
 import { type ProxyBandwidth } from '../_lib/dashboard-queries'
 import { FeedbackWidget } from './feedback-widget'
+import { NotificationsBell, type BellItem } from './notifications-bell'
 
 type NavItem = {
   label: string
@@ -58,6 +59,8 @@ type NavItem = {
    *  Property Management workspace never sees affiliate pages and vice
    *  versa. Untagged items show for every org. */
   module?: 'property' | 'affiliate'
+  /** data-tour anchor for the interactive tour (stable across renames). */
+  tourId?: string
 }
 
 type NavGroup = {
@@ -113,6 +116,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/pipeline',
         icon: Workflow,
         match: (p: string) => p.startsWith('/pipeline'),
+        tourId: 'nav-workflows',
       },
       {
         label: 'Owner Leads',
@@ -120,6 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/property-leads',
         icon: Building2,
         match: (p: string) => p.startsWith('/property-leads'),
+        tourId: 'nav-owner-leads',
       },
       {
         label: 'PM Prospects',
@@ -204,8 +209,9 @@ const NAV_GROUPS: NavGroup[] = [
         match: (p: string) => p.startsWith('/onboarding'),
       },
       {
+        // Un-hidden 2026-09-10: rewritten as user-facing product help
+        // (journey, credits, YAML how-tos, tour restart, contact).
         label: 'Help & Docs',
-        hidden: true,
         href: '/help',
         icon: HelpCircle,
         match: (p: string) => p.startsWith('/help'),
@@ -244,6 +250,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/settings/billing',
         icon: CreditCard,
         match: (p: string) => p.startsWith('/settings/billing'),
+        tourId: 'nav-billing',
       },
       {
         label: 'My Account',
@@ -322,6 +329,9 @@ type Props = {
   isAdmin?: boolean
   proxyBandwidth?: ProxyBandwidth | null
   openFeedbackCount?: number
+  /** In-app notification bell data (fetched server-side by the layout). */
+  notifUnread?: number
+  notifItems?: BellItem[]
 }
 
 export function DashboardShell({
@@ -334,6 +344,8 @@ export function DashboardShell({
   isAdmin = false,
   proxyBandwidth = null,
   openFeedbackCount = 0,
+  notifUnread = 0,
+  notifItems = [],
 }: Props) {
   const brand = orgName ?? 'Dashboard'
   const pathname = usePathname()
@@ -377,12 +389,17 @@ export function DashboardShell({
         ].join(' ')}
       >
         {/* Header */}
-        <div className="flex h-14 items-center justify-between border-b border-[color:var(--color-border)] px-4">
+        <div className="flex h-14 items-center justify-between gap-1 border-b border-[color:var(--color-border)] px-4">
           {showLabels ? (
             orgs.length > 0 ? (
-              <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} showLabels={showLabels} />
+              <span data-tour="org-switcher" className="min-w-0 flex-1">
+                <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} showLabels={showLabels} />
+              </span>
             ) : (
-              <span className="truncate text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]">
+              <span
+                data-tour="org-switcher"
+                className="truncate text-[13px] font-semibold tracking-wide text-[color:var(--color-text-primary)]"
+              >
                 {brand}
               </span>
             )
@@ -390,6 +407,9 @@ export function DashboardShell({
             <span className="text-base font-bold text-[color:var(--color-accent)]">
               {brand.charAt(0).toUpperCase()}
             </span>
+          )}
+          {showLabels && (
+            <NotificationsBell unread={notifUnread} items={notifItems} align="left" tourTarget />
           )}
           <button
             type="button"
@@ -455,6 +475,7 @@ export function DashboardShell({
                     key={item.label}
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
+                    {...(item.tourId ? { 'data-tour': item.tourId } : {})}
                     className={[
                       'group relative flex items-center gap-3 rounded-md px-2 py-2 text-[13px] transition-colors',
                       active
@@ -531,6 +552,9 @@ export function DashboardShell({
             <Menu className="h-5 w-5" />
           </button>
           <span className="truncate text-[13px] font-semibold">{brand}</span>
+          <span className="ml-auto">
+            <NotificationsBell unread={notifUnread} items={notifItems} align="right" />
+          </span>
         </header>
 
         <main className="min-w-0 flex-1 bg-[color:var(--color-bg-primary)]">{children}</main>

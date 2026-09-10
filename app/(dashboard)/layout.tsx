@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { listNotifications, unreadCount } from '@/lib/notifications'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getOrgContext } from '@/lib/orgs/context'
@@ -66,7 +67,13 @@ export default async function DashboardLayout({
   // balance on every page so operators don't have to return to the
   // Dashboard to check it. Shared infra, so safe for all signed-in
   // users (not shadow-filtered).
-  const proxyBandwidth = await loadProxyBandwidth()
+  // Bell data: fetched on every navigation (no websockets needed) — the
+  // dropdown itself is a client component fed from here.
+  const [proxyBandwidth, notifUnread, notifItems] = await Promise.all([
+    loadProxyBandwidth(),
+    unreadCount(org.userId),
+    listNotifications(org.userId, 20),
+  ])
 
   return (
     <DashboardShell
@@ -78,6 +85,8 @@ export default async function DashboardLayout({
       isAdmin={isAdmin}
       proxyBandwidth={proxyBandwidth}
       openFeedbackCount={openFeedbackCount}
+      notifUnread={notifUnread}
+      notifItems={notifItems}
     >
       <InteractiveBanner />
       {children}

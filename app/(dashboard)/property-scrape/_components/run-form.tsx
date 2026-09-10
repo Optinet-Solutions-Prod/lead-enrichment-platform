@@ -117,9 +117,14 @@ type RunFormProps = {
   customSources: CustomSourceView[]
   /** Current org credit balance (runs are debited up-front). */
   balance: number
+  /** Airbnb crawl price for THIS org (5 on their own Apify key, 15 platform). */
+  airbnbCost: number
+  /** False when billing is globally disabled or the org is unlimited — hides
+   *  every credits mention. */
+  showCredits: boolean
 }
 
-export function RunForm({ customSources, balance }: RunFormProps) {
+export function RunForm({ customSources, balance, airbnbCost, showCredits }: RunFormProps) {
   const [state, formAction, pending] = useActionState(runPropertyScrapeAction, initialState)
   const [ingestState, ingestAction, ingestPending] = useActionState(
     async (prev: RunState) => ingestAirbnbAction(prev),
@@ -129,7 +134,7 @@ export function RunForm({ customSources, balance }: RunFormProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <form action={formAction} className="flex flex-col gap-4">
+      <form action={formAction} data-tour="run-sources" className="flex flex-col gap-4">
         {TIERS.map(tier => (
           <fieldset
             key={tier.name}
@@ -173,7 +178,13 @@ export function RunForm({ customSources, balance }: RunFormProps) {
                       )}
                     </span>
                     <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-                      {s.blurb}
+                      {s.key === 'airbnb'
+                        ? showCredits
+                          ? airbnbCost === 5
+                            ? 'Runs on YOUR connected Apify account (5 credits); ingest below when it finishes.'
+                            : `Runs on the platform Apify key (${airbnbCost} credits — connect your own under Integrations to pay 5); ingest below when it finishes.`
+                          : 'Starts a ~300-listing browser crawl; ingest it below when it finishes.'
+                        : s.blurb}
                     </span>
                   </span>
                 </label>
@@ -201,7 +212,7 @@ export function RunForm({ customSources, balance }: RunFormProps) {
             </legend>
             <p className="mb-2 text-[12px] text-[color:var(--color-text-secondary)]">
               Custom JSON-API sources your organization added below. They merge into Owner
-              Leads like the built-ins and cost 1 credit per run.
+              Leads like the built-ins{showCredits ? ' and cost 1 credit per run' : ''}.
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {customSources.map(s => (
@@ -224,23 +235,26 @@ export function RunForm({ customSources, balance }: RunFormProps) {
           </fieldset>
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Sticky on mobile so the CTA never drifts below four fieldsets. */}
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]/95 px-1 py-2 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
           <button
             type="submit"
             disabled={pending}
-            className="inline-flex w-fit items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-4 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-50"
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-4 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-50"
           >
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {pending ? 'Scraping…' : 'Scrape selected sources'}
           </button>
-          <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--color-text-secondary)]">
-            <Coins className="h-3.5 w-3.5" />
-            1 credit per source · Airbnb 5 · balance{' '}
-            <strong className="tabular-nums text-[color:var(--color-text-primary)]">{balance.toLocaleString()}</strong>
-            <Link href="/settings/billing" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
-              Billing &amp; Credits
-            </Link>
-          </span>
+          {showCredits && (
+            <span data-tour="credits" className="inline-flex flex-wrap items-center gap-1.5 text-[12px] text-[color:var(--color-text-secondary)]">
+              <Coins className="h-3.5 w-3.5" />
+              1 credit per source · Airbnb {airbnbCost} · balance{' '}
+              <strong className="tabular-nums text-[color:var(--color-text-primary)]">{balance.toLocaleString()}</strong>
+              <Link href="/settings/billing" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
+                Billing &amp; Credits
+              </Link>
+            </span>
+          )}
         </div>
 
         {state && 'error' in state && state.error && (

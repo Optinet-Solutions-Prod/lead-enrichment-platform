@@ -1,5 +1,6 @@
 import 'server-only'
 import { CREDIT_COSTS } from '@/lib/credits'
+import { getConnectedConfig } from '@/lib/integrations/store'
 import { createServiceClient } from '@/lib/supabase/service'
 import { listSourceDefs, runCustomSource } from './custom'
 import {
@@ -24,10 +25,18 @@ export type SourceResult = {
   detail: string
 }
 
-export function costOfSources(sources: string[]): number {
+/** Airbnb pricing depends on WHOSE Apify account pays for the crawl: the
+ *  org's own connected key (their bill — cheap credits) or the platform key
+ *  (our bill — priced to cover the ~$1 of compute). */
+export async function airbnbCreditCost(orgId: string): Promise<number> {
+  const own = await getConnectedConfig(orgId, 'apify')
+  return own ? CREDIT_COSTS.airbnb_start_byo : CREDIT_COSTS.airbnb_start_platform
+}
+
+export function costOfSources(sources: string[], airbnbCost: number): number {
   let total = 0
   for (const s of sources) {
-    if (s === 'airbnb') total += CREDIT_COSTS.airbnb_start
+    if (s === 'airbnb') total += airbnbCost
     else if (s === 'mta') total += CREDIT_COSTS.mta_refresh
     else total += CREDIT_COSTS.source_run
   }

@@ -23,6 +23,34 @@ export function CreateOrgForm() {
         />
       </label>
 
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-[12px] text-[color:var(--color-text-secondary)]">
+          What are you here for?
+        </legend>
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
+          <input type="radio" name="vertical" value="property" defaultChecked className="mt-0.5" />
+          <span>
+            <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
+              Property owner leads
+            </span>
+            <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+              Find property owners, cross-match Airbnb, win management clients.
+            </span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
+          <input type="radio" name="vertical" value="affiliate" className="mt-0.5" />
+          <span>
+            <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
+              Affiliate scraping
+            </span>
+            <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+              Search-result scraping, lead enrichment and checkpoint tooling.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
       {state?.error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">{state.error}</p>
       )}

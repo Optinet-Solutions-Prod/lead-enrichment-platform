@@ -1,29 +1,61 @@
-import { Coins, CreditCard } from 'lucide-react'
+import { Coins, Infinity as InfinityIcon } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { CREDIT_PACKS, getBillingEnabled, getOrgBilling } from '@/lib/billing'
 import { CREDIT_COSTS, getCreditsBalance, listLedger } from '@/lib/credits'
 import { getOrgContext } from '@/lib/orgs/context'
 import { createServiceClient } from '@/lib/supabase/service'
-import { GrantForm } from './_components/grant-form'
+import { AdminPanel, type OrgOption, type VoucherView } from './_components/admin-panel'
+import { PacksPanel } from './_components/packs-panel'
+import { RedeemVoucher } from './_components/redeem-voucher'
 
 export const dynamic = 'force-dynamic'
 
 const COST_ROWS = [
-  { action: 'Source scrape run', detail: 'Any built-in or custom source (per source, per run)', cost: CREDIT_COSTS.source_run },
-  { action: 'Licence register refresh', detail: 'Full MTA short-let register re-download', cost: CREDIT_COSTS.mta_refresh },
-  { action: 'Airbnb crawl', detail: 'Real-browser crawl on Apify (~300 listings)', cost: CREDIT_COSTS.airbnb_start },
-  { action: 'Airbnb cross-match', detail: 'Linking Owner Leads to Airbnb hosts', cost: 0 },
+  { action: 'Source scrape run', detail: 'Any built-in or custom source (per source, per run)', cost: String(CREDIT_COSTS.source_run) },
+  { action: 'Licence register refresh', detail: 'Full MTA short-let register re-download', cost: String(CREDIT_COSTS.mta_refresh) },
+  { action: 'Airbnb crawl (your Apify key)', detail: 'Real-browser crawl billed to YOUR Apify account', cost: String(CREDIT_COSTS.airbnb_start_byo) },
+  { action: 'Airbnb crawl (platform key)', detail: 'Same crawl on our Apify account (~$1 of compute)', cost: String(CREDIT_COSTS.airbnb_start_platform) },
+  { action: 'Airbnb cross-match', detail: 'Linking Owner Leads to Airbnb hosts', cost: 'free' },
 ]
 
 export default async function BillingPage() {
   const ctx = await getOrgContext()
   if (!ctx) redirect('/welcome')
+  const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
 
   const svc = createServiceClient()
-  const [balance, ledger, { data: isAdmin }] = await Promise.all([
+  const [balance, ledger, billingEnabled, orgBilling, { data: isAdmin }] = await Promise.all([
     getCreditsBalance(ctx.orgId),
     listLedger(ctx.orgId, 50),
+    getBillingEnabled(),
+    getOrgBilling(ctx.orgId),
     svc.rpc('is_admin', { p_user_id: ctx.userId }),
   ])
+
+  // Admin extras: all orgs (for gifting / mode) + the voucher list.
+  let adminOrgs: OrgOption[] = []
+  let vouchers: VoucherView[] = []
+  if (isAdmin === true) {
+    const [{ data: orgRows }, { data: voucherRows }] = await Promise.all([
+      svc.from('organizations').select('id, name, org_settings ( billing_mode )').order('name'),
+      svc
+        .from('credit_vouchers')
+        .select('code, credits, max_redemptions, redeemed_count, expires_at')
+        .order('created_at', { ascending: false }),
+    ])
+    adminOrgs = ((orgRows ?? []) as Array<{
+      id: string
+      name: string
+      org_settings: { billing_mode: string } | { billing_mode: string }[] | null
+    }>).map(o => {
+      const s = Array.isArray(o.org_settings) ? o.org_settings[0] : o.org_settings
+      return { id: o.id, name: o.name, mode: s?.billing_mode ?? 'credits' }
+    })
+    vouchers = (voucherRows ?? []) as VoucherView[]
+  }
+
+  const unlimited = orgBilling.mode === 'unlimited'
+  const showMoney = billingEnabled && !unlimited
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
@@ -34,64 +66,93 @@ export default async function BillingPage() {
         <p className="mt-1 max-w-2xl text-[12px] text-[color:var(--color-text-secondary)]">
           Data collection runs on credits so costs stay predictable: every scrape debits{' '}
           <strong className="text-[color:var(--color-text-primary)]">{ctx.orgName}</strong>&apos;s
-          balance up-front, and the ledger below shows exactly where each credit went.
+          balance up-front, and the ledger shows exactly where each credit went.
         </p>
       </header>
 
-      {/* Balance */}
-      <section className="flex flex-wrap items-center gap-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--color-bg-secondary)]">
-            <Coins className="h-5 w-5 text-[color:var(--color-text-primary)]" />
-          </span>
-          <div>
-            <p className="text-[22px] font-semibold tabular-nums leading-none text-[color:var(--color-text-primary)]">
-              {balance.toLocaleString()}
-            </p>
-            <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">credits available</p>
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-2 rounded-md border border-dashed border-[color:var(--color-border)] px-3 py-2">
-          <CreditCard className="h-4 w-4 text-[color:var(--color-text-secondary)]" />
-          <p className="text-[12px] text-[color:var(--color-text-secondary)]">
-            <strong className="text-[color:var(--color-text-primary)]">Buy credits — coming soon.</strong>{' '}
-            Card payments via Stripe are being wired up; until then contact us for a top-up.
-          </p>
-        </div>
-      </section>
+      {!billingEnabled && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+          Billing is currently <strong>disabled platform-wide</strong> — nothing is charged and
+          prices are hidden. Scrapes and workflows run freely.
+        </p>
+      )}
 
-      {/* Price list */}
+      {billingEnabled && unlimited && (
+        <p className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-900">
+          <InfinityIcon className="h-4 w-4 shrink-0" />
+          This organization is on an <strong>unlimited plan</strong> — runs don&apos;t use credits.
+        </p>
+      )}
+
+      {showMoney && (
+        <>
+          {/* Balance */}
+          <section className="flex flex-wrap items-center gap-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--color-bg-secondary)]">
+                <Coins className="h-5 w-5 text-[color:var(--color-text-primary)]" />
+              </span>
+              <div>
+                <p className="text-[22px] font-semibold tabular-nums leading-none text-[color:var(--color-text-primary)]">
+                  {balance.toLocaleString()}
+                </p>
+                <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
+                  credits available
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <PacksPanel
+            packs={CREDIT_PACKS.map(p => ({ ...p }))}
+            initialCurrency={orgBilling.currency}
+            canSetCurrency={canManage}
+          />
+
+          <RedeemVoucher canRedeem={canManage} />
+
+          {/* Price list */}
+          <section>
+            <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">
+              What things cost
+            </h2>
+            <div className="mt-2 overflow-x-auto rounded-lg border border-[color:var(--color-border)]">
+              <table className="w-full min-w-[480px] text-left text-[12px]">
+                <thead className="bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Action</th>
+                    <th className="px-3 py-2 font-medium">What it does</th>
+                    <th className="px-3 py-2 text-right font-medium">Credits</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {COST_ROWS.map(r => (
+                    <tr key={r.action} className="bg-[color:var(--color-bg-primary)]">
+                      <td className="px-3 py-2 font-medium text-[color:var(--color-text-primary)]">
+                        {r.action}
+                      </td>
+                      <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">{r.detail}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-text-primary)]">
+                        {r.cost}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+
+      {isAdmin === true && (
+        <AdminPanel billingEnabled={billingEnabled} orgs={adminOrgs} vouchers={vouchers} />
+      )}
+
+      {/* Ledger — always visible: it's the audit trail even when billing is off */}
       <section>
-        <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">What things cost</h2>
-        <div className="mt-2 overflow-x-auto rounded-lg border border-[color:var(--color-border)]">
-          <table className="w-full min-w-[480px] text-left text-[12px]">
-            <thead className="bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]">
-              <tr>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">What it does</th>
-                <th className="px-3 py-2 text-right font-medium">Credits</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--color-border)]">
-              {COST_ROWS.map(r => (
-                <tr key={r.action} className="bg-[color:var(--color-bg-primary)]">
-                  <td className="px-3 py-2 font-medium text-[color:var(--color-text-primary)]">{r.action}</td>
-                  <td className="px-3 py-2 text-[color:var(--color-text-secondary)]">{r.detail}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-text-primary)]">
-                    {r.cost === 0 ? 'free' : r.cost}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {isAdmin === true && <GrantForm orgName={ctx.orgName} />}
-
-      {/* Ledger */}
-      <section>
-        <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">Recent activity</h2>
+        <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">
+          Recent activity
+        </h2>
         {ledger.length === 0 ? (
           <p className="mt-2 rounded-lg border border-dashed border-[color:var(--color-border)] p-4 text-[13px] text-[color:var(--color-text-secondary)]">
             Nothing yet — run a scrape on Collect Data or a Workflow and the debit shows up here.

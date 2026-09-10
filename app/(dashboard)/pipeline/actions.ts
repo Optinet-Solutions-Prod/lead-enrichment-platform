@@ -1,10 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getCreditsBalance, spendCredits } from '@/lib/credits'
+import { chargeCredits } from '@/lib/credits'
+import { notifyOrg } from '@/lib/notifications'
 import { getOrgContext } from '@/lib/orgs/context'
 import { crossmatchOwnerLeads } from '@/lib/sources/crossmatch'
-import { costOfSources, executeSources, type SourceResult } from '@/lib/sources/execute'
+import {
+  airbnbCreditCost,
+  costOfSources,
+  executeSources,
+  type SourceResult,
+} from '@/lib/sources/execute'
 import { createServiceClient } from '@/lib/supabase/service'
 
 /**
@@ -99,18 +105,15 @@ export async function runRecipeAction(
   if (!recipe) return { recipeId: id, error: 'Workflow not found.' }
   const steps = recipe.steps as RecipeSteps
 
-  const cost = costOfSources(steps.sources)
-  if (cost > 0) {
-    const newBalance = await spendCredits(ctx.orgId, cost, 'recipe_run', {
-      recipe: recipe.name,
-      sources: steps.sources,
-    })
-    if (newBalance === null) {
-      const have = await getCreditsBalance(ctx.orgId)
-      return {
-        recipeId: id,
-        error: `Not enough credits — this workflow costs ${cost}, your organization has ${have}. Top up under Account → Billing & Credits.`,
-      }
+  const cost = costOfSources(steps.sources, await airbnbCreditCost(ctx.orgId))
+  const charge = await chargeCredits(ctx.orgId, cost, 'recipe_run', {
+    recipe: recipe.name,
+    sources: steps.sources,
+  })
+  if ('insufficient' in charge) {
+    return {
+      recipeId: id,
+      error: `Not enough credits — this workflow costs ${charge.needed}, your organization has ${charge.balance}. Top up under Account → Billing & Credits.`,
     }
   }
 
@@ -132,5 +135,11 @@ export async function runRecipeAction(
   const summary = lastRun.crossmatch
     ? `${okBits}/${results.length} steps ran · cross-match linked ${lastRun.crossmatch.matched} of ${lastRun.crossmatch.checked} leads to Airbnb`
     : `${okBits}/${results.length} steps ran`
+  await notifyOrg(ctx.orgId, {
+    kind: 'workflow_finished',
+    title: `Workflow "${recipe.name}" finished`,
+    body: summary,
+    href: '/pipeline',
+  })
   return { recipeId: id, ok: summary }
 }

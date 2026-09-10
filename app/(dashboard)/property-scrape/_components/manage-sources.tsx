@@ -49,13 +49,13 @@ export function ManageSources({ templateYaml, sources, canManage }: Props) {
             Download template
           </a>
 
-          <form action={formAction} className="inline-flex items-center gap-2">
+          <form action={formAction} className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <input
               type="file"
               name="yaml_file"
               accept=".yaml,.yml,text/yaml"
               required
-              className="max-w-60 text-[12px] text-[color:var(--color-text-secondary)] file:mr-2 file:rounded-md file:border file:border-[color:var(--color-border)] file:bg-[color:var(--color-bg-primary)] file:px-2 file:py-1.5 file:text-[12px] file:text-[color:var(--color-text-primary)]"
+              className="w-full text-[12px] text-[color:var(--color-text-secondary)] file:mr-2 file:rounded-md file:border file:border-[color:var(--color-border)] file:bg-[color:var(--color-bg-primary)] file:px-2 file:py-1.5 file:text-[12px] file:text-[color:var(--color-text-primary)] sm:w-auto sm:max-w-60"
             />
             <button
               type="submit"

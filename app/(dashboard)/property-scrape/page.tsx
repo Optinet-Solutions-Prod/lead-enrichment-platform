@@ -1,11 +1,16 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { ArrowRight, CheckCircle2, Circle, ShieldCheck } from 'lucide-react'
 import { redirect } from 'next/navigation'
+import { getBillingEnabled, getOrgBilling } from '@/lib/billing'
 import { getCreditsBalance } from '@/lib/credits'
 import { getOrgContext } from '@/lib/orgs/context'
 import { listSourceDefs } from '@/lib/sources/custom'
+import { airbnbCreditCost } from '@/lib/sources/execute'
 import { SOURCE_TEMPLATE_YAML } from '@/lib/sources/template'
 import { createServiceClient } from '@/lib/supabase/service'
+import { TourController } from '../_components/tour-controller'
+import { GettingStarted, type ChecklistItem } from './_components/getting-started'
 import { ManageSources } from './_components/manage-sources'
 import { RunForm } from './_components/run-form'
 
@@ -48,11 +53,30 @@ export default async function PropertyScrapePage() {
     svc.from('airbnb_pm_prospects').select('host_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
   ])
 
-  const [customDefs, balance] = await Promise.all([
+  const [
+    customDefs,
+    balance,
+    abCost,
+    billingEnabled,
+    orgBilling,
+    { count: recipeCount },
+    { count: memberCount },
+    { count: integrationCount },
+    { data: profileRow },
+  ] = await Promise.all([
     listSourceDefs(ctx.orgId),
     getCreditsBalance(ctx.orgId),
+    airbnbCreditCost(ctx.orgId),
+    getBillingEnabled(),
+    getOrgBilling(ctx.orgId),
+    svc.from('org_recipes').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
+    svc.from('org_members').select('user_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
+    svc.from('org_integrations').select('provider', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
+    svc.from('user_profiles').select('tour_state').eq('id', ctx.userId).maybeSingle(),
   ])
   const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
+  const showCredits = billingEnabled && orgBilling.mode === 'credits'
+  const tourSeen = profileRow?.tour_state != null
   const customSources = customDefs.map(d => ({
     key: d.key,
     name: d.definition.name,
@@ -61,6 +85,46 @@ export default async function PropertyScrapePage() {
 
   const phoneLeads = leadsWithPhone ?? 0
   const pilotReady = phoneLeads >= 30
+
+  const checklist: ChecklistItem[] = [
+    {
+      key: 'scrape',
+      label: 'Run your first scrape',
+      detail: 'Tick the two pre-selected owner sites below and hit Scrape.',
+      done: (leads ?? 0) > 0,
+      href: '#collect',
+    },
+    {
+      key: 'leads',
+      label: 'Review your Owner Leads',
+      detail: 'Filter to owners with a phone number and pick who to contact first.',
+      done: (leads ?? 0) > 0 && phoneLeads > 0,
+      href: '/property-leads?f=contact_phone%3Anotempty',
+    },
+    {
+      key: 'workflow',
+      label: 'Save a workflow',
+      detail: 'Bundle your go-to sources into one recipe you run with one click.',
+      done: (recipeCount ?? 0) > 0,
+      href: '/pipeline',
+    },
+    {
+      key: 'team',
+      label: 'Invite a teammate',
+      detail: 'Bring in whoever does the outreach — they get their own login.',
+      done: (memberCount ?? 0) >= 2,
+      href: '/settings/organization',
+    },
+    {
+      key: 'integration',
+      label: 'Connect your Apify account',
+      detail: showCredits
+        ? `Airbnb crawls cost 5 credits on your own key instead of ${abCost === 5 ? 15 : abCost}.`
+        : 'Run Airbnb crawls on your own Apify account.',
+      done: (integrationCount ?? 0) > 0,
+      href: '/settings/integrations',
+    },
+  ]
 
   const steps = [
     {
@@ -90,6 +154,9 @@ export default async function PropertyScrapePage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+      <Suspense fallback={null}>
+        <TourController autoStart={!tourSeen} />
+      </Suspense>
       <header>
         <h1 className="text-[18px] font-semibold text-[color:var(--color-text-primary)]">
           Malta Owner Pipeline
@@ -100,6 +167,8 @@ export default async function PropertyScrapePage() {
           sidebar are where you review it and work it.
         </p>
       </header>
+
+      <GettingStarted items={checklist} />
 
       {/* The plan — Meny's research playbook with live progress */}
       <section className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
@@ -173,7 +242,7 @@ export default async function PropertyScrapePage() {
       </section>
 
       {/* The scrapers, organized by source tier */}
-      <section>
+      <section id="collect">
         <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">
           Collect fresh data
         </h2>
@@ -183,7 +252,12 @@ export default async function PropertyScrapePage() {
           datasets — re-running only adds listings you haven&apos;t seen.
         </p>
         <div className="mt-3">
-          <RunForm customSources={customSources} balance={balance} />
+          <RunForm
+            customSources={customSources}
+            balance={balance}
+            airbnbCost={abCost}
+            showCredits={showCredits}
+          />
         </div>
       </section>
 

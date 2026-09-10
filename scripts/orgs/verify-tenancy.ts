@@ -225,6 +225,26 @@ async function main() {
     const aLeave = await rpc(a2.token, 'leave_organization', {})
     check('the owner cannot leave their org', !aLeave.ok)
 
+    // -- credit vouchers -------------------------------------------------------
+    const voucherCode = `TEST-${STAMP}`.slice(0, 20)
+    await svc.from('credit_vouchers').insert({ code: voucherCode, credits: 50, max_redemptions: 2 })
+    const redeem = await rpc(a2.token, 'redeem_voucher', { p_code: voucherCode })
+    const { data: afterVoucher } = await svc
+      .from('org_settings')
+      .select('credits_balance')
+      .eq('org_id', orgA)
+      .maybeSingle()
+    check(
+      'voucher redeem grants credits + returns new balance',
+      redeem.ok && redeem.data === afterVoucher?.credits_balance && Number(redeem.data) >= 50,
+      JSON.stringify({ redeem: redeem.data, balance: afterVoucher?.credits_balance }),
+    )
+    const redeemTwice = await rpc(a2.token, 'redeem_voucher', { p_code: voucherCode })
+    check('an org cannot redeem the same voucher twice', !redeemTwice.ok)
+    const memberRedeem = await rpc(b2.token, 'redeem_voucher', { p_code: voucherCode })
+    check('a plain member cannot redeem vouchers', !memberRedeem.ok)
+    await svc.from('credit_vouchers').delete().eq('code', voucherCode)
+
     // -- transfer_org_ownership -------------------------------------------------
     const badTransfer = await rpc(b2.token, 'transfer_org_ownership', {
       p_user_id: created.userIds[0]!,

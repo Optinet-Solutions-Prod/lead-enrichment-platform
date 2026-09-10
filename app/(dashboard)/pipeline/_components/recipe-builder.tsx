@@ -14,7 +14,7 @@ export type StepOption = {
   usesKeyword?: boolean
 }
 
-export function RecipeBuilder({ steps }: { steps: StepOption[] }) {
+export function RecipeBuilder({ steps, showCredits }: { steps: StepOption[]; showCredits: boolean }) {
   const [state, formAction, pending] = useActionState(saveRecipeAction, initialState)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [crossmatch, setCrossmatch] = useState(false)
@@ -71,10 +71,12 @@ export function RecipeBuilder({ steps }: { steps: StepOption[] }) {
                 />
                 <span>
                   <span className="text-[13px] font-medium text-[color:var(--color-text-primary)]">
-                    {s.label}{' '}
-                    <span className="text-[11px] font-normal text-[color:var(--color-text-secondary)]">
-                      · {s.cost} credit{s.cost > 1 ? 's' : ''}
-                    </span>
+                    {s.label}
+                    {showCredits && (
+                      <span className="text-[11px] font-normal text-[color:var(--color-text-secondary)]">
+                        {' '}· {s.cost} credit{s.cost > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </span>
                   <span className="block text-[12px] text-[color:var(--color-text-secondary)]">{s.hint}</span>
                 </span>
@@ -123,9 +125,11 @@ export function RecipeBuilder({ steps }: { steps: StepOption[] }) {
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             {pending ? 'Saving…' : 'Save workflow'}
           </button>
-          <span className="text-[12px] tabular-nums text-[color:var(--color-text-secondary)]">
-            Runs will cost {cost} credit{cost === 1 ? '' : 's'}
-          </span>
+          {showCredits && (
+            <span className="text-[12px] tabular-nums text-[color:var(--color-text-secondary)]">
+              Runs will cost {cost} credit{cost === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
 
         {state?.ok && (

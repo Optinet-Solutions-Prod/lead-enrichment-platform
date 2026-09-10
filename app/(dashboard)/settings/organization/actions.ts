@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { notifyOrg } from '@/lib/notifications'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgContext, requireOrgRole } from '@/lib/orgs/context'
 
@@ -147,6 +148,16 @@ export async function transferOwnershipAction(
   const { error } = await supabase.rpc('transfer_org_ownership', { p_user_id: userId })
   if (error) return { error: error.message }
   await supabase.auth.refreshSession()
+
+  const ctx = await getOrgContext()
+  if (ctx) {
+    await notifyOrg(ctx.orgId, {
+      kind: 'ownership',
+      title: `${ctx.orgName} has a new owner`,
+      body: 'Ownership was transferred; the previous owner stays on as an admin.',
+      href: '/settings/organization',
+    })
+  }
   revalidatePath(PAGE)
   return { ok: 'Ownership transferred — you are now an admin of this organization.' }
 }

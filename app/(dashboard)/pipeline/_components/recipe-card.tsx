@@ -26,7 +26,7 @@ function StatusIcon({ status }: { status: string }) {
   return <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-700" />
 }
 
-export function RecipeCard({ recipe }: { recipe: RecipeView }) {
+export function RecipeCard({ recipe, showCredits }: { recipe: RecipeView; showCredits: boolean }) {
   const [runState, runAction, running] = useActionState(runRecipeAction, initialState)
   const [delState, delAction, deleting] = useActionState(deleteRecipeAction, initialState)
 
@@ -36,9 +36,11 @@ export function RecipeCard({ recipe }: { recipe: RecipeView }) {
     <section className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">{recipe.name}</h3>
-        <span className="text-[11px] tabular-nums text-[color:var(--color-text-secondary)]">
-          {recipe.cost} credit{recipe.cost === 1 ? '' : 's'} per run
-        </span>
+        {showCredits && (
+          <span className="text-[11px] tabular-nums text-[color:var(--color-text-secondary)]">
+            {recipe.cost} credit{recipe.cost === 1 ? '' : 's'} per run
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <form action={runAction}>
             <input type="hidden" name="recipe_id" value={recipe.id} />

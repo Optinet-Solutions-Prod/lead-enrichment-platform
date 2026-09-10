@@ -1,10 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getCreditsBalance, spendCredits } from '@/lib/credits'
+import { chargeCredits } from '@/lib/credits'
+import { notifyOrg } from '@/lib/notifications'
 import { getOrgContext, requireOrgRole } from '@/lib/orgs/context'
 import { removeSourceDef, upsertSourceDefsFromYaml } from '@/lib/sources/custom'
-import { costOfSources, executeSources, type SourceResult } from '@/lib/sources/execute'
+import {
+  airbnbCreditCost,
+  costOfSources,
+  executeSources,
+  type SourceResult,
+} from '@/lib/sources/execute'
 import { fetchWithTimeout, resolveApify } from '@/lib/sources/runners'
 import { createServiceClient } from '@/lib/supabase/service'
 
@@ -42,16 +48,22 @@ export async function runPropertyScrapeAction(
   const keyword = String(formData.get('keyword') ?? '').trim() || 'apartment'
   if (sources.length === 0) return { error: 'Pick at least one source.' }
 
-  const cost = costOfSources(sources)
-  const newBalance = await spendCredits(org.orgId, cost, 'scrape_run', { sources, keyword })
-  if (newBalance === null) {
-    const have = await getCreditsBalance(org.orgId)
+  const cost = costOfSources(sources, await airbnbCreditCost(org.orgId))
+  const charge = await chargeCredits(org.orgId, cost, 'scrape_run', { sources, keyword })
+  if ('insufficient' in charge) {
     return {
-      error: `Not enough credits — this run costs ${cost}, your organization has ${have}. Top up under Account → Billing & Credits.`,
+      error: `Not enough credits — this run costs ${charge.needed}, your organization has ${charge.balance}. Top up under Account → Billing & Credits.`,
     }
   }
 
   const results = await executeSources(org.orgId, sources, keyword)
+  const okCount = results.filter(r => r.status === 'ok' || r.status === 'started').length
+  await notifyOrg(org.orgId, {
+    kind: 'run_finished',
+    title: `Scrape finished — ${okCount}/${results.length} sources ran`,
+    body: results.map(r => `${r.source}: ${r.detail}`).join(' · ').slice(0, 500),
+    href: '/property-leads',
+  })
   return { results }
 }
 
@@ -127,6 +139,12 @@ export async function ingestAirbnbAction(_prev: RunState): Promise<RunState> {
     const { error } = await svc.from('airbnb_listings').insert(rows.slice(i, i + 100))
     if (error) return { error: `insert @${i}: ${error.message}` }
   }
+  await notifyOrg(org.orgId, {
+    kind: 'airbnb_ingested',
+    title: `Airbnb ingest complete — ${rows.length} listings`,
+    body: 'Airbnb Listings replaced and PM Prospects recomputed.',
+    href: '/airbnb-listings',
+  })
   return {
     results: [
       { source: 'airbnb.com', status: 'ok', detail: `${rows.length} listings ingested — PM Prospects recomputed` },

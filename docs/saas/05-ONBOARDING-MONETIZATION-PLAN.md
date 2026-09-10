@@ -1,6 +1,13 @@
 # Onboarding → Monetization: research + proposal (2026-09-10)
 
-Status: **PROPOSAL — nothing here is built yet.** Stripe checkout is pending (keys), so
+Status: **Phase A BUILT (2026-09-10, owner reviewing).** All four open decisions were
+taken as proposed on the owner's "do all the decisions" instruction: (1) the
+€25/€99/€299 ladder with $29/$115/$345 USD points and the 15-credit platform-key /
+5-credit BYO-key Airbnb rule — LIVE; (2) Stripe keys still pending (Buy buttons render
+disabled); (3) SMTP/Resend deferred — needs the owner's DNS; (4) EUR default with a $
+toggle — LIVE. `billing_enabled` was seeded ON so the owner can review every surface;
+one click in the billing page's admin panel turns all pricing off. Phase B/C unchanged
+below. Stripe checkout is pending (keys), so
 this maps the whole journey around it: registration → guided first value → top-up →
 promo, plus the platform-admin levers (disable pricing, gift credits), a mobile-first
 pass, and help + notifications. Each section ends with a concrete build recommendation.

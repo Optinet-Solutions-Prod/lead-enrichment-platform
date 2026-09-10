@@ -20,6 +20,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.0",
+    "driver.js": "^1.8.0",
     "jose": "^6.2.2",
     "libphonenumber-js": "^1.12.42",
     "lucide-react": "^1.8.0",
