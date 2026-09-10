@@ -28,6 +28,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/scheduler/tick') ||
     pathname.startsWith('/api/proxy/bandwidth/refresh') ||
     pathname.startsWith('/api/enrichment/') ||
+    pathname.startsWith('/api/stripe/webhook') || // Stripe calls this server-to-server; auth = signature verification
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
     pathname.startsWith('/invite/')
@@ -105,6 +106,6 @@ function isHardAuthError(e: unknown): boolean {
 export const config = {
   // Run on all routes except static assets + endpoints that authenticate themselves.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment|api/stripe/webhook).*)',
   ],
 }

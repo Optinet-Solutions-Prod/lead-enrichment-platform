@@ -1,10 +1,19 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { setBillingEnabled, setOrgBillingMode, setOrgCurrency, type Currency } from '@/lib/billing'
+import { redirect } from 'next/navigation'
+import {
+  CREDIT_PACKS,
+  getBillingEnabled,
+  setBillingEnabled,
+  setOrgBillingMode,
+  setOrgCurrency,
+  type Currency,
+} from '@/lib/billing'
 import { grantCredits } from '@/lib/credits'
 import { notifyOrg } from '@/lib/notifications'
 import { getOrgContext } from '@/lib/orgs/context'
+import { createPackCheckout, stripeConfigured } from '@/lib/stripe'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
@@ -84,6 +93,32 @@ export async function grantCreditsAction(
   } catch (e) {
     return { error: (e as Error).message }
   }
+}
+
+/** Send an org admin to Stripe's hosted checkout for one pack. Amounts come
+ *  from CREDIT_PACKS server-side — the client only names a pack + currency. */
+export async function startCheckoutAction(formData: FormData): Promise<void> {
+  const ctx = await getOrgContext()
+  if (!ctx || (ctx.orgRole !== 'owner' && ctx.orgRole !== 'admin')) return
+  if (!stripeConfigured() || !(await getBillingEnabled())) return
+
+  const pack = CREDIT_PACKS.find(p => p.key === String(formData.get('pack')))
+  const currency: Currency = String(formData.get('currency')) === 'USD' ? 'USD' : 'EUR'
+  if (!pack) return
+
+  let url: string
+  try {
+    url = await createPackCheckout({
+      orgId: ctx.orgId,
+      orgName: ctx.orgName,
+      pack,
+      currency,
+      userEmail: ctx.email,
+    })
+  } catch {
+    redirect(`${PAGE}?purchase=error`)
+  }
+  redirect(url)
 }
 
 /** Org owner/admin redeems a voucher code into their active org. */

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Lock, Sparkles } from 'lucide-react'
-import { setCurrencyAction } from '../actions'
+import { CreditCard, Lock, Sparkles } from 'lucide-react'
+import { setCurrencyAction, startCheckoutAction } from '../actions'
 
 export type PackView = {
   key: string
@@ -22,9 +22,12 @@ type Props = {
   initialCurrency: Currency
   /** Org owners/admins persist the currency choice; members toggle locally. */
   canSetCurrency: boolean
+  /** True once Stripe keys are configured AND the viewer may buy — turns the
+   *  Buy buttons into real checkout forms. */
+  purchasable: boolean
 }
 
-export function PacksPanel({ packs, initialCurrency, canSetCurrency }: Props) {
+export function PacksPanel({ packs, initialCurrency, canSetCurrency, purchasable }: Props) {
   const [currency, setCurrency] = useState<Currency>(initialCurrency)
   const [, startTransition] = useTransition()
 
@@ -83,27 +86,45 @@ export function PacksPanel({ packs, initialCurrency, canSetCurrency }: Props) {
               {p.credits.toLocaleString()} credits · ~€{p.perCreditEur}/credit
             </p>
             <p className="mt-2 flex-1 text-[12px] text-[color:var(--color-text-secondary)]">{p.blurb}</p>
-            <button
-              type="button"
-              disabled
-              title="Card payments are being wired up (Stripe) — use a voucher code or contact us meanwhile."
-              className="mt-3 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-[color:var(--color-border)] px-3 py-2 text-[13px] font-medium text-[color:var(--color-text-secondary)] opacity-70"
-            >
-              <Lock className="h-3.5 w-3.5" />
-              Buy — coming soon
-            </button>
+            {purchasable ? (
+              <form action={startCheckoutAction} className="mt-3">
+                <input type="hidden" name="pack" value={p.key} />
+                <input type="hidden" name="currency" value={currency} />
+                <button
+                  type="submit"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-[color:var(--color-accent)] px-3 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)]"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Buy {currency === 'EUR' ? `€${p.eur}` : `$${p.usd}`}
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title="Card payments are being wired up (Stripe) — use a voucher code or contact us meanwhile."
+                className="mt-3 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-[color:var(--color-border)] px-3 py-2 text-[13px] font-medium text-[color:var(--color-text-secondary)] opacity-70"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Buy — coming soon
+              </button>
+            )}
           </div>
         ))}
       </div>
       <p className="mt-2 text-[12px] text-[color:var(--color-text-secondary)]">
-        Card payments via Stripe are almost here. Until then: redeem a voucher code below, or{' '}
+        {purchasable ? (
+          <>Payments are handled by Stripe on a secure hosted page — promo codes can be entered at checkout. Need an invoice or custom volume?{' '}</>
+        ) : (
+          <>Card payments via Stripe are almost here. Until then: redeem a voucher code below, or{' '}</>
+        )}
         <a
           href="mailto:admin@optinetsolutions.com?subject=Credits%20top-up"
           className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]"
         >
           contact us
-        </a>{' '}
-        for an invoiced top-up or custom volume.
+        </a>
+        {purchasable ? '.' : ' for an invoiced top-up or custom volume.'}
       </p>
     </section>
   )

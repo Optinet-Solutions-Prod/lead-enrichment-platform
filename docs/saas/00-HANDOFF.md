@@ -214,9 +214,26 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   inputs, stacking pack cards. verify-tenancy now **30 checks** (voucher redeem/dupe/role)
   — all green; smoke 23/23; tsc + build clean. Pricing/copy = owner reviewing (comments
   expected).
-- ⬜ Not started: Stripe checkout (Phase B — needs keys from user; packs render, Buy
-  disabled), SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still has
-  no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
+- ✅ **Stripe pre-wired (2026-09-10, keys expected ~2026-09-13/14):** the whole Phase B
+  code path ships DARK — gated on `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` env
+  presence, zero behavior change until both exist. `lib/stripe.ts` (hosted Checkout via
+  inline price_data — NO Stripe-dashboard product setup needed; metadata carries
+  org_id/pack/credits), `startCheckoutAction` (org admin only, amounts resolved
+  server-side from CREDIT_PACKS, currency from the page toggle),
+  `/api/stripe/webhook` (signature-verified `checkout.session.completed` → idempotent by
+  session id via ledger meta → `grant_credits` reason 'purchase' + org notification),
+  PacksPanel flips Buy buttons live automatically, billing page shows
+  success/cancelled/error banners from `?purchase=`. **proxy.ts fix:** the middleware was
+  redirecting unauthenticated POSTs to the webhook to /login (verified live — got login
+  HTML) — `/api/stripe/webhook` is now excluded in both the early-exit list and the
+  matcher (its auth IS the signature). Verified: unconfigured webhook answers 503, smoke
+  23/23. **KEY DAY = 3 steps** (documented in .env.example): (1) sk_ key → Vercel env
+  `STRIPE_SECRET_KEY`, (2) dashboard webhook endpoint
+  `https://lead-enrichment-platform-nine.vercel.app/api/stripe/webhook` with event
+  `checkout.session.completed`, (3) its whsec_ → `STRIPE_WEBHOOK_SECRET`, redeploy. Test
+  with sk_test keys + card 4242 4242 4242 4242 first.
+- ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
+  has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing
   hardcoded prod refs, VM fleet.
 

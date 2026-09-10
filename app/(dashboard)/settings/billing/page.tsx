@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { CREDIT_PACKS, getBillingEnabled, getOrgBilling } from '@/lib/billing'
 import { CREDIT_COSTS, getCreditsBalance, listLedger } from '@/lib/credits'
 import { getOrgContext } from '@/lib/orgs/context'
+import { stripeConfigured } from '@/lib/stripe'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdminPanel, type OrgOption, type VoucherView } from './_components/admin-panel'
 import { PacksPanel } from './_components/packs-panel'
@@ -18,10 +19,15 @@ const COST_ROWS = [
   { action: 'Airbnb cross-match', detail: 'Linking Owner Leads to Airbnb hosts', cost: 'free' },
 ]
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await getOrgContext()
   if (!ctx) redirect('/welcome')
   const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
+  const purchase = (await searchParams).purchase
 
   const svc = createServiceClient()
   const [balance, ledger, billingEnabled, orgBilling, { data: isAdmin }] = await Promise.all([
@@ -70,6 +76,23 @@ export default async function BillingPage() {
         </p>
       </header>
 
+      {purchase === 'success' && (
+        <p className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-[13px] text-green-800">
+          Payment received — your credits are added within a few seconds. Refresh if the
+          balance hasn&apos;t moved yet.
+        </p>
+      )}
+      {purchase === 'cancelled' && (
+        <p className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-4 py-3 text-[13px] text-[color:var(--color-text-secondary)]">
+          Checkout cancelled — nothing was charged.
+        </p>
+      )}
+      {purchase === 'error' && (
+        <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          Checkout could not be started — try again in a minute or contact us.
+        </p>
+      )}
+
       {!billingEnabled && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
           Billing is currently <strong>disabled platform-wide</strong> — nothing is charged and
@@ -107,6 +130,7 @@ export default async function BillingPage() {
             packs={CREDIT_PACKS.map(p => ({ ...p }))}
             initialCurrency={orgBilling.currency}
             canSetCurrency={canManage}
+            purchasable={stripeConfigured() && canManage}
           />
 
           <RedeemVoucher canRedeem={canManage} />
