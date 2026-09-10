@@ -211,3 +211,4 @@ Full reasoning, trade-offs and risks are in `02-SAAS-PLAN.md`.
 | `02-SAAS-PLAN.md` | Tenancy model, phased plan, the hard parts, business/legal risks. |
 | `03-ENV-AND-ISOLATION.md` | The two repos + two Supabase projects, isolation rules, the hardcoded prod references to repoint, how to run, cloning the schema. |
 | `04-BUILD-PLAN.md` | The concrete Phase 1+ execution plan: tenancy schema, RLS migration, per-org BYO integrations, source/country entitlements, Monday removal playbook, pricing model, milestones A–F. |
+| `05-ONBOARDING-MONETIZATION-PLAN.md` | PROPOSAL (2026-09-10, not built): registration → interactive tour (driver.js) → activation checklist → top-up/promo page; EUR/$ credit packs + Stripe wiring plan; admin levers (billing kill-switch, per-org unlimited, gift credits, vouchers); mobile-first audit; help + notifications design; phased build order + decisions needed. |
