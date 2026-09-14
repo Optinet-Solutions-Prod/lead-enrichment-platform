@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { ArrowRight, CheckCircle2, Circle, ShieldCheck } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getBillingEnabled, getOrgBilling } from '@/lib/billing'
 import { getCreditsBalance } from '@/lib/credits'
@@ -84,7 +84,6 @@ export default async function PropertyScrapePage() {
   }))
 
   const phoneLeads = leadsWithPhone ?? 0
-  const pilotReady = phoneLeads >= 30
 
   const checklist: ChecklistItem[] = [
     {
@@ -126,32 +125,6 @@ export default async function PropertyScrapePage() {
     },
   ]
 
-  const steps = [
-    {
-      n: 1,
-      title: 'Build the pilot batch',
-      body: `Collect 30–50 owners with real contact details from the direct-from-owner sites below. You have ${phoneLeads} with a phone number.`,
-      done: pilotReady,
-      cta: pilotReady
-        ? { href: '/property-leads?f=contact_phone%3Anotempty', label: 'Open your contactable owners' }
-        : null,
-    },
-    {
-      n: 2,
-      title: 'Test outreach',
-      body: 'Send a small, personal round (call / WhatsApp / email from the Owner Leads page) and track who replies — validate the message before scaling.',
-      done: false,
-      cta: { href: '/property-leads?f=contact_phone%3Anotempty', label: 'Pick owners to contact' },
-    },
-    {
-      n: 3,
-      title: 'Scale with the register + Airbnb',
-      body: `Once the pitch works, go wide: ${(register ?? 0).toLocaleString()} licensed short-let addresses (direct mail) and ${(prospects ?? 0).toLocaleString()} self-managing Airbnb hosts (profile outreach).`,
-      done: false,
-      cta: { href: '/pm-prospects', label: 'See PM Prospects' },
-    },
-  ]
-
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
       <Suspense fallback={null}>
@@ -169,45 +142,6 @@ export default async function PropertyScrapePage() {
       </header>
 
       <GettingStarted items={checklist} />
-
-      {/* The plan — Meny's research playbook with live progress */}
-      <section className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
-        <h2 className="text-[14px] font-medium text-[color:var(--color-text-primary)]">
-          The plan (from the owner-research study)
-        </h2>
-        <ol className="mt-3 flex flex-col gap-3">
-          {steps.map(s => (
-            <li key={s.n} className="flex items-start gap-3">
-              {s.done ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-              ) : (
-                <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--color-text-secondary)]" />
-              )}
-              <div>
-                <p className="text-[13px] font-medium text-[color:var(--color-text-primary)]">
-                  {s.n}. {s.title}
-                </p>
-                <p className="text-[12px] text-[color:var(--color-text-secondary)]">{s.body}</p>
-                {s.cta && (
-                  <Link
-                    href={s.cta.href}
-                    className="mt-1 inline-flex items-center gap-1 text-[12px] text-[color:var(--color-text-primary)] underline underline-offset-2"
-                  >
-                    {s.cta.label}
-                    <ArrowRight className="h-3 w-3" />
-                  </Link>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-3 flex items-start gap-2 rounded-md bg-[color:var(--color-bg-secondary)] px-3 py-2 text-[12px] text-[color:var(--color-text-secondary)]">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Ground rule: contact-gated platforms (Maltapark logins, Airbnb messaging) get
-          personal, sustainable outreach — never automated bulk reveals. It protects the
-          business long-term.
-        </p>
-      </section>
 
       {/* How the data flows */}
       <section>
