@@ -5,12 +5,8 @@ import { chargeCredits } from '@/lib/credits'
 import { notifyOrg } from '@/lib/notifications'
 import { getOrgContext, requireOrgRole } from '@/lib/orgs/context'
 import { removeSourceDef, upsertSourceDefsFromYaml } from '@/lib/sources/custom'
-import {
-  airbnbCreditCost,
-  costOfSources,
-  executeSources,
-  type SourceResult,
-} from '@/lib/sources/execute'
+import { airbnbCreditCost, costOfSources, executeSources } from '@/lib/sources/execute'
+import type { SourceResult } from '@/lib/sources/execute'
 import { fetchWithTimeout, resolveApify } from '@/lib/sources/runners'
 import { createServiceClient } from '@/lib/supabase/service'
 
@@ -21,9 +17,15 @@ import { createServiceClient } from '@/lib/supabase/service'
  * listings we haven't seen). Airbnb is the exception: it runs on Apify's
  * browser fleet asynchronously — start here, ingest when it finishes.
  * Runs debit org credits up-front via spend_credits (atomic).
+ *
+ * NOTE: never `export type { X }` (re-export) from a 'use server' file —
+ * Next registers every export as a server reference at RUNTIME, and the
+ * erased type binding crashes the whole actions chunk on evaluation
+ * ("SourceResult is not defined"), 500-ing EVERY action bundled with it.
+ * Inline type declarations are fine; consumers import SourceResult from
+ * lib/sources/execute directly.
  */
 
-export type { SourceResult }
 export type RunState = { results: SourceResult[] } | { error: string } | null
 
 // ---------------------------------------------------------------------------

@@ -3,12 +3,8 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { CheckCircle2, CircleDashed, Coins, Loader2, XCircle } from 'lucide-react'
-import {
-  ingestAirbnbAction,
-  runPropertyScrapeAction,
-  type RunState,
-  type SourceResult,
-} from '../actions'
+import type { SourceResult } from '@/lib/sources/execute'
+import { ingestAirbnbAction, runPropertyScrapeAction, type RunState } from '../actions'
 
 const initialState: RunState = null
 
