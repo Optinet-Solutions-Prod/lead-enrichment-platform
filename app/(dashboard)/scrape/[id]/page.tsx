@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { LEADS_COLUMNS } from '@/lib/filters/columns-leads'
@@ -8,6 +8,7 @@ import { getShadowContext } from '@/lib/shadow-filter'
 import { getUserPreferences } from '@/lib/user-preferences'
 import { createServiceClient } from '@/lib/supabase/service'
 import { translateKeywordsToEnglish } from '@/lib/translate'
+import { domainForLead } from '../../websites/_lib/query'
 import { AdvancedFilters } from '../../_components/advanced-filters'
 import { Pagination } from '../../_components/pagination'
 import { LeadsTable } from '../../leads/_components/leads-table'
@@ -20,6 +21,7 @@ import { AutoRefresh } from '../_components/auto-refresh'
 import { CaptchaRecoveryBanner } from '../_components/captcha-recovery-banner'
 import { MobileSkippedRetryBanner } from '../_components/mobile-skipped-retry-banner'
 import { EnrichmentStages } from '../_components/enrichment-stages'
+import { AnalysisSummary, type JobAnalysisSummary } from '../_components/analysis-summary'
 import { KickStreamersPanel } from '../_components/kick-streamers-panel'
 import { KickStreamersTable } from '../_components/kick-streamers-table'
 import { YoutubeChannelsPanel } from '../_components/youtube-channels-panel'
@@ -104,21 +106,52 @@ export const dynamic = 'force-dynamic'
 // past the default serverless timeout.
 export const maxDuration = 300
 
-async function countNotRelevantInJob(
+/**
+ * Every row this batch stored, split by why it is or isn't on screen, so a
+ * reader can always account for the difference between what the scrape
+ * found and what the table shows.
+ */
+async function countRowsInJob(
   svc: ReturnType<typeof createServiceClient>,
   jobIds: string[],
-): Promise<number> {
-  const { count } = await svc
-    .from('google_lead_gen_table')
-    .select('id', { head: true, count: 'exact' })
-    .in('scrape_job_id', jobIds)
-    .eq('is_not_relevant', true)
-  return count ?? 0
+): Promise<{ stored: number; notRelevant: number; flagged: number }> {
+  const [storedRes, notRelRes, flaggedRes] = await Promise.all([
+    svc
+      .from('google_lead_gen_table')
+      .select('id', { head: true, count: 'exact' })
+      .in('scrape_job_id', jobIds),
+    svc
+      .from('google_lead_gen_table')
+      .select('id', { head: true, count: 'exact' })
+      .in('scrape_job_id', jobIds)
+      .eq('is_not_relevant', true),
+    svc
+      .from('google_lead_gen_table')
+      .select('id', { head: true, count: 'exact' })
+      .in('scrape_job_id', jobIds)
+      .eq('is_not_relevant', false)
+      .not('system_flag', 'is', null),
+  ])
+  return {
+    stored: storedRes.count ?? 0,
+    notRelevant: notRelRes.count ?? 0,
+    flagged: flaggedRes.count ?? 0,
+  }
 }
 
 export default async function ScrapeJobPage({ params, searchParams }: Props) {
   const { id } = await params
   const sp = await searchParams
+
+  // Old `?lead=<id>` drawer permalinks resolve to the website's page, with
+  // the batch carried through so Back returns here.
+  const leadParam = typeof sp.lead === 'string' ? Number(sp.lead) : NaN
+  if (Number.isInteger(leadParam) && leadParam > 0) {
+    const leadDomain = await domainForLead(leadParam)
+    if (leadDomain) {
+      redirect(`/websites/${encodeURIComponent(leadDomain)}?from=${encodeURIComponent(`/scrape/${id}`)}`)
+    }
+  }
 
   const svc = createServiceClient()
   const { data: jobRaw, error: jobError } = await svc
@@ -237,7 +270,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
 
   const [
     { rows, total },
-    hiddenCount,
+    rowCounts,
     stageSummary,
     captchaSolverEnabled,
     kickSummary,
@@ -259,6 +292,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
     maltaparkSummary,
     maltaparkRows,
     prefs,
+    analysis,
   ] = await Promise.all([
       queryLeads({
         page,
@@ -273,7 +307,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
         sorts,
         includeNotRelevant: showHidden,
       }),
-      countNotRelevantInJob(svc, batchJobIds),
+      countRowsInJob(svc, batchJobIds),
       // Kick / YouTube jobs have no leads, so the lead-enrichment stages don't apply.
       noLeadsEngine ? Promise.resolve(null) : fetchStageSummary(id),
       mobileCaptchaAborted
@@ -300,7 +334,35 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
       isMaltapark ? fetchMaltaparkListingSummary(id) : Promise.resolve(null),
       isMaltapark ? fetchMaltaparkListingRows(id) : Promise.resolve(null),
       getUserPreferences(),
+      // One round trip for the whole analysis strip — counting from `rows`
+      // would only ever describe the current page.
+      noLeadsEngine
+        ? Promise.resolve(null)
+        : svc.rpc('job_analysis_summary', { p_job_ids: batchJobIds }).then(({ data, error }) => {
+            if (error) {
+              console.error('[scrape/[id]] job_analysis_summary', error.message)
+              return null
+            }
+            const row = Array.isArray(data) ? data[0] : data
+            return (row as JobAnalysisSummary | undefined) ?? null
+          }),
     ])
+
+  // Both kinds of hidden row come back when the toggle is on, so the count on
+  // the button covers both.
+  const hiddenCount = rowCounts.notRelevant + rowCounts.flagged
+
+  // What the search reported, against what we stored. The gap is same-site
+  // duplicates collapsing; naming it keeps the header honest.
+  const scrapedCount = (() => {
+    const s = job.result_summary
+    if (!s) return null
+    const org = typeof s['organic_results'] === 'number' ? (s['organic_results'] as number) : 0
+    const ppc = typeof s['ppc_results'] === 'number' ? (s['ppc_results'] as number) : 0
+    const tot = typeof s['total_results'] === 'number' ? (s['total_results'] as number) : null
+    return tot ?? (org + ppc || null)
+  })()
+  const collapsedCount = scrapedCount !== null ? Math.max(0, scrapedCount - rowCounts.stored) : 0
 
   const toggleHref = (() => {
     const next = new URLSearchParams()
@@ -379,7 +441,21 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
               {' '}row{total === 1 ? '' : 's'}
               {!showHidden && hiddenCount > 0 && (
                 <span className="ml-1">
-                  · {hiddenCount.toLocaleString()} hidden as not relevant
+                  · {hiddenCount.toLocaleString()} hidden
+                  {rowCounts.flagged > 0 && rowCounts.notRelevant > 0
+                    ? ` (${rowCounts.notRelevant} not relevant, ${rowCounts.flagged} system-flagged)`
+                    : rowCounts.flagged > 0
+                      ? ' by a system flag'
+                      : ' as not relevant'}
+                </span>
+              )}
+              {/* The same website on two result pages or in both device passes
+                  collapses to one row — say so rather than leave the reader
+                  wondering where the difference went. */}
+              {collapsedCount > 0 && (
+                <span className="ml-1">
+                  · {collapsedCount.toLocaleString()} same-site duplicate
+                  {collapsedCount === 1 ? '' : 's'} collapsed from {scrapedCount!.toLocaleString()} found
                 </span>
               )}
             </p>
@@ -391,12 +467,12 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
                 className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
                 title={
                   showHidden
-                    ? 'Hide rows marked as not relevant'
-                    : 'Include rows marked as not relevant (operators, manual flags) in the table below'
+                    ? 'Hide rows marked as not relevant or system-flagged'
+                    : 'Include rows marked as not relevant or system-flagged in the table below'
                 }
               >
                 {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                {showHidden ? 'Hide not-relevant' : `Show not-relevant (${hiddenCount})`}
+                {showHidden ? 'Hide not-relevant / flagged' : `Show hidden (${hiddenCount})`}
               </Link>
             )}
             <span
@@ -524,6 +600,19 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
               )
             })}
           </div>
+
+          {analysis && (
+            <div className="pt-2">
+              <AnalysisSummary
+                summary={analysis}
+                baseParams={
+                  new URLSearchParams(
+                    Object.entries(sp).flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as [string, string]] : [])),
+                  )
+                }
+              />
+            </div>
+          )}
 
           <div className="pt-2">
             <AdvancedFilters columns={columns} preserve={['show_hidden']} />

@@ -26,6 +26,7 @@ import {
   VISIBLE_PIPELINE_STAGES,
   isSocialBadgeEngine,
   type EnrichmentStatus,
+  type JobLeadCounts,
   type KickPipelineStatus,
   type ScrapeJob,
   type SocialPipelineStatus,
@@ -1087,7 +1088,7 @@ export function JobsTable({
                   <DurationCell job={job} href={href} />
                 </td>
                 <LinkTd href={href}>
-                  <ResultsCell summary={job.result_summary} />
+                  <ResultsCell summary={job.result_summary} counts={job.lead_counts} />
                 </LinkTd>
                 <LinkTd href={href}>
                   <PipelineBadges
@@ -1216,7 +1217,7 @@ export function JobsCardList({ jobs, pendingPositions }: Props) {
             <span title={mobileDurationTooltip(job)} suppressHydrationWarning>
               {formatTotalDuration(job)}
             </span>
-            <ResultsCell summary={job.result_summary} mobile />
+            <ResultsCell summary={job.result_summary} counts={job.lead_counts} mobile />
           </div>
           {job.status === 'completed' && (
             <div className="mt-1.5">
@@ -1305,44 +1306,56 @@ function totalResults(summary: Record<string, unknown> | null): number | null {
   return null
 }
 
-function asNumber(summary: Record<string, unknown> | null, key: string): number | null {
-  if (!summary) return null
-  const v = summary[key]
-  return typeof v === 'number' ? v : null
-}
-
+/**
+ * How many rows you will find when you open this batch.
+ *
+ * Counts stored rows, so it cannot disagree with the batch view, and the
+ * title spells out where every missing result went: same-site duplicates
+ * collapsed, rows hidden as not relevant or by a system flag.
+ */
 function ResultsCell({
   summary,
+  counts,
   mobile = false,
 }: {
   summary: Record<string, unknown> | null
+  counts?: JobLeadCounts | null | undefined
   mobile?: boolean
 }) {
-  const total = totalResults(summary)
-  if (total === null) return <span>—</span>
-  const ppc = asNumber(summary, 'ppc') ?? asNumber(summary, 'ppc_results')
-  const organic = asNumber(summary, 'organic') ?? asNumber(summary, 'organic_results')
+  const scraped = totalResults(summary)
+  // No counts yet (a job still running, or an engine with no leads table) —
+  // fall back to what the scrape reported rather than showing nothing.
+  if (!counts) {
+    if (scraped === null) return <span>—</span>
+    return <span className="whitespace-nowrap">{mobile ? `${scraped} results` : scraped}</span>
+  }
+
+  const hidden = counts.notRelevant + counts.flagged
+  const collapsed = scraped !== null ? Math.max(0, scraped - counts.stored) : 0
+  const title = [
+    scraped !== null ? `${scraped} result${scraped === 1 ? '' : 's'} from the search` : null,
+    collapsed > 0 ? `${collapsed} same-site duplicate${collapsed === 1 ? '' : 's'} collapsed` : null,
+    `${counts.stored} row${counts.stored === 1 ? '' : 's'} stored`,
+    counts.notRelevant > 0 ? `${counts.notRelevant} hidden as not relevant` : null,
+    counts.flagged > 0 ? `${counts.flagged} hidden by a system flag` : null,
+    `${counts.visible} shown`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   if (mobile) {
     return (
-      <span>
-        {total} results
-        {(ppc !== null || organic !== null) && (
-          <span className="text-[color:var(--color-text-secondary)]">
-            {' · '}
-            {ppc ?? 0} PPC · {organic ?? 0} Org
-          </span>
-        )}
+      <span title={title}>
+        {counts.visible} shown
+        {hidden > 0 && <span className="text-[color:var(--color-text-secondary)]">{` · ${hidden} hidden`}</span>}
       </span>
     )
   }
   return (
-    <span className="whitespace-nowrap">
-      {total}
-      {(ppc !== null || organic !== null) && (
-        <span className="ml-1 text-[10px] text-[color:var(--color-text-secondary)]">
-          ({ppc ?? 0} PPC · {organic ?? 0} Org)
-        </span>
+    <span className="whitespace-nowrap" title={title}>
+      {counts.visible}
+      {hidden > 0 && (
+        <span className="ml-1 text-[10px] text-[color:var(--color-text-secondary)]">(+{hidden} hidden)</span>
       )}
     </span>
   )

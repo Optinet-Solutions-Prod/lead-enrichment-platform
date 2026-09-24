@@ -28,6 +28,7 @@ export const LEADS_COLUMNS: ReadonlyArray<ColumnDef> = [
   { key: 'overall_position', label: 'Position', type: 'number', filterable: true, sortable: true },
   { key: 'page_number', label: 'Page #', type: 'number', filterable: true, sortable: true },
   { key: 'batch_id', label: 'Batch', type: 'number', filterable: true, sortable: true },
+  { key: 'is_relevant', label: 'Relevant to keyword?', type: 'boolean', filterable: true, sortable: false, options: [...BOOL_THREE_OPTIONS] },
   { key: 'is_affiliate', label: 'Is affiliate?', type: 'boolean', filterable: true, sortable: false, options: [...BOOL_THREE_OPTIONS] },
   { key: 'has_contact_details', label: 'Has contacts?', type: 'boolean', filterable: true, sortable: false },
   { key: 'has_s_tags', label: 'Has s-tags?', type: 'boolean', filterable: true, sortable: false },

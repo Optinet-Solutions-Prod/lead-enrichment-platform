@@ -4,6 +4,7 @@ import { LEADS_COLUMNS } from '@/lib/filters/columns-leads'
 import type { Filter, Sort } from '@/lib/filters/types'
 import { applyShadowFilter, getShadowContext } from '@/lib/shadow-filter'
 import { createServiceClient } from '@/lib/supabase/service'
+import { DEFAULT_RECENCY_BANDS, recencyBand, type RecencyBand, type RecencyBands } from '@/lib/website-profiles/recency'
 
 // 0 is the sentinel for "All rows" — substituted with a soft cap
 // in queryLeads so a multi-thousand-row table doesn't lock up the
@@ -44,11 +45,38 @@ export type LeadRow = {
   s_tag_id: number | null
   created_at: string
   is_not_relevant: boolean
+  /** Obvious non-affiliate category set by the system (denylist, social host,
+   *  known list, OpenAI). Hidden by default like not-relevant rows. */
+  system_flag: string | null
+  // Website profile (one per website) — when the website was last seen on
+  // any scrape and how often, plus the colour band for the table dot.
+  profile_id: number | null
+  last_seen_at: string | null
+  appearance_count: number | null
+  recency_band: RecencyBand
+  /** What the website IS, in a dozen words, from the SERP screen. Lives on
+   *  the profile because it describes the site, not this one appearance. */
+  ai_site_description: string | null
+  /** Where this domain already exists — see existingState(). */
+  existing_state: ExistingState
+  /** When "already exists" was last established, or null when it never
+   *  was — the badge must say "never checked" rather than invent a time. */
+  existing_checked_at: string | null
+  // Relevance to the keyword, screened off the SERP before any crawl.
+  is_relevant: boolean | null
+  relevance_reason: string | null
+  relevance_overridden_at: string | null
   // Attribution — denormalized from scrape_queue at query time so the
   // table can show "by <display>" without an extra round-trip.
   created_by_username: string | null
   created_by_display: string | null
 }
+
+/** 'external' — a known account in an outside system (a CRM or billing
+ *  source; none is wired up yet, so this branch is unreachable today and is
+ *  where that source goes). 'system' — an earlier scrape of ours already saw
+ *  the website. 'new' — genuinely new, which is the lead we want. */
+export type ExistingState = 'external' | 'system' | 'new'
 
 export type LeadsQueryOptions = {
   page: number
@@ -75,6 +103,8 @@ export type LeadsQueryOptions = {
    *  are hidden from the default /leads view. Pass true to surface
    *  them (with the badge) e.g. for an admin "show hidden" toggle. */
   includeNotRelevant?: boolean
+  /** Recency colour bands (admin setting). Defaults to the seed values. */
+  recencyBands?: RecencyBands
 }
 
 export type LeadsQueryResult = {
@@ -107,7 +137,10 @@ export async function queryLeads(opts: LeadsQueryOptions): Promise<LeadsQueryRes
         'has_s_tags, is_stag_overridden_at',
         's_tags_checked_at, s_tag_id',
         'created_at',
-        'is_not_relevant',
+        'is_not_relevant, system_flag, profile_id',
+        'is_relevant, relevance_reason, relevance_overridden_at',
+        // Website profile — FK google_lead_gen_table.profile_id → website_profiles(id).
+        'website_profiles:website_profiles!profile_id(last_seen_at, first_seen_at, appearance_count, ai_site_description)',
         // FK join — google_lead_gen_table.scrape_job_id → scrape_queue(id).
         // PostgREST flattens this into a nested object on the row.
         'scrape_queue:scrape_queue!scrape_job_id(created_by_username, created_by_display)',
@@ -119,10 +152,10 @@ export async function queryLeads(opts: LeadsQueryOptions): Promise<LeadsQueryRes
   // viewer never even sees a count of shadow rows.
   query = applyShadowFilter(query, shadowCtx) as typeof query
 
-  // Default: hide not-relevant rows (user-flagged).
-  // `?show_hidden=1` flips includeNotRelevant=true.
+  // Default: hide not-relevant rows (user-flagged) and system-flagged ones
+  // (obvious non-affiliates). `?show_hidden=1` flips includeNotRelevant=true.
   if (!opts.includeNotRelevant) {
-    query = query.eq('is_not_relevant', false)
+    query = query.eq('is_not_relevant', false).is('system_flag', null)
   }
 
   if (opts.scrapeJobIds && opts.scrapeJobIds.length > 0) {
@@ -176,18 +209,59 @@ export async function queryLeads(opts: LeadsQueryOptions): Promise<LeadsQueryRes
   }
   // PostgREST returns the joined scrape_queue row as a nested object —
   // flatten it into the LeadRow shape callers expect.
+  const bands = opts.recencyBands ?? DEFAULT_RECENCY_BANDS
+  const nowMs = Date.now()
   const rows = (data ?? []).map(raw => {
     const r = raw as unknown as Record<string, unknown> & {
       scrape_queue: { created_by_username: string | null; created_by_display: string | null } | null
+      website_profiles: {
+        last_seen_at: string | null
+        first_seen_at: string | null
+        appearance_count: number | null
+        ai_site_description: string | null
+      } | null
     }
-    const { scrape_queue, ...rest } = r
+    const { scrape_queue, website_profiles, ...rest } = r
+    const lastSeen = website_profiles?.last_seen_at ?? null
+    const firstSeen = website_profiles?.first_seen_at ?? null
     return {
       ...rest,
       created_by_username: scrape_queue?.created_by_username ?? null,
       created_by_display: scrape_queue?.created_by_display ?? null,
+      last_seen_at: lastSeen,
+      appearance_count: website_profiles?.appearance_count ?? null,
+      recency_band: recencyBand(lastSeen, bands, nowMs),
+      ai_site_description: website_profiles?.ai_site_description ?? null,
+      existing_state: existingState(firstSeen, r.created_at as string),
+      // Our own history is established the moment the profile recorded its
+      // first sighting — a real time, never a fallback to now().
+      existing_checked_at: firstSeen,
     }
   }) as unknown as LeadRow[]
   return { rows, total: count ?? 0 }
+}
+
+/**
+ * Where a lead's website already exists.
+ *
+ * Scraping a site puts it in our system by definition, so "known externally
+ * but not in the system" cannot happen, and "in the system" only means
+ * anything once an external source has been ruled out: external wins, our
+ * own history is the fallback, anything left is genuinely new. There is no
+ * external source yet, so today this is two-way — keep the three-way shape
+ * so one can slot in.
+ *
+ * Our own history: the website was first seen more than a minute before this
+ * lead was written. The minute of slack stops the rows of a single batch from
+ * marking each other as pre-existing.
+ */
+function existingState(profileFirstSeen: string | null, leadCreatedAt: string): ExistingState {
+  if (profileFirstSeen) {
+    const first = Date.parse(profileFirstSeen)
+    const lead = Date.parse(leadCreatedAt)
+    if (Number.isFinite(first) && Number.isFinite(lead) && first < lead - 60_000) return 'system'
+  }
+  return 'new'
 }
 
 export async function listCountryFilters(): Promise<Array<{ code: string; name: string }>> {

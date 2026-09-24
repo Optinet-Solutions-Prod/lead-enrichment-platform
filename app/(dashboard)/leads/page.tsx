@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { EyeOff, Eye } from 'lucide-react'
 import { LEADS_COLUMNS } from '@/lib/filters/columns-leads'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
@@ -6,6 +7,8 @@ import type { ColumnDef } from '@/lib/filters/types'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getUserPreferences } from '@/lib/user-preferences'
+import { parseRecencyBands, type RecencyBands } from '@/lib/website-profiles/recency'
+import { domainForLead } from '../websites/_lib/query'
 import { Pagination } from '../_components/pagination'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { LeadsTable } from './_components/leads-table'
@@ -16,13 +19,20 @@ import {
   queryLeads,
 } from './_lib/query'
 
-async function countNotRelevant(): Promise<number> {
+/** Rows hidden from the default view: marked not relevant OR system-flagged. */
+async function countHidden(): Promise<number> {
   const svc = createServiceClient()
   const { count } = await svc
     .from('google_lead_gen_table')
     .select('id', { head: true, count: 'exact' })
-    .eq('is_not_relevant', true)
+    .or('is_not_relevant.eq.true,system_flag.not.is.null')
   return count ?? 0
+}
+
+async function loadRecencyBands(): Promise<RecencyBands> {
+  const svc = createServiceClient()
+  const { data } = await svc.rpc('get_system_setting', { p_key: 'recency_bands_days' })
+  return parseRecencyBands(data)
 }
 
 type SearchParams = Record<string, string | string[] | undefined>
@@ -35,6 +45,14 @@ export default async function LeadsPage({
   searchParams: Promise<SearchParams>
 }) {
   const sp = await searchParams
+
+  // `?lead=<id>` used to open a drawer over this table. The drawer is gone
+  // and the website has a page of its own, so send shared links there.
+  const leadParam = typeof sp.lead === 'string' ? Number(sp.lead) : NaN
+  if (Number.isInteger(leadParam) && leadParam > 0) {
+    const domain = await domainForLead(leadParam)
+    if (domain) redirect(`/websites/${encodeURIComponent(domain)}`)
+  }
 
   const page = clampInt(sp.page, 1, 1_000_000, 1)
   const size = clampPageSize(sp.size, DEFAULT_LEAD_PAGE_SIZE)
@@ -62,6 +80,7 @@ export default async function LeadsPage({
     return qs ? `/leads?${qs}` : '/leads'
   })()
 
+  const recencyBands = await loadRecencyBands()
   const [{ rows, total }, countries, hiddenCount, prefs] = await Promise.all([
     queryLeads({
       page,
@@ -74,9 +93,10 @@ export default async function LeadsPage({
       filters,
       sorts,
       includeNotRelevant: showHidden,
+      recencyBands,
     }),
     listCountryFilters(),
-    countNotRelevant(),
+    countHidden(),
     getUserPreferences(),
   ])
 
@@ -107,7 +127,7 @@ export default async function LeadsPage({
             <span className="text-[color:var(--color-text-primary)]">{total.toLocaleString()}</span> total.
             {!showHidden && hiddenCount > 0 && (
               <span className="ml-1">
-                · {hiddenCount.toLocaleString()} hidden as not relevant.
+                · {hiddenCount.toLocaleString()} hidden as not relevant or system-flagged.
               </span>
             )}
           </p>
@@ -123,7 +143,7 @@ export default async function LeadsPage({
             }
           >
             {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            {showHidden ? 'Hide not-relevant' : `Show not-relevant (${hiddenCount})`}
+            {showHidden ? 'Hide not-relevant / flagged' : `Show hidden (${hiddenCount})`}
           </Link>
         )}
       </header>

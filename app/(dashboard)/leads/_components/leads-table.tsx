@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { Check, CheckSquare, ExternalLink, EyeOff, Link2, Square, Zap } from 'lucide-react'
+import { Check, CheckSquare, ExternalLink, EyeOff, Link2, ShieldAlert, Square, Zap } from 'lucide-react'
+import { RECENCY_DOT, RECENCY_LABEL, type RecencyBand } from '@/lib/website-profiles/recency'
 import { isInteractiveTarget } from '@/lib/dom/is-interactive-target'
 import { SortHeader } from '../../_components/sort-header'
 import { RowContextMenu, type ContextMenuAction } from '../../_components/row-context-menu'
@@ -17,7 +18,7 @@ import {
 } from '../actions'
 import { BooleanLabelEditor } from './boolean-label-editor'
 import { BulkActionsBar } from './bulk-actions-bar'
-import { LeadDetailDrawer } from './lead-detail-drawer'
+import { ExistsBadge } from './exists-badge'
 import { StagCheckHint } from './stag-check-hint'
 
 type Props = {
@@ -63,71 +64,27 @@ export function LeadsTable({
     [initialRows, extraRows],
   )
 
-  // Drawer is URL-driven via `?lead=<id>` so QA can copy a row link
-  // and any teammate clicking it lands on this exact lead's drawer.
-  // Local state only as fallback for legacy callers.
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
-  const leadParam = sp.get('lead')
-  const openLeadId = leadParam ? Number(leadParam) : null
 
-  const setOpenLeadId = useCallback(
-    (id: number | null) => {
-      const params = new URLSearchParams(sp.toString())
-      if (id === null) params.delete('lead')
-      else params.set('lead', String(id))
-      const qs = params.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  // Where "Back" on the website page should return to — the page has no
+  // other way to know whether you arrived from a batch, from /leads, or
+  // from a pasted link.
+  const from = useMemo(() => {
+    const qs = sp.toString()
+    return qs ? `${pathname}?${qs}` : pathname
+  }, [pathname, sp])
+
+  // A domain opens its WEBSITE. The old per-lead drawer answered questions
+  // about a site while pretending to be about a row.
+  const openWebsite = useCallback(
+    (domain: string | null) => {
+      const href = websiteHref(domain, from)
+      if (href) router.push(href)
     },
-    [router, pathname, sp],
+    [router, from],
   )
-
-  // Cross-page drawer navigation. When the drawer is at the first/last
-  // visible lead and the user clicks the back/forward arrow, jump to the
-  // adjacent page and open its last/first lead. We can't know that lead's
-  // id until the new page renders, so we stash a sentinel `open=first|last`
-  // in the URL and resolve it once `rows` updates.
-  const totalPages = pageInfo
-    ? Math.max(1, Math.ceil(pageInfo.total / pageInfo.size))
-    : 1
-  const canGoPrevPage = pageInfo !== undefined && pageInfo.page > 1
-  const canGoNextPage = pageInfo !== undefined && pageInfo.page < totalPages
-
-  const onBoundary = useCallback(
-    (dir: 'prev' | 'next') => {
-      if (!pageInfo) return
-      const target = dir === 'next' ? pageInfo.page + 1 : pageInfo.page - 1
-      if (target < 1 || target > totalPages) return
-      const params = new URLSearchParams(sp.toString())
-      params.set('page', String(target))
-      params.set('open', dir === 'next' ? 'first' : 'last')
-      params.delete('lead')
-      router.push(`${pathname}?${params.toString()}`, { scroll: false })
-    },
-    [pageInfo, totalPages, sp, router, pathname],
-  )
-
-  // Resolve the `open=first|last` sentinel to a concrete `lead=<id>` once
-  // the new page's rows arrive. Uses `replace` so the back button doesn't
-  // bounce through this intermediate state.
-  useEffect(() => {
-    const want = sp.get('open')
-    if (!want) return
-    const params = new URLSearchParams(sp.toString())
-    // No rows on this page — the sentinel can never resolve to a lead here,
-    // so strip it rather than leaving ?open=… orphaned in the URL.
-    if (rows.length === 0) {
-      params.delete('open')
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-      return
-    }
-    const target = want === 'last' ? rows[rows.length - 1] : rows[0]
-    if (!target) return
-    params.delete('open')
-    params.set('lead', String(target.id))
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [sp, rows, router, pathname])
 
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -378,11 +335,11 @@ export function LeadsTable({
     const isBulk = n > 1
     return [
       {
-        label: 'Open lead',
+        label: 'Open website',
         icon: ExternalLink,
         disabled: isBulk,
-        hint: isBulk ? 'Disabled — drawer only opens one lead at a time' : undefined,
-        onClick: () => setOpenLeadId(rowId),
+        hint: isBulk ? 'Disabled — opens one website at a time' : undefined,
+        onClick: () => openWebsite(rows.find(r => r.id === rowId)?.domain ?? null),
         separatorAfter: true,
       },
       {
@@ -486,8 +443,12 @@ export function LeadsTable({
        *  header — above the viewport. Letting the page own both axes keeps
        *  per-cell sticky pinned to the viewport top. Wide tables fall back to
        *  page-level horizontal scroll, which is acceptable for this layout. */}
-      <div className="hidden rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] md:block">
-        <table className="w-full border-collapse text-[11px]">
+      {/* Scrolls sideways, but only sideways: overflow-y:clip does not create
+       *  a scroll container, so the page still owns vertical scrolling and
+       *  the sticky header stays pinned. The min-width is what makes the
+       *  horizontal scrollbar appear instead of squeezing columns thinner. */}
+      <div className="hidden overflow-x-auto [overflow-y:clip] rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] md:block">
+        <table className="w-full min-w-[1180px] border-collapse text-[11px]">
           {/* Sticky lives on each <th> below (not on <thead>). HTML
            *  table layout doesn't reliably honour position:sticky on
            *  the row-group element across browsers; per-cell sticky
@@ -524,6 +485,8 @@ export function LeadsTable({
                 </>
               )}
               <Th>{jobContext ? 'Full URL' : 'URL'}</Th>
+              <Th>What it is</Th>
+              <Th>Already exists?</Th>
               <Th>Is an affiliate?</Th>
               <Th>S-tags</Th>
               {/* "Verified s-tags" column hidden — backend stage still
@@ -570,7 +533,7 @@ export function LeadsTable({
                 {jobContext ? (
                   <>
                     <Td className="max-w-[220px] truncate p-0" title={row.domain ?? ''}>
-                      <DomainButton domain={row.domain} onOpen={() => setOpenLeadId(row.id)} />
+                      <DomainButton domain={row.domain} band={row.recency_band} lastSeenAt={row.last_seen_at} appearanceCount={row.appearance_count} systemFlag={row.system_flag} from={from} />
                     </Td>
                     <Td>
                       <TypeBadge type={row.result_type} />
@@ -605,7 +568,7 @@ export function LeadsTable({
                     </Td>
                     <Td>{row.overall_position ?? '—'}</Td>
                     <Td className="p-0">
-                      <DomainButton domain={row.domain} onOpen={() => setOpenLeadId(row.id)} />
+                      <DomainButton domain={row.domain} band={row.recency_band} lastSeenAt={row.last_seen_at} appearanceCount={row.appearance_count} systemFlag={row.system_flag} from={from} />
                     </Td>
                   </>
                 )}
@@ -621,11 +584,17 @@ export function LeadsTable({
                       >
                         {row.url.length > 55 ? row.url.slice(0, 55) + '…' : row.url}
                       </a>
-                      <CopyRowLinkButton leadId={row.id} />
+                      <CopyRowLinkButton leadId={row.id} domain={row.domain} />
                     </div>
                   ) : (
-                    <CopyRowLinkButton leadId={row.id} />
+                    <CopyRowLinkButton leadId={row.id} domain={row.domain} />
                   )}
+                </Td>
+                <Td>
+                  <SiteDescription row={row} />
+                </Td>
+                <Td>
+                  <ExistsBadge state={row.existing_state} checkedAt={row.existing_checked_at} />
                 </Td>
                 <Td>
                   <BooleanLabelEditor
@@ -704,7 +673,7 @@ export function LeadsTable({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setOpenLeadId(row.id)}
+                  onClick={() => openWebsite(row.domain)}
                   className="truncate text-left text-[13px] font-medium text-[color:var(--color-text-primary)] underline-offset-2 hover:underline"
                 >
                   {jobContext ? (row.domain ?? '—') : (row.keyword ?? '—')}
@@ -734,11 +703,17 @@ export function LeadsTable({
                     >
                       {row.url.length > 80 ? row.url.slice(0, 80) + '…' : row.url}
                     </a>
-                    <CopyRowLinkButton leadId={row.id} />
+                    <CopyRowLinkButton leadId={row.id} domain={row.domain} />
                   </span>
                 ) : (
-                  <CopyRowLinkButton leadId={row.id} />
+                  <CopyRowLinkButton leadId={row.id} domain={row.domain} />
                 )}
+              </Field>
+              <Field label="What it is">
+                <SiteDescription row={row} />
+              </Field>
+              <Field label="Already exists?">
+                <ExistsBadge state={row.existing_state} checkedAt={row.existing_checked_at} />
               </Field>
               <Field label="Is an affiliate?">
                 <BooleanLabelEditor
@@ -824,16 +799,6 @@ export function LeadsTable({
         </>
       )}
 
-      <LeadDetailDrawer
-        leadId={openLeadId}
-        leadIds={visibleIds}
-        onClose={() => setOpenLeadId(null)}
-        onNavigate={setOpenLeadId}
-        onBoundary={onBoundary}
-        canGoPrevPage={canGoPrevPage}
-        canGoNextPage={canGoNextPage}
-      />
-
       <RowContextMenu
         cursor={contextCursor}
         actions={buildContextActions()}
@@ -863,29 +828,18 @@ export function LeadsTable({
   )
 }
 
-/** Copies a permalink that opens THIS row's drawer when clicked.
- *  Used during QA so testers can paste a link in the feedback widget
- *  (or chat) and the admin lands on the same row + drawer with one
- *  click — no need to re-search through filters/pages.
- *
- *  The drawer is URL-driven via `?lead=<id>` (see LeadsTable above),
- *  so the link is just the current path with that param set + the
- *  page-1 reset so the row is guaranteed visible regardless of where
- *  the link recipient was last paginated to. */
-function CopyRowLinkButton({ leadId }: { leadId: number }) {
-  const pathname = usePathname()
-  const sp = useSearchParams()
+/** Copies a link to this row's WEBSITE page, so a tester can paste it in the
+ *  feedback widget and the admin lands on the same site with one click. The
+ *  link is stable and survives re-scrapes (the old `?lead=<id>` drawer link
+ *  still redirects there). */
+function CopyRowLinkButton({ leadId, domain }: { leadId: number; domain: string | null }) {
   const [copied, setCopied] = useState(false)
 
   const handle = async () => {
-    const params = new URLSearchParams(sp.toString())
-    params.set('lead', String(leadId))
-    // Reset page=1 so the recipient sees the row regardless of where
-    // the sender was paginated to. Filters / sorts are preserved.
-    params.delete('page')
-    const qs = params.toString()
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const link = `${origin}${pathname}${qs ? `?${qs}` : ''}`
+    // No domain (a malformed row) — fall back to the lead permalink, which
+    // the leads page redirects to the website when it can.
+    const link = `${origin}${websiteHref(domain) ?? `/leads?lead=${leadId}`}`
 
     try {
       await navigator.clipboard.writeText(link)
@@ -911,8 +865,8 @@ function CopyRowLinkButton({ leadId }: { leadId: number }) {
     <button
       type="button"
       onClick={handle}
-      title={copied ? 'Copied row link!' : 'Copy link to this row (opens the drawer when shared)'}
-      aria-label={copied ? 'Copied row link' : 'Copy row link'}
+      title={copied ? 'Copied link!' : "Copy a link to this website's page"}
+      aria-label={copied ? 'Copied website link' : 'Copy website link'}
       className={[
         'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-accent)]',
         copied
@@ -937,21 +891,112 @@ function NotRelevantPill() {
   )
 }
 
+/**
+ * What the website is, in the model's words, plus a marker when the result
+ * was judged off-keyword. The description belongs to the domain, so the same
+ * text repeats down a column of one website's pages — which makes a run of
+ * junk obvious at a glance.
+ */
+function SiteDescription({ row }: { row: LeadRow }) {
+  const offKeyword = row.is_relevant === false
+  const overridden = row.relevance_overridden_at !== null
+  const text = row.ai_site_description
+
+  if (!text && !offKeyword) {
+    return <span className="text-[11px] text-[color:var(--color-text-secondary)]">—</span>
+  }
+
+  return (
+    <div className="flex max-w-[240px] flex-col gap-0.5">
+      {offKeyword && (
+        <span
+          className={[
+            'w-fit rounded-full px-2 py-0.5 text-[10px] font-medium',
+            overridden ? 'bg-zinc-200 text-zinc-700' : 'bg-rose-100 text-rose-800',
+          ].join(' ')}
+          title={row.relevance_reason ?? 'Judged not relevant to the keyword.'}
+        >
+          {overridden ? 'Off keyword (forced through)' : 'Off keyword'}
+        </span>
+      )}
+      {text && (
+        <span className="line-clamp-2 text-[11px] leading-snug text-[color:var(--color-text-secondary)]" title={text}>
+          {text}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** The domain's page URL, or null when the row has no usable domain.
+ *  `from` is where the website page's Back link returns to; it is left off
+ *  links meant to be shared, which should not carry the sender's position. */
+function websiteHref(domain: string | null, from?: string): string | null {
+  const host = (domain ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/\.+$/, '')
+  if (!host) return null
+  const base = `/websites/${encodeURIComponent(host)}`
+  return from ? `${base}?from=${encodeURIComponent(from)}` : base
+}
+
 function DomainButton({
   domain,
-  onOpen,
+  band,
+  lastSeenAt,
+  appearanceCount,
+  systemFlag,
+  from,
 }: {
   domain: string | null
-  onOpen: () => void
+  band?: RecencyBand | undefined
+  lastSeenAt?: string | null | undefined
+  appearanceCount?: number | null | undefined
+  systemFlag?: string | null | undefined
+  from?: string | undefined
 }) {
+  // Recency dot: how recently this WEBSITE (not this row) was last seen on
+  // any scrape, from its profile. The title carries the plain words.
+  const dotTitle = band
+    ? `${RECENCY_LABEL[band]}${lastSeenAt ? ` · last seen ${new Date(lastSeenAt).toLocaleDateString()}` : ''}${
+        appearanceCount != null ? ` · seen ${appearanceCount}×` : ''
+      }`
+    : undefined
+  const href = websiteHref(domain, from)
+  const inner = (
+    <>
+      {band && <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${RECENCY_DOT[band]}`} title={dotTitle} />}
+      <span className="truncate" title={dotTitle}>
+        {domain ?? '—'}
+      </span>
+      {systemFlag && <SystemFlagPill flag={systemFlag} />}
+    </>
+  )
+  const cls =
+    'flex w-full min-w-0 items-center gap-1.5 px-3 py-2 text-left font-medium text-[color:var(--color-text-primary)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--color-accent)]'
+
+  // A real link, so middle-click / cmd-click open the website in a new tab.
+  if (!href) return <span className={cls}>{inner}</span>
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="block w-full truncate px-3 py-2 text-left font-medium text-[color:var(--color-text-primary)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--color-accent)]"
+    <Link href={href} className={cls}>
+      {inner}
+    </Link>
+  )
+}
+
+function SystemFlagPill({ flag }: { flag: string }) {
+  return (
+    <span
+      title={`System flag: ${flag.replace(/_/g, ' ')} — an obvious non-affiliate. Hidden from the default view, skipped by enrichment.`}
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-700"
     >
-      {domain ?? '—'}
-    </button>
+      <ShieldAlert className="h-2.5 w-2.5" />
+      {flag.replace(/_/g, ' ')}
+    </span>
   )
 }
 

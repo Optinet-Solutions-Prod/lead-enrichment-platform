@@ -12,6 +12,7 @@ import {
   type KickPipelineStatus,
   type ScrapeJob,
   type SocialBadgeEngine,
+  type JobLeadCounts,
   type SocialPipelineStatus,
   type StageKey,
   type StageTimings,
@@ -1705,19 +1706,22 @@ export async function queryJobs(opts: JobsQueryOptions): Promise<JobsQueryResult
     arr.push(j.id)
     completedSocialByEngine.set(key, arr)
   }
-  const [enrichmentByJob, timingsByJob, captchaByJob, kickByJob, socialByJob] = await Promise.all([
+  const [enrichmentResult, timingsByJob, captchaByJob, kickByJob, socialByJob] = await Promise.all([
     fetchEnrichmentStatus(completedIds),
     fetchStageTimings(jobs.filter(j => j.status === 'completed' && j.with_enrichment)),
     fetchCaptchaSolvedBy(jobs.map(j => j.id)),
     fetchKickProgress(completedKickIds),
     fetchSocialProgress(completedSocialByEngine),
   ])
+  const enrichmentByJob = enrichmentResult.status
+  const countsByJob = enrichmentResult.counts
   return {
     rows: jobs.map(j => {
       const ppc = j.batch_group_id ? ppcSiblingByBatch.get(j.batch_group_id) ?? null : null
       return {
         ...j,
         enrichment: enrichmentByJob.get(j.id) ?? {},
+        lead_counts: countsByJob.get(j.id) ?? null,
         stage_timings: timingsByJob.get(j.id) ?? null,
         captcha_solved_by: captchaByJob.get(j.id) ?? null,
         kick: kickByJob.get(j.id) ?? null,
@@ -1756,9 +1760,10 @@ async function fetchCaptchaSolvedBy(
 /** One query, aggregated in TS — cheap for ~30 jobs × ~10 rows each. */
 async function fetchEnrichmentStatus(
   jobIds: string[],
-): Promise<Map<string, EnrichmentStatus>> {
+): Promise<{ status: Map<string, EnrichmentStatus>; counts: Map<string, JobLeadCounts> }> {
   const out = new Map<string, EnrichmentStatus>()
-  if (jobIds.length === 0) return out
+  const counts = new Map<string, JobLeadCounts>()
+  if (jobIds.length === 0) return { status: out, counts }
 
   const svc = createServiceClient()
   type LeadRow = {
@@ -1768,12 +1773,14 @@ async function fetchEnrichmentStatus(
     contact_checked_at: string | null
     s_tags_checked_at: string | null
     stag_check_checked_at: string | null
+    is_not_relevant: boolean | null
+    system_flag: string | null
   }
   const data = (await selectInChunks(jobIds, chunk =>
     svc
       .from('google_lead_gen_table')
       .select(
-        'id, scrape_job_id, affiliate_checked_at, contact_checked_at, s_tags_checked_at, stag_check_checked_at',
+        'id, scrape_job_id, affiliate_checked_at, contact_checked_at, s_tags_checked_at, stag_check_checked_at, is_not_relevant, system_flag',
       )
       .in('scrape_job_id', chunk),
   )) as unknown as LeadRow[]
@@ -1788,7 +1795,19 @@ async function fetchEnrichmentStatus(
     if (row.stag_check_checked_at !== null) acc.stag_check = true
     out.set(jobId, acc)
   }
-  return out
+
+  // Counted from the rows already fetched for the pipeline dots, so an
+  // accurate Results column costs no extra round trip.
+  for (const jobId of jobIds) counts.set(jobId, { stored: 0, visible: 0, notRelevant: 0, flagged: 0 })
+  for (const row of data) {
+    const c = row.scrape_job_id ? counts.get(row.scrape_job_id) : undefined
+    if (!c) continue
+    c.stored++
+    if (row.is_not_relevant === true) c.notRelevant++
+    else if (row.system_flag != null) c.flagged++
+    else c.visible++
+  }
+  return { status: out, counts }
 }
 
 /** Per-Kick-job progression counts for the jobs-table badge. Kick scrapes

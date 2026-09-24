@@ -5,8 +5,6 @@ import Link from 'next/link'
 import {
   Brain,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   EyeOff,
   ExternalLink,
@@ -21,21 +19,12 @@ import {
   Tag,
   Trash2,
   User,
-  X,
   Zap,
 } from 'lucide-react'
-import type { LeadDetail, ContactItemDetail } from '../_lib/detail-query'
-import {
-  getCachedLeadDetail,
-  invalidateLeadDetailCache,
-  setCachedLeadDetail,
-} from '../_lib/detail-cache'
-import {
-  deleteLeadScreenshot,
-  forceEnrichLeadsAction,
-  setNotRelevantAction,
-  type MarkNotRelevantState,
-} from '../actions'
+import type { LeadDetail, ContactItemDetail } from '../../leads/_lib/detail-query'
+import { invalidateLeadDetailCache } from '../../leads/_lib/detail-cache'
+import { deleteLeadScreenshot, forceEnrichLeadsAction } from '../../leads/actions'
+import { setWebsiteNotRelevantAction, type WebsiteActionState } from '../actions'
 
 type Detail = LeadDetail
 
@@ -53,297 +42,59 @@ function cleanDomain(raw: string | null): string {
   }
 }
 
-async function fetchLeadDetail(leadId: number, signal: AbortSignal): Promise<Detail> {
-  const res = await fetch(`/api/leads/${leadId}`, { signal, cache: 'no-store' })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body?.error ?? `HTTP ${res.status}`)
-  }
-  return res.json()
-}
-
-
-type Props = {
-  leadId: number | null
-  /** The ordered list of currently-visible lead ids; lets the drawer step
-   *  through them with prev/next without closing. Pass an empty array if
-   *  navigation isn't applicable. */
-  leadIds?: number[]
-  onClose: () => void
-  /** Called when the user clicks the prev/next arrows. If omitted, arrows
-   *  are hidden. */
-  onNavigate?: (id: number) => void
-  /** Called when the user clicks past the first/last visible lead. The
-   *  caller is responsible for advancing to the prev/next page. */
-  onBoundary?: (dir: 'prev' | 'next') => void
-  canGoPrevPage?: boolean
-  canGoNextPage?: boolean
-}
-
-export function LeadDetailDrawer({
-  leadId,
-  leadIds = [],
-  onClose,
-  onNavigate,
-  onBoundary,
-  canGoPrevPage = false,
-  canGoNextPage = false,
-}: Props) {
-  const [detail, setDetail] = useState<Detail | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (leadId === null) return
-    const controller = new AbortController()
-
-    // Stale-while-revalidate: if we've fetched this lead before, show
-    // the cached payload immediately and skip the loader. Always re-fetch
-    // in the background to pick up any server-side changes.
-    const cached = getCachedLeadDetail(leadId)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDetail(cached ?? null)
-
-    setError(null)
-    setLoading(!cached)
-
-    fetchLeadDetail(leadId, controller.signal)
-      .then(d => {
-        if (controller.signal.aborted) return
-        setCachedLeadDetail(leadId, d)
-        setDetail(d)
-      })
-      .catch(e => {
-        if (controller.signal.aborted) return
-        // If we showed cached data and the refresh fails, keep showing
-        // the cache rather than flashing an error — log it instead.
-        if (cached) {
-           
-          console.warn('Background refresh failed for lead', leadId, e)
-          return
-        }
-        setError(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [leadId])
-
-  // When the drawer closes, clear UI state. We keep the module-level
-  // cache so re-opening the same lead is instant.
-  useEffect(() => {
-    if (leadId !== null) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDetail(null)
-
-    setError(null)
-  }, [leadId])
-
-  useEffect(() => {
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    if (leadId !== null) {
-      document.addEventListener('keydown', onEsc)
-      return () => document.removeEventListener('keydown', onEsc)
-    }
-  }, [leadId, onClose])
-
-  // Keyboard shortcuts for prev/next while the drawer is open. Re-derive
-  // the navigation state inside the handler so we don't have to hoist
-  // goPrev/goNext above the early return; closure over latest props is
-  // sufficient.
-  useEffect(() => {
-    if (leadId === null) return
-    function onKey(e: KeyboardEvent) {
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      if (e.metaKey || e.ctrlKey || e.altKey) return
-
-      // Spatial mapping: left key on the keyboard = previous, right = next.
-      const isNext = e.key === 'ArrowRight' || e.key === 'm' || e.key === 'M'
-      const isPrev = e.key === 'ArrowLeft'  || e.key === 'n' || e.key === 'N'
-      if (!isNext && !isPrev) return
-
-      const idx = leadIds.indexOf(leadId!)
-      if (idx < 0) return
-      const here = leadIds[idx]
-      const atFirstLocal = idx === 0
-      const atLastLocal = idx === leadIds.length - 1
-      const prev = atFirstLocal ? null : leadIds[idx - 1] ?? null
-      const next = atLastLocal ? null : leadIds[idx + 1] ?? null
-      void here
-
-      if (isNext) {
-        if (next !== null) {
-          e.preventDefault()
-          onNavigate?.(next)
-        } else if (atLastLocal && canGoNextPage) {
-          e.preventDefault()
-          onBoundary?.('next')
-        }
-        return
-      }
-      if (isPrev) {
-        if (prev !== null) {
-          e.preventDefault()
-          onNavigate?.(prev)
-        } else if (atFirstLocal && canGoPrevPage) {
-          e.preventDefault()
-          onBoundary?.('prev')
-        }
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [leadId, leadIds, onNavigate, onBoundary, canGoPrevPage, canGoNextPage])
-
-  if (leadId === null) return null
-
-  const lead = detail?.lead ?? null
-
-  // Prev/next navigation. Walks the visible lead ids the table handed
-  // us; at the boundary of the visible list, falls back to `onBoundary`
-  // to bridge to the adjacent page (if the table indicates one exists).
-  const navIndex = leadIds.indexOf(leadId)
-  const inList = navIndex >= 0
-  const atFirst = inList && navIndex === 0
-  const atLast = inList && navIndex === leadIds.length - 1
-  const prevId = inList && navIndex > 0 ? leadIds[navIndex - 1] ?? null : null
-  const nextId = inList && navIndex < leadIds.length - 1 ? leadIds[navIndex + 1] ?? null : null
-  const prevEnabled = prevId !== null || (atFirst && canGoPrevPage && onBoundary !== undefined)
-  const nextEnabled = nextId !== null || (atLast && canGoNextPage && onBoundary !== undefined)
-  const canNavigate =
-    onNavigate !== undefined && inList && (leadIds.length > 1 || canGoPrevPage || canGoNextPage)
-
-  function goPrev() {
-    if (prevId !== null) onNavigate?.(prevId)
-    else if (atFirst && canGoPrevPage) onBoundary?.('prev')
-  }
-  function goNext() {
-    if (nextId !== null) onNavigate?.(nextId)
-    else if (atLast && canGoNextPage) onBoundary?.('next')
-  }
-
-  return (
-    <>
-      {/* Drawer — no backdrop so pagination + other rows stay clickable.
-          z-50 keeps it above the sidebar (z-40) and mobile backdrop (z-30). */}
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[460px] flex-col border-l border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] shadow-xl">
-        <header className="flex flex-col gap-2 border-b border-[color:var(--color-border)] px-4 py-3">
-          {canNavigate && (
-            <div className="flex items-center gap-1 text-[11px] text-[color:var(--color-text-secondary)]">
-              <button
-                type="button"
-                onClick={goPrev}
-                disabled={!prevEnabled}
-                aria-label={prevId === null && atFirst && canGoPrevPage ? 'Previous page (N or ←)' : 'Previous lead (N or ←)'}
-                title={prevId === null && atFirst && canGoPrevPage ? 'Previous page (N or ←)' : 'Previous lead (N or ←)'}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={!nextEnabled}
-                aria-label={nextId === null && atLast && canGoNextPage ? 'Next page (M or →)' : 'Next lead (M or →)'}
-                title={nextId === null && atLast && canGoNextPage ? 'Next page (M or →)' : 'Next lead (M or →)'}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-              <span className="ml-1 tabular-nums">
-                {navIndex + 1} <span className="opacity-60">of {leadIds.length}</span>
-              </span>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                title="Close"
-                className="ml-auto rounded-md p-1 text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[14px] font-semibold text-[color:var(--color-text-primary)]">
-                {cleanDomain(lead?.domain ?? lead?.url ?? null)}
-              </p>
-              {lead?.url && (
-                <a
-                  href={lead.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-0.5 flex items-start gap-1 text-[11px] text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text-primary)]"
-                >
-                  <ExternalLink className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span className="break-all">{lead.url}</span>
-                </a>
-              )}
-            </div>
-            {!canNavigate && (
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="rounded-md p-1 text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto">
-          {loading && <Loading />}
-          {error && <ErrorPanel message={error} />}
-          {detail && !loading && !error && (
-            <DetailBody detail={detail} onOpenLead={onNavigate} />
-          )}
-        </div>
-      </aside>
-    </>
-  )
-}
-
-function Loading() {
-  return (
-    <div className="flex h-40 items-center justify-center text-[12px] text-[color:var(--color-text-secondary)]">
-      Loading…
-    </div>
-  )
-}
-
-function ErrorPanel({ message }: { message: string }) {
-  return (
-    <div className="m-4 rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700">
-      Error: {message}
-    </div>
-  )
-}
-
-function DetailBody({
+/**
+ * The operator actions, as a toolbar rather than a stack of explanatory
+ * panels — each one is a button that expands only when you mean to use it.
+ */
+export function WebsiteActions({
   detail,
-  onOpenLead,
+  leadIds,
+  domain,
 }: {
   detail: Detail
-  onOpenLead?: ((id: number) => void) | undefined
+  /** Every appearance of this website, so the actions act on the site
+   *  rather than on whichever row we happened to render. */
+  leadIds: number[]
+  domain: string
 }) {
+  const lead = detail.lead
+  if (!lead) return null
+  return (
+    <div className="flex flex-wrap items-start gap-2 text-[12px]">
+      <NotRelevantPanel
+        leadId={lead.id}
+        leadIds={leadIds}
+        domain={domain}
+        isNotRelevant={lead.is_not_relevant}
+        markedAt={lead.not_relevant_marked_at}
+        markedBy={lead.not_relevant_marked_by}
+      />
+    </div>
+  )
+}
+
+/**
+ * The evidence, as cards that flow across the full width. Sections with
+ * nothing in them are left out entirely — a column of "—" told you
+ * nothing and pushed the real content off the screen.
+ */
+export function WebsiteFacts({ detail }: { detail: Detail }) {
   const lead = detail.lead
   if (!lead) {
     return (
-      <div className="m-4 text-[12px] text-[color:var(--color-text-secondary)]">
-        Lead not found.
+      <div className="text-[12px] text-[color:var(--color-text-secondary)]">
+        No enrichment has run for this website yet.
       </div>
     )
   }
 
+  const showAffiliate = lead.is_affiliate !== null || lead.affiliate_score != null
+  const showContacts = Boolean(detail.contact)
+  const showStags = detail.stags.length > 0
+  const showCohort = detail.cohort.length > 0
+
   return (
-    <div className="flex flex-col gap-4 p-4 text-[12px]">
+    <div className="columns-1 gap-4 text-[12px] lg:columns-2 2xl:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
       {lead.inherited_from_lead_id !== null && (
         <MemoryPanel
           leadId={lead.id}
@@ -354,14 +105,10 @@ function DetailBody({
         />
       )}
 
-      <NotRelevantPanel
-        leadId={lead.id}
-        isNotRelevant={lead.is_not_relevant}
-        markedAt={lead.not_relevant_marked_at}
-        markedBy={lead.not_relevant_marked_by}
-      />
-
-      <Section title="Context">
+      {/* Which appearance the enrichment below actually ran against —
+          contacts and s-tags are stored per lead row, so saying so keeps
+          the page honest when a later re-sighting inherited the flags. */}
+      <Section title="Enriched from this appearance">
         <KV label="Keyword" value={lead.keyword ?? '—'} />
         <KV label="Country" value={[lead.country, lead.country_code].filter(Boolean).join(' · ') || '—'} />
         <KV
@@ -402,10 +149,7 @@ function DetailBody({
           <KV
             label="Queued by"
             value={
-              <span
-                className="inline-flex items-center gap-1"
-                title={lead.queued_by_username ?? undefined}
-              >
+              <span className="inline-flex items-center gap-1" title={lead.queued_by_username ?? undefined}>
                 <User className="h-3 w-3 text-[color:var(--color-text-secondary)]" />
                 {lead.queued_by_display || lead.queued_by_username}
               </span>
@@ -428,74 +172,67 @@ function DetailBody({
         )}
       </Section>
 
-      {detail.serp_screenshot_url && (
-        <SerpScreenshotSection url={detail.serp_screenshot_url} />
-      )}
+      {detail.serp_screenshot_url && <SerpScreenshotSection url={detail.serp_screenshot_url} />}
 
       {(detail.screenshot_url || lead.result_type === 'PPC') && (
-        <ScreenshotSection
-          leadId={lead.id}
-          url={detail.screenshot_url}
-          isPPC={lead.result_type === 'PPC'}
-        />
+        <ScreenshotSection leadId={lead.id} url={detail.screenshot_url} isPPC={lead.result_type === 'PPC'} />
       )}
 
-      <Section title="Affiliate detection">
-        <KV
-          label="Is affiliate?"
-          value={
-            lead.is_affiliate === null ? (
-              '—'
-            ) : (
-              <span className="inline-flex flex-wrap items-center gap-1.5">
-                {`${lead.is_affiliate ? 'Yes' : 'No'}${lead.affiliate_confidence ? ` · ${lead.affiliate_confidence}` : ''}`}
-                {lead.affiliate_source === 'monday' && <MondayBadge title="Affiliate status identified from the matched Monday.com item, not our enrichment." />}
-              </span>
-            )
-          }
-        />
-        {lead.affiliate_score != null && (
+      {showAffiliate && (
+        <Section title="Affiliate detection">
           <KV
-            label="Score"
-            value={`affiliate ${lead.affiliate_score} · casino ${lead.affiliate_casino_score ?? 0} · ${lead.affiliate_external_links ?? 0} outbound`}
+            label="Is affiliate?"
+            value={
+              lead.is_affiliate === null
+                ? '—'
+                : `${lead.is_affiliate ? 'Yes' : 'No'}${lead.affiliate_confidence ? ` · ${lead.affiliate_confidence}` : ''}`
+            }
           />
-        )}
-        {lead.affiliate_indicators && lead.affiliate_indicators.length > 0 && (
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[11px] text-[color:var(--color-text-secondary)]">
-            {lead.affiliate_indicators.map((ind, i) => <li key={i}>{ind}</li>)}
-          </ul>
-        )}
-      </Section>
+          {lead.affiliate_score != null && (
+            <KV
+              label="Score"
+              value={`affiliate ${lead.affiliate_score} · casino ${lead.affiliate_casino_score ?? 0} · ${lead.affiliate_external_links ?? 0} outbound`}
+            />
+          )}
+          {lead.affiliate_indicators && lead.affiliate_indicators.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[11px] text-[color:var(--color-text-secondary)]">
+              {lead.affiliate_indicators.map((ind, i) => (
+                <li key={i}>
+                  <Indicator text={ind} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
-      <Section title="Contacts">
-        {!detail.contact ? (
-          <p className="text-[color:var(--color-text-secondary)]">Not yet extracted.</p>
-        ) : (
-          <ContactsBody contact={detail.contact} />
-        )}
-      </Section>
+      {showContacts && (
+        <Section title="Contacts">
+          <ContactsBody contact={detail.contact!} />
+        </Section>
+      )}
 
-      <Section title={`S-tags (${detail.stags.length})`}>
-        {detail.stags.length === 0 ? (
-          <p className="text-[color:var(--color-text-secondary)]">None extracted.</p>
-        ) : (
+      {showStags && (
+        <Section title={`S-tags (${detail.stags.length})`}>
           <ul className="space-y-2">
             {detail.stags.map((t, i) => (
-              <li key={i} className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-2 text-[11px]">
+              <li
+                key={i}
+                className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-2 text-[11px]"
+              >
                 <div className="flex flex-wrap items-center gap-1.5 font-mono font-semibold text-[color:var(--color-text-primary)]">
                   <Tag className="h-3 w-3" />
-                  <span>{t.source_param ?? 'tag'}={t.s_tag}</span>
-                  <span className="ml-auto flex flex-wrap items-center gap-1">
-                    {t.origin === 'monday' && <MondayBadge title="Tracking id inherited from a matched Monday.com item (legacy integration)." />}
-                    {t.extracted_via === 'mobile' && (
-                      <span
-                        className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800"
-                        title="Tag was only visible when the page was rendered with an iPhone UA + 375x812 viewport — desktop pass returned zero tracking links."
-                      >
-                        via mobile
-                      </span>
-                    )}
+                  <span>
+                    {t.source_param ?? 'tag'}={t.s_tag}
                   </span>
+                  {t.extracted_via === 'mobile' && (
+                    <span
+                      className="ml-auto rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-800"
+                      title="Tag was only visible when the page was rendered with an iPhone UA + 375x812 viewport — desktop pass returned zero tracking links."
+                    >
+                      via mobile
+                    </span>
+                  )}
                 </div>
                 {t.brand && (
                   <p className="mt-0.5 text-[color:var(--color-text-secondary)]">
@@ -527,7 +264,9 @@ function DetailBody({
                     </summary>
                     <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-[10px] text-[color:var(--color-text-secondary)]">
                       {t.redirect_chain.map((step, j) => (
-                        <li key={j} className="break-all">{step}</li>
+                        <li key={j} className="break-all">
+                          {step}
+                        </li>
                       ))}
                     </ol>
                   </details>
@@ -546,62 +285,61 @@ function DetailBody({
               </li>
             ))}
           </ul>
-        )}
-      </Section>
+        </Section>
+      )}
 
-      <Section
-        title={`Owner network (${detail.cohort.length})`}
-        subtitle="Other affiliate sites that share at least one s-tag value with this lead — strong signal of common operator."
-      >
-        {detail.cohort.length === 0 ? (
-          <p className="text-[color:var(--color-text-secondary)]">
-            {detail.stags.length === 0
-              ? 'No s-tags collected yet — owner network unavailable until enrichment completes.'
-              : 'No other lead shares any s-tag with this one yet.'}
-          </p>
-        ) : (
+      {showCohort && (
+        <Section
+          title={`Owner network (${detail.cohort.length})`}
+          subtitle="Other sites sharing at least one s-tag value — a strong signal of a common operator."
+        >
           <ul className="space-y-1.5">
             {detail.cohort.map(sib => {
               const display = sib.domain || sib.url || `lead #${sib.lead_id}`
-              const Wrap: React.ElementType = onOpenLead ? 'button' : 'div'
+              // A sibling is another WEBSITE, so it opens that website's page.
+              const host = cleanDomain(sib.domain ?? sib.url ?? null)
               return (
                 <li key={sib.lead_id}>
-                  <Wrap
-                    {...(onOpenLead
-                      ? {
-                          type: 'button',
-                          onClick: () => onOpenLead(sib.lead_id),
-                        }
-                      : {})}
-                    className={[
-                      'flex w-full items-center justify-between gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-2.5 py-2 text-left text-[11px]',
-                      onOpenLead
-                        ? 'cursor-pointer transition-colors hover:bg-[color:var(--color-bg-primary)]'
-                        : '',
-                    ].join(' ')}
+                  <Link
+                    href={`/websites/${encodeURIComponent(host)}`}
+                    className="flex w-full items-center justify-between gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-[color:var(--color-bg-primary)]"
                   >
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium text-[color:var(--color-text-primary)]">
-                        {display}
-                      </span>
+                      <span className="truncate font-medium text-[color:var(--color-text-primary)]">{display}</span>
                       <span className="text-[10px] text-[color:var(--color-text-secondary)]">
-                        {sib.country_code ?? '—'} · {sib.shared_count} shared{' '}
-                        {sib.shared_count === 1 ? 's-tag' : 's-tags'}
+                        {sib.country_code ?? '—'} · {sib.shared_count} shared {sib.shared_count === 1 ? 's-tag' : 's-tags'}
                       </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      <span className="rounded-full bg-[color:var(--color-bg-primary)] px-2 py-0.5 font-mono text-[10px] text-[color:var(--color-text-secondary)]">
-                        ×{sib.shared_count}
-                      </span>
+                    <span className="shrink-0 rounded-full bg-[color:var(--color-bg-primary)] px-2 py-0.5 font-mono text-[10px] text-[color:var(--color-text-secondary)]">
+                      ×{sib.shared_count}
                     </span>
-                  </Wrap>
+                  </Link>
                 </li>
               )
             })}
           </ul>
-        )}
-      </Section>
+        </Section>
+      )}
     </div>
+  )
+}
+
+/**
+ * One affiliate-detection indicator. Some are a scraper stack trace rather
+ * than a finding — a multi-line SOCKS proxy error once rendered in full and
+ * swamped the card. Long ones collapse to a summary you can open.
+ */
+function Indicator({ text }: { text: string }) {
+  const long = text.length > 140 || /[\r\n]/.test(text)
+  if (!long) return <>{text}</>
+  const head = text.split(/[\r\n]/)[0]!.slice(0, 120)
+  return (
+    <details>
+      <summary className="cursor-pointer marker:text-[color:var(--color-text-secondary)]">{head}…</summary>
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[color:var(--color-bg-secondary)] p-2 text-[10px]">
+        {text}
+      </pre>
+    </details>
   )
 }
 
@@ -745,19 +483,6 @@ function KV({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-/** Badge marking data inherited from a matched Monday.com item (v3),
- *  distinct from our own extraction/tool badges. */
-function MondayBadge({ title }: { title?: string }) {
-  return (
-    <span
-      className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-800"
-      title={title ?? 'Inherited from the matched Monday.com item — not extracted by our system.'}
-    >
-      Monday.com
-    </span>
-  )
-}
-
 // v2 provenance: map each extraction method to the human-readable tool
 // that produced it, so operators can see WHICH tool found each contact.
 const METHOD_TOOL: Record<string, string> = {
@@ -774,7 +499,6 @@ const METHOD_TOOL: Record<string, string> = {
   openai: 'OpenAI web search',
   hunter: 'Hunter.io',
   manual: 'Manual entry',
-  monday: 'Monday.com',
 }
 
 function toolLabel(method: string): string {
@@ -1129,48 +853,55 @@ function MemoryPanel({
   )
 }
 
+/**
+ * Not-relevant is a verdict about the WEBSITE — a news site doesn't become
+ * relevant because a different keyword turned it up — so the flag goes on
+ * every appearance at once and onto the profile the next scrape reads.
+ */
 function NotRelevantPanel({
   leadId,
+  leadIds,
+  domain,
   isNotRelevant,
   markedAt,
   markedBy,
 }: {
   leadId: number
+  leadIds: number[]
+  domain: string
   isNotRelevant: boolean
   markedAt: string | null
   markedBy: string | null
 }) {
-  const initial: MarkNotRelevantState = null
-  const [state, action, pending] = useActionState(setNotRelevantAction, initial)
+  const ids = leadIds.length > 0 ? leadIds.join(',') : String(leadId)
+  const n = leadIds.length || 1
+  const initial: WebsiteActionState = { status: 'idle' }
+  const [state, action, pending] = useActionState(setWebsiteNotRelevantAction, initial)
   const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
-    if (state?.status === 'ok') invalidateLeadDetailCache(leadId)
+    if (state.status === 'ok') invalidateLeadDetailCache(leadId)
   }, [state, leadId])
 
-  // Optimistic flip — server action revalidates the lead drawer's data
-  // source on next open, but the panel updates immediately so the user
-  // sees the new state. Action returns the new value so toggling back
-  // and forth in the same drawer session lands on the right UI.
-  const effectivelyHidden =
-    state?.status === 'ok' ? state.isNotRelevant : isNotRelevant
+  // Optimistic flip so the panel shows the new state before the page
+  // re-renders from the revalidated data.
+  const effectivelyHidden = state.status === 'ok' ? state.message.startsWith('Marked') : isNotRelevant
 
   if (effectivelyHidden) {
     return (
       <section className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2">
         <EyeOff className="h-4 w-4 shrink-0 text-amber-700" />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold text-amber-900">
-            Marked as not relevant
-          </p>
+          <p className="text-[11px] font-semibold text-amber-900">Marked as not relevant</p>
           <p className="truncate text-[10px] text-amber-800/80">
-            Hidden from /leads · skipped by enrichment
+            Hidden from /leads · skipped by enrichment · {n} appearance{n === 1 ? '' : 's'}
             {markedAt ? ` · ${new Date(markedAt).toLocaleString()}` : ''}
             {markedBy ? ` · by ${markedBy}` : ''}
           </p>
         </div>
         <form action={action}>
-          <input type="hidden" name="lead_id" value={leadId} />
+          <input type="hidden" name="lead_ids" value={ids} />
+          <input type="hidden" name="domain" value={domain} />
           <input type="hidden" name="value" value="false" />
           <button
             type="submit"
@@ -1185,55 +916,54 @@ function NotRelevantPanel({
     )
   }
 
+  // Collapsed, this is one button; the explanation appears only once the
+  // operator has said they mean it.
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        title={`Hides this website from /leads across all ${n} appearance${n === 1 ? '' : 's'}, cancels in-flight enrichment, and stops future passes picking it up. Reversible.`}
+        className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1.5 text-[11px] font-medium text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
+      >
+        <EyeOff className="h-3 w-3" />
+        Mark not relevant
+      </button>
+    )
+  }
+
   return (
-    <section className="flex flex-col gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-          Not relevant?
-        </p>
-        {!confirming && (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
-          >
-            <EyeOff className="h-3 w-3" />
-            Mark as not relevant
-          </button>
-        )}
-      </div>
-      <p className="text-[10px] text-[color:var(--color-text-secondary)]">
-        Hides this lead from /leads, cancels in-flight enrichment for it,
-        and prevents future enrichment passes from picking it up. Reversible.
+    <section className="flex w-full max-w-[520px] flex-col gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+        Not relevant?
       </p>
-      {confirming && (
-        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-2.5 py-2">
-          <form action={action} className="flex items-center gap-2">
-            <input type="hidden" name="lead_id" value={leadId} />
-            <input type="hidden" name="value" value="true" />
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={pending}
-              className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] hover:bg-[color:var(--color-bg-secondary)]"
-            >
-              Cancel
-            </button>
-          </form>
-        </div>
-      )}
-      {state?.status === 'error' && (
-        <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">
-          {state.error}
-        </p>
+      <p className="text-[10px] text-[color:var(--color-text-secondary)]">
+        Hides this website from /leads across all {n} appearance{n === 1 ? '' : 's'}, cancels in-flight
+        enrichment, and stops future scrapes picking it up. Reversible.
+      </p>
+      <form action={action} className="flex items-center gap-2">
+        <input type="hidden" name="lead_ids" value={ids} />
+        <input type="hidden" name="domain" value={domain} />
+        <input type="hidden" name="value" value="true" />
+        <button
+          type="submit"
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+          Confirm
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={pending}
+          className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2.5 py-1 text-[11px] hover:bg-[color:var(--color-bg-secondary)]"
+        >
+          Cancel
+        </button>
+      </form>
+      {state.status === 'error' && (
+        <p className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">{state.error}</p>
       )}
     </section>
   )
