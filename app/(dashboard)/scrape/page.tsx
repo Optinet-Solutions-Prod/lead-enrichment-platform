@@ -9,6 +9,7 @@ import { getUserPreferences } from '@/lib/user-preferences'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { Pagination } from '../_components/pagination'
+import { AdvancedSearch, type SearchFacets } from './_components/advanced-search'
 import { AutoRefresh } from './_components/auto-refresh'
 import { EnqueueForm } from './_components/enqueue-form'
 import { JobsCardList, JobsTable } from './_components/jobs-table'
@@ -54,7 +55,7 @@ export default async function ScrapePage({
   const restrictToOwnerEmail =
     ownerScope === 'mine' && callerEmail ? callerEmail : undefined
 
-  const [profiles, jobsResult, isAdmin, prefs, quotaSnap, fleet, mineCount, allCount] = await Promise.all([
+  const [profiles, jobsResult, isAdmin, prefs, quotaSnap, fleet, mineCount, allCount, searchFacets] = await Promise.all([
     listActiveProfiles(),
     queryJobs({
       page,
@@ -104,6 +105,12 @@ export default async function ScrapePage({
       const { count } = await (applyShadowFilter(base, ctx) as typeof base)
       return count ?? 0
     })(),
+    // Options for the advanced-search panel, in one round trip.
+    (async () => {
+      const svc = createServiceClient()
+      const { data } = await svc.rpc('job_search_facets')
+      return (data ?? { countries: [], engines: [], statuses: [], sources: [], owners: [] }) as SearchFacets
+    })(),
   ])
   // Pass through only non-exempt snapshots so the EnqueueForm
   // doesn't render the badge for admins or when caps are disabled.
@@ -111,7 +118,7 @@ export default async function ScrapePage({
     !quotaSnap.exempt && quotaSnap.cap !== null && quotaSnap.remaining !== null
       ? { cap: quotaSnap.cap, usedToday: quotaSnap.usedToday, remaining: quotaSnap.remaining }
       : null
-  const { rows, total } = jobsResult
+  const { rows, total, searchNotes } = jobsResult
 
   // Auto-refresh stays on while either the scrape itself OR a follow-on
   // enrichment chain is still in flight, so the badge can transition from
@@ -173,14 +180,23 @@ export default async function ScrapePage({
               allCount={allCount}
             />
           </div>
-          {hasActive && (
-            <p className="text-[11px] text-[color:var(--color-text-secondary)]">
-              auto-refreshing every 5 s
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            {hasActive && (
+              <p className="text-[11px] text-[color:var(--color-text-secondary)]">
+                auto-refreshing every 5 s
+              </p>
+            )}
+            <AdvancedSearch facets={searchFacets} />
+          </div>
         </div>
 
         <AdvancedFilters columns={columns} />
+
+        {q && searchNotes && searchNotes.length > 0 && (
+          <p className="text-[11px] text-[color:var(--color-text-secondary)]">
+            Searched as: {searchNotes.join(' · ')}
+          </p>
+        )}
 
         <JobsTable
           jobs={rows}

@@ -29,6 +29,7 @@ import {
   Plug,
   Search,
   Settings,
+  Sparkles,
   Users,
   Workflow,
   X,
@@ -170,7 +171,16 @@ const NAV_GROUPS: NavGroup[] = [
         module: 'affiliate',
         href: '/leads',
         icon: ListChecks,
-        match: (p: string) => p.startsWith('/leads'),
+        match: (p: string) => p.startsWith('/leads') || p.startsWith('/websites'),
+      },
+      {
+        // What the AI analysis found: confirmed affiliates, the brands they
+        // promote, their CTA links, and the manual S-tag worklist.
+        label: 'Affiliates (AI)',
+        module: 'affiliate',
+        href: '/affiliates',
+        icon: Sparkles,
+        match: (p: string) => p.startsWith('/affiliates'),
       },
       {
         // Open to all signed-in users so the whole ops team can clear

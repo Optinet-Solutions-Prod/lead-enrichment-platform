@@ -232,6 +232,34 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   `https://lead-enrichment-platform-nine.vercel.app/api/stripe/webhook` with event
   `checkout.session.completed`, (3) its whsec_ → `STRIPE_WEBHOOK_SECRET`, redeploy. Test
   with sk_test keys + card 4242 4242 4242 4242 first.
+- ✅ **Ported from Google-Lead-Gen (2026-09-24, per prod's `docs/for-saas-repo-2026-09-24.md`
+  @ 24b7cf2; migrations `20260924120000` + `20260924130000`, applied live).** No shared git
+  ancestor, so re-applied by hand from prod's FINAL definitions (prod clone at
+  `C:\Users\Chris-Optinet\Google-Lead-Gen`, read-only). Monday stripped everywhere the brief
+  lists. **DB:** website_profiles / appearances / relations / known_non_affiliate_domains,
+  lead profile_id + system_flag + SERP title/description + relevance columns, lead→profile
+  sync trigger, complete_scrape_job with the **job-scoped dedupe** (never prod's all-time
+  predicate that hid re-seen websites' rows), lead-domain functional index, AI triage/crawl
+  columns + website_cta_links, relevance-gated ai_candidates_for_job, two-way
+  job_analysis_summary, search_scrape_jobs/facets (pg_trgm), replay_missing_leads.
+  **Deliberate SaaS deviations:** our chain keeps its affiliate terminus (prod's
+  chain_stops_at_rooster NOT ported; no rooster re-check enqueue); Rooster UI wording →
+  "partner brand"; "Already exists?" is two-way (external/CRM slot reserved in code);
+  prod's dedupe-setting copy (which described the old buggy behaviour) rewritten; no Vercel
+  cron for AI (Hobby) — `/api/ai-analysis/run` is bearer-auth'd and excluded from the
+  session middleware; prod's new-scrape wizard / admin integrations+reports / GoLogin
+  proxy tooling are outside the brief and not ported. **App:** `/websites/[domain]` page
+  (built on OUR Monday-free drawer sections; drawer removed, `?lead=` permalinks redirect),
+  leads table (website links, recency dot, system-flag pill, "What it is", ExistsBadge),
+  honest counts (jobs Results column + batch header + analysis strip), advanced batch
+  search, `/affiliates` (nav: Tools, affiliate module), AI libs (relevance + crawl, OFF by
+  default; key = system setting `openai_api_key` or env `OPENAI_API_KEY` — none set yet),
+  admin System → Website profiles settings, loading.tsx on all 28 dashboard pages,
+  `staleTimes` router cache (org switch / leave / invite / create now purge it), worker
+  keeps the SERP snippet. **Gate:** new `scripts/orgs/verify-websites.ts` — 21 end-to-end
+  checks incl. the brief's §12 regression (re-scrape of known sites keeps its rows) — plus
+  smoke (26 pages), verify-actions (real browser), tenancy 30/30: all green. Note: with
+  loading.tsx, notFound()/redirect() stream in-page (HTTP 200 + meta refresh) — expected.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

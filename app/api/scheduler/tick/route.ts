@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireBearer } from '@/lib/auth/bearer'
 import { decodeAdUrl } from '@/lib/decode-ad-url'
+import { runSystemFlagLlmPass } from '@/lib/website-profiles/system-flag-llm'
 
 // Vercel cron sends GET — alias to the same handler as manual POSTs.
 export async function GET(request: NextRequest) {
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest) {
     .is('is_affiliate', null)
     .is('affiliate_checked_at', null)
     .neq('is_not_relevant', true)
+    .is('system_flag', null)
     .neq('result_type', 'PPC')
     .gte('created_at', since)
     .order('id', { ascending: false })
@@ -204,12 +206,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ----------------------------------------------------------------
+  // Website system flag — ask OpenAI about a handful of never-judged new
+  // websites (obvious non-affiliates skip enrichment). No-op unless an admin
+  // turned `system_flag_llm_enabled` on and a key is configured.
+  // ----------------------------------------------------------------
+  const systemFlagLlm = await runSystemFlagLlmPass(svc, { limit: 5, timeoutMs: 6_000 })
+
   return Response.json({
     ok: true,
     now: now.toISOString(),
     enrichment_advances: advances,
     ppc_screenshot_enqueued: ppcEnqueued,
     affiliate_scoring_enqueued: affEnqueued,
+    system_flag_llm: systemFlagLlm,
     orphan_checkpoints_cancelled: orphansCancelled,
     duplicate_scrapes_cancelled: dupesCancelled,
   })

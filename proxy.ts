@@ -10,6 +10,7 @@ import { updateSession } from '@/lib/supabase/middleware'
  *   /signup, /invite/<token> — public auth pages (signup + invite acceptance)
  *   /api/scheduler/tick     — Vercel cron authenticates via Bearer CRON_SECRET
  *   /api/proxy/bandwidth/refresh — Vercel cron authenticates via Bearer CRON_SECRET
+ *   /api/ai-analysis/run    — authenticates via Bearer CRON_SECRET
  *   static assets           — handled by the `matcher` below
  *
  * Unauthenticated users on a protected route are redirected to /login
@@ -29,6 +30,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/proxy/bandwidth/refresh') ||
     pathname.startsWith('/api/enrichment/') ||
     pathname.startsWith('/api/stripe/webhook') || // Stripe calls this server-to-server; auth = signature verification
+    pathname.startsWith('/api/ai-analysis/') || // Bearer CRON_SECRET, called by a scheduler / operator, never a browser session
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
     pathname.startsWith('/invite/')
@@ -106,6 +108,6 @@ function isHardAuthError(e: unknown): boolean {
 export const config = {
   // Run on all routes except static assets + endpoints that authenticate themselves.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment|api/stripe/webhook).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/scheduler/tick|api/proxy/bandwidth/refresh|api/enrichment|api/stripe/webhook|api/ai-analysis).*)',
   ],
 }

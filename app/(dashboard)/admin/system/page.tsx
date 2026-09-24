@@ -5,6 +5,8 @@ import { CaptchaSolverToggle } from './_components/captcha-solver-toggle'
 import { CaptchaAutoSolveToggle } from './_components/captcha-auto-solve-toggle'
 import { MaintenanceToggle } from './_components/maintenance-toggle'
 import { ProxyBandwidthSettings } from './_components/proxy-bandwidth-settings'
+import { WebsiteProfileSettings, type WebsiteProfileConfig } from './_components/website-profile-settings'
+import { parseRecencyBands } from '@/lib/website-profiles/recency'
 import { BYTES_PER_GB } from '@/lib/proxy-bandwidth'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +32,14 @@ export default async function AdminSystemPage() {
     { data: bwLimitRaw },
     { data: bwThresholdRaw },
     { data: bwSnap },
+    { data: ttlRaw },
+    { data: bandsRaw },
+    { data: dedupeRaw },
+    { data: llmFlagRaw },
+    { data: openAiKeyRaw },
+    { data: aiEnabledRaw },
+    { data: aiCapRaw },
+    { data: aiBudgetRaw },
   ] = await Promise.all([
     svc.rpc('get_system_setting', { p_key: 'captcha_solver_enabled' }),
     svc.rpc('get_system_setting', { p_key: 'captcha_auto_solve' }),
@@ -42,7 +52,35 @@ export default async function AdminSystemPage() {
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    svc.rpc('get_system_setting', { p_key: 'verdict_ttl_days' }),
+    svc.rpc('get_system_setting', { p_key: 'recency_bands_days' }),
+    svc.rpc('get_system_setting', { p_key: 'profile_dedupe_enabled' }),
+    svc.rpc('get_system_setting', { p_key: 'system_flag_llm_enabled' }),
+    svc.rpc('get_system_setting', { p_key: 'openai_api_key' }),
+    svc.rpc('get_system_setting', { p_key: 'ai_analysis_enabled' }),
+    svc.rpc('get_system_setting', { p_key: 'ai_crawl_daily_cap' }),
+    svc.rpc('get_system_setting', { p_key: 'ai_crawl_budget_usd' }),
   ])
+
+  // Website profile controls. TTLs default to the migration seed.
+  const ttlOf = (k: string, d: number) => {
+    const o = ttlRaw && typeof ttlRaw === 'object' ? (ttlRaw as Record<string, unknown>) : {}
+    const n = typeof o[k] === 'number' ? (o[k] as number) : typeof o[k] === 'string' ? Number(o[k]) : NaN
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : d
+  }
+  const profileConfig: WebsiteProfileConfig = {
+    ttl: { affiliate: ttlOf('affiliate', 90), rooster: ttlOf('rooster', 60), contact: ttlOf('contact', 180), stags: ttlOf('stags', 90) },
+    bands: parseRecencyBands(bandsRaw),
+    // Dedupe defaults ON (the migration seeds true); only an explicit false turns it off.
+    dedupeEnabled: dedupeRaw !== false,
+    llmFlagEnabled: llmFlagRaw === true,
+    aiAnalysisEnabled: aiEnabledRaw === true,
+    aiDailyCap: typeof aiCapRaw === 'number' && aiCapRaw > 0 ? Math.floor(aiCapRaw) : 150,
+    aiBudgetUsd: typeof aiBudgetRaw === 'number' && aiBudgetRaw > 0 ? aiBudgetRaw : 5,
+    hasOpenAiKey:
+      (typeof openAiKeyRaw === 'string' && openAiKeyRaw.trim().length > 0) ||
+      Boolean((process.env.OPENAI_API_KEY ?? '').trim()),
+  }
   const captchaSolverEnabled = solverRaw === false ? false : true
   // Auto-solve defaults OFF (the migration seeds false) — be defensive
   // against a missing row by treating anything but explicit true as off.
@@ -157,6 +195,21 @@ export default async function AdminSystemPage() {
           thresholdGb={bwThresholdGb}
           latest={bwLatest}
         />
+      </section>
+
+      <section className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
+        <header className="mb-3">
+          <h2 className="text-[13px] font-semibold text-[color:var(--color-text-primary)]">Website profiles</h2>
+          <p className="mt-1 max-w-3xl text-[11px] text-[color:var(--color-text-secondary)]">
+            Every website we have ever scraped has one profile. Each scrape still writes a row for every website it
+            found and logs a timestamped appearance on the profile; verdicts are inherited while inside the expiry
+            below and re-checked when the website shows up again after it. Obvious non-affiliates (video platforms,
+            newspapers, regulators, operators) are parked under a <strong>system flag</strong> and skipped by
+            enrichment.
+          </p>
+        </header>
+
+        <WebsiteProfileSettings config={profileConfig} />
       </section>
     </div>
   )

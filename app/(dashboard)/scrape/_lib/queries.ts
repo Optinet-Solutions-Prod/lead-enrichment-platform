@@ -18,6 +18,7 @@ import {
   type StageTimings,
 } from './pipeline'
 import { ENGINE_CONFIGS } from '@/lib/engines'
+import { buildJobSearch } from './job-search'
 
 // Re-export client-safe types for callers that already import from
 // queries.ts. The actual definitions live in ./pipeline because that
@@ -1536,7 +1537,9 @@ export type JobsQueryOptions = {
   size: number
   /** Hard cap on rows returned. Used for the "recent N" callsite. */
   limit?: number
-  /** Free-text search across keyword, country_code, error_message. */
+  /** Free-text search — every word must match somewhere on the row, with
+   *  expansions (country names, status synonyms, batch numbers, domains).
+   *  See ./job-search.ts. */
   q?: string
   filters?: Filter[]
   sorts?: Sort[]
@@ -1544,20 +1547,18 @@ export type JobsQueryOptions = {
    *  created_by_email matches. Powers the "Mine / All" toggle on
    *  /scrape — default "mine" so operators land on their own work. */
   restrictToOwnerEmail?: string
+  /** Restrict to these job ids. Used by advanced search, which ranks in SQL
+   *  and then reuses this function purely for row hydration. */
+  restrictToIds?: string[]
 }
 
 export type JobsQueryResult = {
   rows: ScrapeJob[]
   total: number
+  /** How the search read the query ("norway" -> country NO), so the page can
+   *  show its interpretation rather than leaving it a black box. */
+  searchNotes?: string[]
 }
-
-const JOBS_SEARCH_COLUMNS = [
-  'keyword',
-  'country_code',
-  'error_message',
-  'created_by_display',
-  'created_by_username',
-]
 
 /** Soft cap for the "All rows" dropdown option on /scrape. */
 const JOBS_ROWS_ALL_CAP = 10_000
@@ -1630,12 +1631,20 @@ export async function queryJobs(opts: JobsQueryOptions): Promise<JobsQueryResult
     query = query.eq('created_by_email', opts.restrictToOwnerEmail.toLowerCase())
   }
 
-  // Free-text search across a small set of columns.
+  if (opts.restrictToIds) {
+    if (opts.restrictToIds.length === 0) return { rows: [], total: 0 }
+    query = query.in('id', opts.restrictToIds)
+  }
+
+  // Search: every word must match somewhere on the row. Repeated `or=`
+  // parameters are ANDed by PostgREST — "every word has to match, but each
+  // may match a different column".
+  let searchNotes: string[] = []
   if (opts.q && opts.q.trim().length > 0) {
-    const safe = opts.q.replace(/[,()*]/g, '').trim()
-    if (safe.length > 0) {
-      const or = JOBS_SEARCH_COLUMNS.map(c => `${c}.ilike.%${safe}%`).join(',')
-      query = query.or(or)
+    const plan = await buildJobSearch(svc, opts.q)
+    if (plan) {
+      for (const group of plan.groups) query = query.or(group)
+      searchNotes = plan.notes
     }
   }
 
@@ -1731,6 +1740,7 @@ export async function queryJobs(opts: JobsQueryOptions): Promise<JobsQueryResult
       }
     }),
     total: count ?? jobs.length,
+    ...(searchNotes.length > 0 ? { searchNotes } : {}),
   }
 }
 

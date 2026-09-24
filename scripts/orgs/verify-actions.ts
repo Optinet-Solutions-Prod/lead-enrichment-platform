@@ -60,6 +60,9 @@ async function main() {
     await page.fill('input[name="username"]', email)
     await page.fill('input[name="password"]', password)
     await page.click('button[type="submit"]')
+    // Wait for the post-login navigation itself: with loading boundaries the
+    // network can go idle before the redirect away from /login lands.
+    await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {})
     await page.waitForLoadState('networkidle')
     check('login lands on a dashboard page', !page.url().includes('/login'), page.url())
 
