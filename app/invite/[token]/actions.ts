@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { notifyOrg } from '@/lib/notifications'
 import { createClient } from '@/lib/supabase/server'
@@ -34,5 +35,6 @@ export async function acceptInviteAction(
 
   // Refresh so the new JWT carries the org_id / org_role claims.
   await supabase.auth.refreshSession()
+  revalidatePath('/', 'layout')
   redirect('/property-scrape')
 }

@@ -172,6 +172,7 @@ export async function leaveOrgAction(
   const { error } = await supabase.rpc('leave_organization')
   if (error) return { error: error.message }
   await supabase.auth.refreshSession()
+  revalidatePath('/', 'layout')
 
   const ctx = await getOrgContext()
   if (!ctx) redirect('/welcome')

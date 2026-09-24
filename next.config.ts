@@ -8,6 +8,18 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./lib/integrations/*.yaml"],
   },
+
+  experimental: {
+    // Every dashboard page is force-dynamic, and Next defaults dynamic
+    // segments to a 0s client cache — so Scrape -> Leads -> Scrape re-renders
+    // on the server all three times. 30s keeps a just-visited page instant on
+    // return. Anything that changes WHICH org's data a page shows (workspace
+    // switch, leaving an org) must purge this cache with revalidatePath.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
 };
 
 export default nextConfig;

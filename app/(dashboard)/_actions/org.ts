@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgContext } from '@/lib/orgs/context'
@@ -16,6 +17,9 @@ export async function switchOrgAction(formData: FormData): Promise<void> {
   if (error) return // not a member / not signed in — nav simply stays put
 
   await supabase.auth.refreshSession()
+  // The client router cache (staleTimes) would otherwise replay the previous
+  // org's pages for up to 30s.
+  revalidatePath('/', 'layout')
 
   const ctx = await getOrgContext()
   const home = ctx?.modules.includes('property')
