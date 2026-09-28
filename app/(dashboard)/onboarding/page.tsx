@@ -241,10 +241,12 @@ export default function OnboardingPage() {
             next="lifecycle"
           >
             <p>
-              Submitting a scrape on <Code>/scrape</Code> queues one job per
-              keyword. A VM worker picks it up within ~5 seconds, opens a real
-              Chromium browser through GoLogin (with the country&apos;s residential
-              proxy), and writes the results back into Supabase.
+              Submitting a scrape on <Code>/scrape/new</Code> creates one job per
+              keyword and starts it straight away: Google is searched as someone
+              in the chosen country, the results (organic and page-one ads) land
+              in about a minute per keyword, and the enrichment stages you picked
+              run inside the app afterwards. The one-click demos on that page
+              fill everything in for a casino, VPN or property run.
             </p>
             <ul>
               <li>
@@ -252,11 +254,9 @@ export default function OnboardingPage() {
                 own job. Up to 500 chars each.
               </li>
               <li>
-                <strong>Country</strong> — picks the GoLogin profile and proxy
-                location. Profiles flagged{' '}
-                <span className="text-amber-700">⚠ needs login</span> mean
-                Google requires a logged-in account before serving PPC ads
-                there.
+                <strong>Country</strong> — which Google market is searched;
+                results match what someone in that country sees. Thirty-two
+                countries are available today.
               </li>
               <li>
                 <strong>Search language</strong> — sets <Code>&hl=</Code> on the

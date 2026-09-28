@@ -346,7 +346,11 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   `/scrape/today`, duplicate-warning modal, `?demo=casino|vpn|property` one-click presets
   (2 keywords × 2 pages, affiliate+contact). `scripts/orgs/verify-scrape-runner.ts` runs a
   real demo end to end (costs 2 Apify runs); `scripts/orgs/seed-demo-scrapes.ts` queues the
-  three demo batches under the admin account. ⚠ Not run here: s-tag extraction, PPC
+  three demo batches under the admin account. **Live examples seeded 2026-09-29 under
+  admin@optinetsolutions.com** (visible on /scrape → Everyone or as admin): casino GB 18+9
+  leads / 9 affiliates / 7 with contacts; VPN GB 14+13 leads / 10 affiliates / 14 with
+  contacts; property MT 9+15 leads / 18 with contacts. The owner's original stuck job
+  ("best vpn for streaming" MT) also completed (16 leads). ⚠ Not run here: s-tag extraction, PPC
   screenshots, social engines (all need the browser fleet). ⚠ Apify Starter has no
   concurrency cap but each run costs ~$0.003/page.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
