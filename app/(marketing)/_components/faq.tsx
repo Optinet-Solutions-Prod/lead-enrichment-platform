@@ -1,7 +1,7 @@
 const FAQ = [
   {
     q: 'Where does the data come from?',
-    a: 'From public sources we scrape on your behalf: direct-from-owner property sites, Maltapark classifieds, the MTA licence register, Airbnb (via a real-browser crawl), and Google / Bing search results for the affiliate module. Every lead links back to the listing or page it was found on.',
+    a: 'From public sources we scrape on your behalf: direct-from-owner property sites, Maltapark classifieds, the MTA licence register, Airbnb (via a real-browser crawl), and Google / Bing search results for partner and publisher discovery. Every lead links back to the listing or page it was found on.',
   },
   {
     q: 'What is a credit, and what does one cost?',
@@ -18,6 +18,10 @@ const FAQ = [
   {
     q: 'Is this compliant with the platforms you scrape?',
     a: 'We only collect what a listing or page shows publicly, keep one record per website, and never automate bulk contact reveals on login-gated platforms (Maltapark accounts, Airbnb messaging) — those are worked by hand, sustainably. You are responsible for how you contact people under GDPR.',
+  },
+  {
+    q: 'Does it send the outreach for me?',
+    a: 'Not yet. It gives you the contact, the context, a status on every lead and a follow-up reminder on the day — you send from your own email or WhatsApp, so deliverability and tone stay yours. Sequences are on the roadmap.',
   },
   {
     q: 'What happens when I run out of credits?',

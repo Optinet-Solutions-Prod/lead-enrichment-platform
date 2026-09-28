@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getBillingEnabled, getOrgBilling } from '@/lib/billing'
 import { getCreditsBalance } from '@/lib/credits'
 import { getOrgContext } from '@/lib/orgs/context'
+import { todayIso } from '@/lib/outreach'
 import { listSourceDefs } from '@/lib/sources/custom'
 import { airbnbCreditCost } from '@/lib/sources/execute'
 import { SOURCE_TEMPLATE_YAML } from '@/lib/sources/template'
@@ -12,6 +13,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { TourController } from '../_components/tour-controller'
 import { GettingStarted, type ChecklistItem } from './_components/getting-started'
 import { ManageSources } from './_components/manage-sources'
+import { OutreachPulse, type DueLead } from './_components/outreach-pulse'
 import { RunForm } from './_components/run-form'
 
 export const dynamic = 'force-dynamic'
@@ -63,6 +65,11 @@ export default async function PropertyScrapePage() {
     { count: memberCount },
     { count: integrationCount },
     { data: profileRow },
+    { count: contactedCount },
+    { count: repliedCount },
+    { count: wonCount },
+    { count: dueCount },
+    { data: dueRows },
   ] = await Promise.all([
     listSourceDefs(ctx.orgId),
     getCreditsBalance(ctx.orgId),
@@ -73,7 +80,36 @@ export default async function PropertyScrapePage() {
     svc.from('org_members').select('user_id', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
     svc.from('org_integrations').select('provider', { count: 'exact', head: true }).eq('org_id', ctx.orgId),
     svc.from('user_profiles').select('tour_state').eq('id', ctx.userId).maybeSingle(),
+    svc.from('property_leads').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).neq('outreach_status', 'new'),
+    svc.from('property_leads').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('outreach_status', 'replied'),
+    svc.from('property_leads').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('outreach_status', 'won'),
+    svc
+      .from('property_leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', ctx.orgId)
+      .lte('next_follow_up_at', todayIso())
+      .not('outreach_status', 'in', '(won,lost)'),
+    svc
+      .from('property_leads')
+      .select('id, owner_name, location, contact_phone, next_follow_up_at, outreach_status')
+      .eq('org_id', ctx.orgId)
+      .lte('next_follow_up_at', todayIso())
+      .not('outreach_status', 'in', '(won,lost)')
+      .order('next_follow_up_at', { ascending: true })
+      .limit(5),
   ])
+  const outreachCounts = {
+    contacted: contactedCount ?? 0,
+    replied: repliedCount ?? 0,
+    won: wonCount ?? 0,
+    due: dueCount ?? 0,
+  }
+  const dueLeads = (dueRows ?? []) as DueLead[]
+  const dueHref = `/property-leads?${new URLSearchParams([
+    ['f', `next_follow_up_at:lte:${todayIso()}`],
+    ['f', 'outreach_status:isnot:won'],
+    ['f', 'outreach_status:isnot:lost'],
+  ]).toString()}`
   const canManage = ctx.orgRole === 'owner' || ctx.orgRole === 'admin'
   const showCredits = billingEnabled && orgBilling.mode === 'credits'
   const tourSeen = profileRow?.tour_state != null
@@ -142,6 +178,8 @@ export default async function PropertyScrapePage() {
       </header>
 
       <GettingStarted items={checklist} />
+
+      <OutreachPulse counts={outreachCounts} due={dueLeads} dueHref={dueHref} />
 
       {/* How the data flows */}
       <section>

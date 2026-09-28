@@ -192,7 +192,7 @@ export default async function HelpPage() {
             Affiliate workspace
           </h2>
           <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
-            This workspace runs the affiliate toolkit: search-result scraping under{' '}
+            This workspace runs the partner-discovery toolkit: search-result scraping under{' '}
             <Link href="/scrape" className="underline underline-offset-2">Scrape</Link>, results under{' '}
             <Link href="/leads" className="underline underline-offset-2">Leads</Link>, captcha clearing
             under Interactive Checkpoints, and per-country browser profiles under Country Profiles.

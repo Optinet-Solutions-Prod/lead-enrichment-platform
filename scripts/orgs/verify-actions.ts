@@ -128,6 +128,14 @@ async function main() {
         `active=${prof?.active_org_id}`,
       )
     }
+    // Outreach tracking renders on Owner Leads (status select per row). The
+    // active workspace here is Property Management, which has real leads —
+    // render-only, nothing is changed.
+    await page.goto(`${APP}/property-leads`)
+    await page.waitForLoadState('networkidle')
+    const outreachSelects = await page.locator('select[name="status"]').count()
+    check('outreach editor renders on Owner Leads rows', outreachSelects > 0, `found ${outreachSelects}`)
+
     check('no 5xx responses during the whole flow', serverErrors.length === 0, serverErrors.join(' | '))
   } finally {
     await browser.close()

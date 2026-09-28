@@ -177,7 +177,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         // What the AI analysis found: confirmed affiliates, the brands they
         // promote, their CTA links, and the manual S-tag worklist.
-        label: 'Affiliates (AI)',
+        label: 'Partners (AI)',
         module: 'affiliate',
         href: '/affiliates',
         icon: Sparkles,

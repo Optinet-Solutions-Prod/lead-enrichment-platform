@@ -10,6 +10,7 @@ import {
 } from '../_lib/query'
 import { WebsiteActions, WebsiteFacts } from '../_components/website-detail'
 import { Appearances } from '../_components/appearances'
+import { OutreachEditor } from '../../_components/outreach-editor'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,9 +133,26 @@ export default async function WebsitePage({ params, searchParams }: Props) {
         {/* The actions belong beside the identity, not stacked above the
             content as three panels of explanatory prose. They need the
             enriched lead, so they stream in with it. */}
-        <Suspense fallback={<ActionsSkeleton />}>
-          <ActionsSlot primaryLeadId={primaryLeadId} leadIds={leadIds} domain={domain} />
-        </Suspense>
+        <div className="flex flex-wrap items-start gap-4">
+          {profile && (
+            <div className="min-w-[18rem]">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+                Outreach
+              </p>
+              <OutreachEditor
+                kind="website"
+                id={profile.id}
+                status={profile.outreach_status}
+                nextFollowUpAt={profile.next_follow_up_at}
+                note={profile.outreach_note}
+                contactedAt={profile.contacted_at}
+              />
+            </div>
+          )}
+          <Suspense fallback={<ActionsSkeleton />}>
+            <ActionsSlot primaryLeadId={primaryLeadId} leadIds={leadIds} domain={domain} />
+          </Suspense>
+        </div>
       </header>
 
       <Verdicts site={site} />

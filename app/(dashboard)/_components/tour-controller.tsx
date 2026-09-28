@@ -105,9 +105,9 @@ const AFFILIATE_STEPS: DriveStep[] = [
   {
     element: '[data-tour="nav-affiliates"]',
     popover: {
-      title: 'Affiliates (AI)',
+      title: 'Partners (AI)',
       description:
-        'What the AI analysis found: confirmed affiliates, the brands they promote and their outbound links — when the analysis is enabled.',
+        'What the AI analysis found: sites that already promote products like yours, the brands they push and their outbound links — when the analysis is enabled.',
     },
   },
   {

@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { getShadowContext } from '@/lib/shadow-filter'
 import { applyShadowFilter } from '@/lib/shadow-filter'
 import { createServiceClient } from '@/lib/supabase/service'
+import type { OutreachStatus } from '@/lib/outreach'
 import { loadLeadDetail, type LeadDetail } from '../../leads/_lib/detail-query'
 import { DEFAULT_RECENCY_BANDS, recencyBand, type RecencyBand } from '@/lib/website-profiles/recency'
 
@@ -43,6 +44,10 @@ export type WebsiteProfile = {
   brand: string | null
   has_contact_details: boolean | null
   has_s_tags: boolean | null
+  outreach_status: OutreachStatus
+  contacted_at: string | null
+  next_follow_up_at: string | null
+  outreach_note: string | null
 }
 
 /** One SERP appearance of this website — the genuinely per-row facts. */
@@ -151,6 +156,7 @@ export async function loadWebsiteSummary(rawDomain: string): Promise<WebsiteSumm
         'ai_is_affiliate, ai_affiliate_reason, ai_contact_page_url',
         'ai_cta_count, ai_brand_count',
         'is_affiliate, is_rooster_partner, brand, has_contact_details, has_s_tags',
+        'outreach_status, contacted_at, next_follow_up_at, outreach_note',
       ].join(', '),
     )
     .eq('normalized_domain', domain)

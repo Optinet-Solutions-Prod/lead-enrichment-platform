@@ -40,6 +40,7 @@ export const PLANS: Plan[] = [
     features: [
       'Every data page: Owner Leads, PM Prospects, Airbnb, licence register',
       'All built-in sources',
+      'Outreach status, notes and follow-up reminders',
       'Guided tour + getting-started checklist',
       'Community help',
     ],
@@ -93,7 +94,7 @@ export const PLANS: Plan[] = [
     members: 'Unlimited members & workspaces',
     features: [
       'Everything in Growth',
-      'AI affiliate analysis with CTA-link extraction',
+      'AI partner analysis — which brands a site already promotes',
       'Website profiles with verdict expiry & system flags',
       'Invoiced billing (EUR or USD)',
       'Dedicated onboarding',

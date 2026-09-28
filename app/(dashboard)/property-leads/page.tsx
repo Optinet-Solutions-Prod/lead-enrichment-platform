@@ -6,8 +6,10 @@ import { PROPERTY_LEADS_COLUMNS } from '@/lib/filters/columns-property-leads'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import { clampPageSize } from '@/lib/page-size'
 import { getOrgContext } from '@/lib/orgs/context'
+import { todayIso, type OutreachStatus } from '@/lib/outreach'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { OutreachEditor } from '../_components/outreach-editor'
 import { PageIntro } from '../_components/page-intro'
 import { Pagination } from '../_components/pagination'
 import { SortHeader } from '../_components/sort-header'
@@ -29,6 +31,10 @@ type LeadRow = {
   scraped_at: string
   airbnb_url: string | null
   airbnb_match_basis: string | null
+  outreach_status: OutreachStatus
+  contacted_at: string | null
+  next_follow_up_at: string | null
+  outreach_note: string | null
 }
 
 type SearchParams = Record<string, string | string[] | undefined>
@@ -74,7 +80,7 @@ export default async function PropertyLeadsPage({
   // Typed as plain `string` so supabase-js doesn't parse the literal into a
   // deep generic (TS2589 when the builder is threaded through applyFilters).
   const cols: string =
-    'id, source_site, listing_url, title, price_text, location, owner_name, contact_phone, contact_email, contact_type, notes, scraped_at, airbnb_url, airbnb_match_basis'
+    'id, source_site, listing_url, title, price_text, location, owner_name, contact_phone, contact_email, contact_type, notes, scraped_at, airbnb_url, airbnb_match_basis, outreach_status, contacted_at, next_follow_up_at, outreach_note'
   let query = svc.from('property_leads').select(cols, { count: 'exact' }).eq('org_id', ctx.orgId)
   if (siteFilter) query = query.eq('source_site', siteFilter)
 
@@ -113,6 +119,8 @@ export default async function PropertyLeadsPage({
     { data: siteRows },
     { count: phoneCount },
     { count: emailCount },
+    { count: contactedCount },
+    { count: dueCount },
   ] = await Promise.all([
     query,
     // Per-site chips (always across the FULL table, not the filtered view).
@@ -129,6 +137,17 @@ export default async function PropertyLeadsPage({
       .eq('org_id', ctx.orgId)
       .not('contact_email', 'is', null)
       .neq('contact_email', ''),
+    svc
+      .from('property_leads')
+      .select('id', { head: true, count: 'exact' })
+      .eq('org_id', ctx.orgId)
+      .neq('outreach_status', 'new'),
+    svc
+      .from('property_leads')
+      .select('id', { head: true, count: 'exact' })
+      .eq('org_id', ctx.orgId)
+      .lte('next_follow_up_at', todayIso())
+      .not('outreach_status', 'in', '(won,lost)'),
   ])
   // PGRST103 = requested page is past the last row (e.g. an empty org) — render empty.
   if (error && error.code !== 'PGRST103') throw new Error(`Failed to load property leads: ${error.message}`)
@@ -143,6 +162,13 @@ export default async function PropertyLeadsPage({
   const total = (siteRows ?? []).length
   const withPhone = phoneCount ?? 0
   const withEmail = emailCount ?? 0
+  const contacted = contactedCount ?? 0
+  const due = dueCount ?? 0
+  const dueHref = `/property-leads?${new URLSearchParams([
+    ['f', `next_follow_up_at:lte:${todayIso()}`],
+    ['f', 'outreach_status:isnot:won'],
+    ['f', 'outreach_status:isnot:lost'],
+  ]).toString()}`
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -154,7 +180,7 @@ export default async function PropertyLeadsPage({
         statsLine={
           siteFilter
             ? `showing ${filteredTotal.toLocaleString()} from ${siteFilter}`
-            : `${total.toLocaleString()} leads · ${withPhone} with phone · ${withEmail} with email`
+            : `${total.toLocaleString()} leads · ${withPhone} with phone · ${withEmail} with email · ${contacted} contacted${due > 0 ? ` · ${due} follow-up${due === 1 ? '' : 's'} due` : ''}`
         }
         relations={[
           { href: '/property-scrape', label: 'Collect more leads' },
@@ -178,9 +204,10 @@ export default async function PropertyLeadsPage({
               makes sense — most are selling, not hosting.
             </p>
             <p>
-              <strong>What to do with it (plan steps 1–2):</strong> filter to leads with a
-              phone, pick 30–50, and run a personal outreach round — call or WhatsApp,
-              pitching management for their property. Track who responds before scaling.
+              <strong>Working the list:</strong> filter to leads with a phone, pick 30–50, and
+              run a personal outreach round — call or WhatsApp, pitching management for their
+              property. Set the <strong>Outreach</strong> status on each row as you go, add a
+              follow-up date, and the home page reminds you on the day.
             </p>
           </>
         }
@@ -198,6 +225,14 @@ export default async function PropertyLeadsPage({
         >
           All ({total})
         </Link>
+        {due > 0 && (
+          <Link
+            href={dueHref}
+            className="rounded-full border border-rose-300 bg-rose-50 px-2.5 py-1 text-[12px] text-rose-800 hover:bg-rose-100"
+          >
+            Follow-ups due ({due})
+          </Link>
+        )}
         {sites.map(([site, count]) => (
           <Link
             key={site}
@@ -217,7 +252,7 @@ export default async function PropertyLeadsPage({
       <AdvancedFilters columns={PROPERTY_LEADS_COLUMNS} preserve={['site']} />
 
       <div className="overflow-x-auto rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
-        <table className="w-full min-w-[1080px] text-left text-[13px]">
+        <table className="w-full min-w-[1380px] text-left text-[13px]">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               <th className="px-3 py-2"><SortHeader columnKey="source_site" label="Source" sortable /></th>
@@ -229,12 +264,13 @@ export default async function PropertyLeadsPage({
               <th className="px-3 py-2"><SortHeader columnKey="contact_email" label="Email" sortable /></th>
               <th className="px-3 py-2"><SortHeader columnKey="contact_type" label="Type" sortable /></th>
               <th className="px-3 py-2"><SortHeader columnKey="airbnb_match_basis" label="Airbnb" sortable /></th>
+              <th className="px-3 py-2"><SortHeader columnKey="outreach_status" label="Outreach" sortable /></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-[color:var(--color-text-secondary)]">
+                <td colSpan={10} className="px-3 py-6 text-center text-[color:var(--color-text-secondary)]">
                   No property leads{siteFilter ? ` for ${siteFilter}` : ''} yet.
                 </td>
               </tr>
@@ -332,6 +368,17 @@ export default async function PropertyLeadsPage({
                   ) : (
                     <span className="text-[color:var(--color-text-secondary)]">—</span>
                   )}
+                </td>
+                <td className="px-3 py-2">
+                  <OutreachEditor
+                    kind="lead"
+                    id={r.id}
+                    status={r.outreach_status}
+                    nextFollowUpAt={r.next_follow_up_at}
+                    note={r.outreach_note}
+                    contactedAt={r.contacted_at}
+                    compact
+                  />
                 </td>
               </tr>
             ))}

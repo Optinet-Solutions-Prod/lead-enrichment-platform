@@ -42,10 +42,10 @@ export function CreateOrgForm() {
           <input type="radio" name="vertical" value="affiliate" className="mt-0.5" />
           <span>
             <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
-              Affiliate scraping
+              Partner &amp; publisher discovery
             </span>
             <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-              Search-result scraping, lead enrichment and checkpoint tooling.
+              Find the websites ranking for your keywords, the people behind them, and reach out.
             </span>
           </span>
         </label>

@@ -49,7 +49,7 @@ export default async function AffiliatesPage({ searchParams }: { searchParams: P
         <div className="min-w-0">
           <h1 className="inline-flex items-center gap-2 text-[16px] font-semibold text-[color:var(--color-text-primary)]">
             <Sparkles className="h-4 w-4 text-[color:var(--color-text-secondary)]" />
-            Affiliates found by AI
+            Partner sites found by AI
           </h1>
           <p className="mt-0.5 max-w-3xl text-[12px] text-[color:var(--color-text-secondary)]">
             Websites that survived the relevance and not-relevant trim, then were opened and judged. Each row shows how

@@ -282,6 +282,27 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   ASSERTS both tours auto-start; smoke checks `/`, `/pricing`, `/login` are reachable
   signed-out and the app redirects signed-out (29 pages + 4 auth-gate checks). Gate:
   tsc, eslint, build, smoke, verify-actions, verify-websites 21/21, tenancy 30/30 — green.
+- ✅ **Repositioning + outreach tracking (2026-09-28, migration `20260928120000`, applied
+  live):** owner's direction — casino/iGaming affiliates are Optinet's COMPETITORS, never
+  customers, and the product is "lead → outreach → monitor", not scraping. Research
+  (Grovia/Publisher Discovery/Breezy stop at discovery; affiliate spend: e-commerce 38%,
+  finance 15%, SaaS 9%; SaaS 22.5% recurring commissions, hosting longest cookies) →
+  landing page now leads with the four-stage journey, a "Who it's for" grid of ten
+  industries (property management flagged as live; VPN, hosting, B2B SaaS, fintech,
+  e-commerce, cybersecurity, education, travel, insurance comparison), services incl.
+  "Partner & publisher discovery" and "Outreach tracking", a team section, and an honest
+  FAQ ("Does it send the outreach? Not yet — sequences on the roadmap"). All casino /
+  affiliate wording scrubbed from public surfaces; nav "Partners (AI)", welcome "Partner &
+  publisher discovery" (module key stays `affiliate`, URLs unchanged). **Outreach layer
+  (backs the claim):** `outreach_status` enum (new/contacted/replied/won/not_now/lost) +
+  `contacted_at` / `next_follow_up_at` / `outreach_note` on BOTH `property_leads` (org-
+  scoped) and `website_profiles`; one server action (`_actions/outreach.ts`) + one client
+  editor (`OutreachEditor`, compact in the Owner Leads table, full on the website page);
+  filterable/sortable columns; "Follow-ups due" chip; **Outreach pulse** card on Collect
+  Data (contacted/replied/won + the due list). Free on every plan. ⚠ Still to do before
+  selling discovery to other industries: `lib/ai-analysis` prompts are casino-tuned (from
+  prod) — make them vertical-neutral / keyword-driven. verify-actions asserts the editor
+  renders on Owner Leads.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing
