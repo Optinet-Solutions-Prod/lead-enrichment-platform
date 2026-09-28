@@ -1,5 +1,6 @@
 'use client'
 
+import { PROPERTY_MODULE_ENABLED } from '@/lib/modules'
 import { useActionState } from 'react'
 import { createOrganizationAction, type CreateOrgState } from '../actions'
 
@@ -38,17 +39,19 @@ export function CreateOrgForm() {
             </span>
           </span>
         </label>
-        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
-          <input type="radio" name="vertical" value="property" className="mt-0.5" />
-          <span>
-            <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
-              Property owner leads
+        {PROPERTY_MODULE_ENABLED && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
+            <input type="radio" name="vertical" value="property" className="mt-0.5" />
+            <span>
+              <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
+                Property owner leads
+              </span>
+              <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+                Find property owners listing without an agent, cross-match Airbnb, win management clients.
+              </span>
             </span>
-            <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-              Find property owners listing without an agent, cross-match Airbnb, win management clients.
-            </span>
-          </span>
-        </label>
+          </label>
+        )}
       </fieldset>
 
       {state?.error && (

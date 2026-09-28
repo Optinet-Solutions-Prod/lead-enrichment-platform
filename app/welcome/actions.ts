@@ -1,5 +1,6 @@
 'use server'
 
+import { PROPERTY_MODULE_ENABLED } from '@/lib/modules'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { notifyUser } from '@/lib/notifications'
@@ -17,7 +18,7 @@ export async function createOrganizationAction(
     return { error: 'Organization name must be at least 2 characters.' }
   }
   const vertical = String(formData.get('vertical') ?? 'affiliate')
-  const modules = vertical === 'affiliate' ? ['affiliate'] : ['property']
+  const modules = vertical === 'property' && PROPERTY_MODULE_ENABLED ? ['property'] : ['affiliate']
 
   const supabase = await createClient()
   const {
@@ -36,11 +37,11 @@ export async function createOrganizationAction(
     kind: 'welcome',
     title: 'Welcome! Your workspace starts with 100 free credits',
     body: 'Enough for a full pilot batch — run your first scrape to see it in action.',
-    href: vertical === 'affiliate' ? '/scrape' : '/property-scrape',
+    href: modules.includes('property') ? '/property-scrape' : '/scrape',
   })
 
   // Refresh so the new JWT carries the org_id / org_role claims.
   await supabase.auth.refreshSession()
   revalidatePath('/', 'layout')
-  redirect(vertical === 'affiliate' ? '/scrape' : '/property-scrape')
+  redirect(modules.includes('property') ? '/property-scrape' : '/scrape')
 }

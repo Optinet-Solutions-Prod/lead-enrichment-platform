@@ -1,11 +1,11 @@
 const FAQ = [
   {
     q: 'Where does the data come from?',
-    a: 'From public sources we scrape on your behalf: Google and Bing results for your keywords in each country (desktop and mobile, organic and paid), creator platforms (YouTube, TikTok, Twitch, Kick, Snapchat, Telegram) and Facebook’s Ad Library, plus the websites themselves for contact details. The property module adds direct-from-owner listing sites, classifieds, the short-let licence register and Airbnb. Every record links back to the page it was found on.',
+    a: 'From public sources we scrape on your behalf: Google and Bing results for your keywords in each country (desktop and mobile, organic and paid), creator platforms (YouTube, TikTok, Twitch, Kick, Snapchat, Telegram) and Facebook’s Ad Library, plus the websites themselves for contact details. Every record links back to the page it was found on.',
   },
   {
     q: 'What is a credit, and what does one cost?',
-    a: 'Keyword searches are metered by a daily quota per user (one keyword on one engine in one country is one search), not by credits. Credits pay for source runs: most are 1 credit; the Airbnb crawl is 5 on your own Apify key or 15 on ours because it uses real browser compute. AI classification, contact enrichment, filters, exports, outreach tracking and workflows are included. New workspaces start with 100 credits.',
+    a: 'Keyword searches are metered by a daily quota per user (one keyword on one engine in one country is one search), not by credits. Credits pay for source runs: 1 credit per run of a built-in or custom source. AI classification, contact enrichment, filters, exports, outreach tracking and workflows are included. New workspaces start with 100 credits.',
   },
   {
     q: 'Do I need my own API keys?',

@@ -60,7 +60,7 @@ export const PLANS: Plan[] = [
       'Everything in Free',
       'Workflows — save a recipe, run it in one click',
       'Facebook Ad Library — who already advertises in your niche',
-      'Property owner leads module (Airbnb + licence cross-match)',
+      'Advanced search across every batch',
       'Custom YAML sources (bring any JSON API)',
       'Email support',
     ],
@@ -152,10 +152,8 @@ export const CREDIT_USAGE = [
   { action: 'Keyword search (one keyword × engine × country)', credits: 'daily quota' },
   { action: 'AI classification, contact enrichment, outreach tracking', credits: 'free' },
   { action: 'Source run (any built-in or custom source)', credits: '1' },
-  { action: 'Licence-register refresh', credits: '1' },
-  { action: 'Airbnb crawl on your own Apify key', credits: '5' },
-  { action: 'Airbnb crawl on the platform key', credits: '15' },
-  { action: 'Airbnb cross-match, filters, exports, workflows', credits: 'free' },
+  { action: 'Custom YAML source run (bring any JSON API)', credits: '1' },
+  { action: 'Filters, exports, workflows', credits: 'free' },
 ]
 
 export function money(amount: number, currency: Currency): string {

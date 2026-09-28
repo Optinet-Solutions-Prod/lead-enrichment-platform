@@ -73,7 +73,7 @@ async function main() {
       .waitFor({ timeout: 6000 })
       .then(() => true)
       .catch(() => false)
-    check('guided tour auto-starts for a new account (property workspace)', sawPropertyTour)
+    check('guided tour auto-starts for a new account', sawPropertyTour)
     if (sawPropertyTour) {
       await page.keyboard.press('Escape')
       await page.waitForTimeout(800)
@@ -97,7 +97,7 @@ async function main() {
     }
 
     for (let round = 1; round <= 3; round++) {
-      await page.goto(`${APP}/property-scrape`)
+      await page.goto(`${APP}/scrape`, { waitUntil: 'load' })
       await page.waitForLoadState('networkidle')
       await page.keyboard.press('Escape')
       await page.waitForTimeout(300)
@@ -129,13 +129,24 @@ async function main() {
         `active=${prof?.active_org_id}`,
       )
     }
-    // Outreach tracking renders on Owner Leads (status select per row). The
-    // active workspace here is Property Management, which has real leads —
-    // render-only, nothing is changed.
-    await page.goto(`${APP}/property-leads`)
-    await page.waitForLoadState('networkidle')
-    const outreachSelects = await page.locator('select[name="status"]').count()
-    check('outreach editor renders on Owner Leads rows', outreachSelects > 0, `found ${outreachSelects}`)
+    // Outreach tracking renders on a website page (status select in the
+    // header). Render-only, nothing is changed.
+    const { data: anyProfile } = await svc
+      .from('website_profiles')
+      .select('normalized_domain')
+      .not('first_lead_id', 'is', null)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const domain = (anyProfile as { normalized_domain: string } | null)?.normalized_domain
+    if (domain) {
+      await page.goto(`${APP}/websites/${encodeURIComponent(domain)}`, { waitUntil: 'load' })
+      await page.locator('select[name="status"]').first().waitFor({ timeout: 15_000 }).catch(() => {})
+      const outreachSelects = await page.locator('select[name="status"]').count()
+      check('outreach editor renders on a website page', outreachSelects > 0, `found ${outreachSelects} on ${domain}`)
+    } else {
+      check('outreach editor renders on a website page', false, 'no website profile to open')
+    }
 
     check('no 5xx responses during the whole flow', serverErrors.length === 0, serverErrors.join(' | '))
   } finally {

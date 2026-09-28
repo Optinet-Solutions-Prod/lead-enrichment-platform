@@ -134,7 +134,7 @@ type Props = {
   script?: TourScript
 }
 
-export function TourController({ autoStart, script = 'property' }: Props) {
+export function TourController({ autoStart, script = 'affiliate' }: Props) {
   const searchParams = useSearchParams()
   const forced = searchParams.get('tour') === '1'
   const startedRef = useRef(false)

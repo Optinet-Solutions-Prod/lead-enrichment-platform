@@ -15,9 +15,9 @@ integrations:
     name: Apify
     category: Scraping
     description: >-
-      Real-browser scraping platform. Powers the Airbnb market crawls and can
-      crack bot-walled sites. Connecting your own account makes all Apify runs
-      bill to it instead of the platform default.
+      Real-browser scraping platform behind the sources that need one.
+      Connecting your own account makes those runs bill to it instead of the
+      platform default.
     docs_url: https://console.apify.com/account/integrations
     fields:
       - key: api_token

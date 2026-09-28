@@ -1,3 +1,4 @@
+import { PROPERTY_MODULE_ENABLED } from '@/lib/modules'
 import { Coins, Infinity as InfinityIcon } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { CREDIT_PACKS, getBillingEnabled, getOrgBilling } from '@/lib/billing'
@@ -13,10 +14,17 @@ export const dynamic = 'force-dynamic'
 
 const COST_ROWS = [
   { action: 'Source scrape run', detail: 'Any built-in or custom source (per source, per run)', cost: String(CREDIT_COSTS.source_run) },
-  { action: 'Licence register refresh', detail: 'Full MTA short-let register re-download', cost: String(CREDIT_COSTS.mta_refresh) },
-  { action: 'Airbnb crawl (your Apify key)', detail: 'Real-browser crawl billed to YOUR Apify account', cost: String(CREDIT_COSTS.airbnb_start_byo) },
-  { action: 'Airbnb crawl (platform key)', detail: 'Same crawl on our Apify account (~$1 of compute)', cost: String(CREDIT_COSTS.airbnb_start_platform) },
-  { action: 'Airbnb cross-match', detail: 'Linking Owner Leads to Airbnb hosts', cost: 'free' },
+  { action: 'Keyword search (Google)', detail: 'Metered by the daily quota, not credits', cost: 'quota' },
+  { action: 'AI classification, contact extraction, outreach tracking', detail: 'Included with every batch', cost: 'free' },
+  // The property module's rows only show while that module is enabled.
+  ...(PROPERTY_MODULE_ENABLED
+    ? [
+        { action: 'Licence register refresh', detail: 'Full MTA short-let register re-download', cost: String(CREDIT_COSTS.mta_refresh) },
+        { action: 'Airbnb crawl (your Apify key)', detail: 'Real-browser crawl billed to YOUR Apify account', cost: String(CREDIT_COSTS.airbnb_start_byo) },
+        { action: 'Airbnb crawl (platform key)', detail: 'Same crawl on our Apify account (~$1 of compute)', cost: String(CREDIT_COSTS.airbnb_start_platform) },
+        { action: 'Airbnb cross-match', detail: 'Linking Owner Leads to Airbnb hosts', cost: 'free' },
+      ]
+    : []),
 ]
 
 export default async function BillingPage({
@@ -179,7 +187,7 @@ export default async function BillingPage({
         </h2>
         {ledger.length === 0 ? (
           <p className="mt-2 rounded-lg border border-dashed border-[color:var(--color-border)] p-4 text-[13px] text-[color:var(--color-text-secondary)]">
-            Nothing yet — run a scrape on Collect Data or a Workflow and the debit shows up here.
+            Nothing yet — run a source and the debit shows up here.
           </p>
         ) : (
           <div className="mt-2 overflow-x-auto rounded-lg border border-[color:var(--color-border)]">

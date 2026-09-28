@@ -4,7 +4,6 @@ import {
   ArrowRight,
   AtSign,
   Brain,
-  Building2,
   CalendarClock,
   Coins,
   KeyRound,
@@ -29,7 +28,7 @@ const PROOF = [
   { n: '85k+', label: 'search results turned into website profiles' },
   { n: '9', label: 'engines & platforms: Google, Bing, YouTube, TikTok, Twitch, Kick, Snapchat, Telegram, Facebook Ad Library' },
   { n: '10', label: 'contact channels found per site — email, phone, contact form and 7 socials' },
-  { n: '8,294', label: 'property owners mapped by the property module for one market' },
+  { n: '32', label: 'countries you can search as a local, from Malta to Japan' },
 ]
 
 const JOURNEY = [
@@ -103,11 +102,6 @@ const SERVICES = [
     icon: Send,
     title: 'Outreach tracking & monitoring',
     body: 'Status, note and follow-up date on every site. A pulse of contacted, replied, won and due-today on your home page. Workflows rerun weekly and merge only what is new.',
-  },
-  {
-    icon: Building2,
-    title: 'Property owner leads (module)',
-    body: 'For property managers: owners listing without an agent, cross-matched with Airbnb and the short-let licence register, with the same outreach tracking. Switch it on per workspace.',
   },
 ]
 
@@ -209,11 +203,6 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-          <p className="mt-6 text-[13px] text-[color:var(--color-text-secondary)]">
-            Also in the box: a <strong className="font-medium text-[color:var(--color-text-primary)]">property owner leads</strong> module
-            for letting agencies and property managers — live today in Malta with real data — using the
-            same outreach tracking.
-          </p>
         </div>
       </section>
 

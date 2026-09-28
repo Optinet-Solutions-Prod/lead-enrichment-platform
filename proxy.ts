@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { PROPERTY_MODULE_ENABLED, isPropertyRoute } from '@/lib/modules'
 
 /**
  * Protects every route except:
@@ -19,6 +20,15 @@ import { updateSession } from '@/lib/supabase/middleware'
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // The property module is secluded (moving to its own repository): its
+  // routes bounce to the scrape home instead of rendering.
+  if (!PROPERTY_MODULE_ENABLED && isPropertyRoute(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/scrape'
+    url.search = ''
+    return NextResponse.redirect(url)
+  }
 
   // Never gate the scheduler cron, the internal enrichment endpoint (auth'd
   // via INTERNAL_API_TOKEN), the SSO callback (verifies a portal-signed JWT

@@ -23,16 +23,8 @@ const PAGES = [
   '/',
   '/pricing',
   '/overview',
-  '/property-scrape',
-  '/pipeline',
-  '/property-leads',
-  '/property-leads?q=malta&sort=owner_name&order=desc&f=contact_type%3Ais%3Aowner',
-  '/pm-prospects',
-  '/pm-prospects?q=ma&sort=listings_count&order=asc&f=purest%3Aistrue',
-  '/airbnb-listings',
-  '/airbnb-listings?q=sea&sort=host_name&order=asc&page=2',
-  '/hfps-register',
-  '/hfps-register?q=triq&f=island%3Ais%3AGozo&sort=town&order=desc&page=2',
+  '/scrape/new',
+  '/scrape/today',
   '/scrape',
   '/leads',
   '/leads?f=is_relevant%3Aisfalse&show_hidden=1',
@@ -112,7 +104,7 @@ async function main() {
     // The marketing site must be reachable WITHOUT a session, and the app
     // must not be — the proxy allowlist is easy to get wrong in either
     // direction.
-    for (const [page, want] of [['/', 200], ['/pricing', 200], ['/login', 200], ['/property-scrape', 307]] as const) {
+    for (const [page, want] of [['/', 200], ['/pricing', 200], ['/login', 200], ['/scrape', 307]] as const) {
       const res = await fetch(`${APP}${page}`, { redirect: 'manual' })
       const ok = want === 200 ? res.status === 200 : res.status >= 300 && res.status < 400
       if (!ok) failures++

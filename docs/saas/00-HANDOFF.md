@@ -353,6 +353,20 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   ("best vpn for streaming" MT) also completed (16 leads). ⚠ Not run here: s-tag extraction, PPC
   screenshots, social engines (all need the browser fleet). ⚠ Apify Starter has no
   concurrency cap but each run costs ~$0.003/page.
+- ✅ **Property module secluded (2026-09-29):** it is moving to its own repository,
+  `Optinet-Solutions-Prod/property-listings-scraper` (extraction pushed: the module's pages,
+  actions, libs, shell dependency closure, the original migrations, and one paste-able
+  `0001_property_listings.sql` for a fresh Supabase project — tenancy core, user_profiles,
+  system_settings, integrations, activity/notifications, credits + vouchers, property tables,
+  sources/recipes, outreach). In the SaaS the code stays but is dark behind
+  `lib/modules.ts#PROPERTY_MODULE_ENABLED` (env `NEXT_PUBLIC_PROPERTY_MODULE=on` to show it):
+  `getOrgContext()` drops `property` from every org's modules (nav/help/tour hide themselves),
+  `proxy.ts` redirects `/property-scrape|/property-leads|/pm-prospects|/airbnb-listings|
+  /hfps-register|/pipeline` → `/scrape`, login/signup/welcome land on `/scrape`, the welcome
+  picker no longer offers the vertical, landing/pricing/FAQ/billing/help lost the Airbnb and
+  licence-register wording. Data (property_leads, airbnb_listings, hfps_register) is untouched
+  in the SaaS DB until exported. The Google "Property management" demo preset stays — it is
+  search discovery, not the listings module.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

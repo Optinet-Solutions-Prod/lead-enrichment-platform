@@ -1,3 +1,4 @@
+import { visibleModules } from '@/lib/modules'
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -74,7 +75,9 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     .select('enabled_modules')
     .eq('org_id', active.orgId)
     .maybeSingle()
-  const modules = (settings?.enabled_modules as string[] | null) ?? ['property']
+  // The property module is secluded (moving to its own repository); it is
+  // dropped here so nav, help and tours never see it. See lib/modules.ts.
+  const modules = visibleModules((settings?.enabled_modules as string[] | null) ?? ['affiliate'])
 
   return {
     userId: user.id,

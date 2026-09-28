@@ -9,10 +9,10 @@ type Props = {
 }
 
 function safeFrom(from: string | undefined): string {
-  if (!from || /[\r\n\\]/.test(from)) return '/property-scrape'
+  if (!from || /[\r\n\\]/.test(from)) return '/scrape'
   return from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login')
     ? from
-    : '/property-scrape'
+    : '/scrape'
 }
 
 export default async function LoginPage({ searchParams }: Props) {

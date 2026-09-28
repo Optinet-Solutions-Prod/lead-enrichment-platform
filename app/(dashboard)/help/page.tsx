@@ -127,10 +127,9 @@ export default async function HelpPage() {
             Credits in one paragraph
           </h2>
           <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
-            Every scrape debits your organization&apos;s balance up-front: {CREDIT_COSTS.source_run}{' '}
-            credit per source run, {CREDIT_COSTS.mta_refresh} for a licence-register refresh,{' '}
-            {CREDIT_COSTS.airbnb_start_byo} for an Airbnb crawl on your own Apify key (
-            {CREDIT_COSTS.airbnb_start_platform} on the platform key), cross-matching is free.
+            Every source run debits your organization&apos;s balance up-front: {CREDIT_COSTS.source_run}{' '}
+            credit per run. Keyword searches on Google are metered by a daily quota instead, and
+            enrichment, filters and workflows are free.
             New workspaces start with 100 free credits. Balance, price list, packs and the full
             ledger live under{' '}
             <Link href="/settings/billing" className="underline underline-offset-2">
@@ -147,12 +146,14 @@ export default async function HelpPage() {
           Bring your own sources &amp; integrations
         </h2>
         <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
-          <li>
-            <strong className="text-[color:var(--color-text-primary)]">Custom sources:</strong> any
-            JSON API that lists properties can become a source — download the YAML template on{' '}
-            <Link href="/property-scrape" className="underline underline-offset-2">Collect Data</Link>,
-            map the fields, upload.
-          </li>
+          {isProperty && (
+            <li>
+              <strong className="text-[color:var(--color-text-primary)]">Custom sources:</strong> any
+              JSON API that lists properties can become a source — download the YAML template on{' '}
+              <Link href="/property-scrape" className="underline underline-offset-2">Collect Data</Link>,
+              map the fields, upload.
+            </li>
+          )}
           <li>
             <strong className="text-[color:var(--color-text-primary)]">Integrations:</strong> connect
             your own third-party accounts (Apify first) under{' '}

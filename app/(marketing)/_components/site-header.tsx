@@ -36,7 +36,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         <div className="ml-auto hidden items-center gap-2 md:flex">
           {signedIn ? (
             <Link
-              href="/property-scrape"
+              href="/scrape"
               className="rounded-md bg-[color:var(--color-accent)] px-3.5 py-2 text-[13px] font-medium text-[color:var(--color-text-primary)] hover:bg-[color:var(--color-accent-hover)]"
             >
               Open dashboard
@@ -85,7 +85,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
           </nav>
           <div className="mt-2 flex flex-col gap-2 border-t border-[color:var(--color-border)] pt-3">
             {signedIn ? (
-              <Link href="/property-scrape" className="rounded-md bg-[color:var(--color-accent)] px-3.5 py-2.5 text-center text-[14px] font-medium">
+              <Link href="/scrape" className="rounded-md bg-[color:var(--color-accent)] px-3.5 py-2.5 text-center text-[14px] font-medium">
                 Open dashboard
               </Link>
             ) : (
