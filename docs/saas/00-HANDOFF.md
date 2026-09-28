@@ -303,6 +303,23 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   selling discovery to other industries: `lib/ai-analysis` prompts are casino-tuned (from
   prod) — make them vertical-neutral / keyword-driven. verify-actions asserts the editor
   renders on Owner Leads.
+- ✅ **Affiliate-first repositioning (2026-09-28, same day, owner correction):** property /
+  Airbnb is "just another feature"; the MAIN product is affiliate discovery for brands that
+  recruit affiliates (VPN, hosting, SaaS, fintech… — still never casino). Landing page now
+  leads "Recruit the affiliates your competitors already have", five-stage journey Scrape →
+  Classify → Contacts → Outreach → Monitor, ten affiliate-recruiting industries (VPN, hosting,
+  B2B SaaS, fintech/brokers, cybersecurity, e-commerce, education, travel, insurance, health &
+  supplements), property as an "also in the box" module. Product mock is now the Partners
+  (AI) table (fictional VPN-review domains). Proof tiles: 85k+ results profiled, 9 engines &
+  platforms (Google, Bing, YouTube, TikTok, Twitch, Kick, Snapchat, Telegram, FB Ad Library),
+  10 contact channels, 8,294 property owners (module). Pricing features lead with keyword ×
+  country search, contact enrichment and creator search; CREDIT_USAGE states keyword searches
+  are a daily quota (lib/scrape-quota, 20/user/day default), AI + enrichment + outreach free.
+  Auth side panel and FAQ rewritten to match. **Welcome picker now defaults to the affiliate
+  vertical** (`app/welcome/actions.ts` fallback too) → new orgs land on `/scrape`. Scrape form
+  keyword placeholder is a VPN example, not casino. ⚠ Consequence: the default signup path
+  now needs the scraping worker connected (owner-side pending item) — a new affiliate org
+  that queues a keyword today sees the job wait forever.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

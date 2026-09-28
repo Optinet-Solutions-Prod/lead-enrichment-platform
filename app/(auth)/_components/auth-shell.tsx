@@ -37,13 +37,13 @@ export function AuthShell({
 
         <div className="relative max-w-md">
           <h2 className="text-[30px] font-semibold leading-tight tracking-tight">
-            Leads worth calling, from public websites, in minutes.
+            Every affiliate ranking in your market, with a contact, in minutes.
           </h2>
           <ul className="mt-6 flex flex-col gap-3 text-[14px]">
             {[
               '100 free credits — a full pilot batch, no card needed',
-              'Owner name, phone and listing in one row; Airbnb and licence cross-match built in',
-              'Workflows rerun your best sources in one click; credits are on a ledger',
+              'One profile per website: relevance, brands promoted, emails and socials — with the source',
+              'Outreach status and follow-up reminders on every row; workflows rerun weekly',
             ].map(t => (
               <li key={t} className="flex items-start gap-2.5">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
@@ -54,8 +54,8 @@ export function AuthShell({
         </div>
 
         <p className="relative text-[12px] text-[color:var(--color-text-secondary)]">
-          8,294 licensed short-lets · 1,560 Airbnb listings · 18 property sources — mapped for one
-          market already. Yours is next.
+          85k+ search results profiled · 9 engines &amp; platforms · email, phone and 7 social channels per
+          site. Your market is next.
         </p>
       </aside>
 

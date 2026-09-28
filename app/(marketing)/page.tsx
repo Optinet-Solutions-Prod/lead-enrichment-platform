@@ -2,8 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import {
   ArrowRight,
-  BadgeCheck,
-  BedDouble,
+  AtSign,
   Brain,
   Building2,
   CalendarClock,
@@ -21,92 +20,94 @@ import { Pricing } from './_components/pricing'
 import { ProductMock } from './_components/product-mock'
 
 export const metadata: Metadata = {
-  title: 'Lead Engine — from lead to outreach to follow-up, in one place',
+  title: 'Lead Engine — find, classify and recruit the affiliates in your market',
   description:
-    'Find the websites and listings already ranking in your market, get the person behind them, qualify with AI, track every conversation and never miss a follow-up. Start with 100 free credits.',
+    'Scrape every website and creator ranking for your keywords in every country, classify them with AI, pull the contact details, track the outreach and monitor what changes. Start with 100 free credits.',
 }
 
 const PROOF = [
-  { n: '8,294', label: 'licensed short-lets mapped from the official register' },
-  { n: '1,560', label: 'Airbnb listings cross-matched to owners' },
-  { n: '18', label: 'property sources harvested for one market' },
-  { n: '85k+', label: 'search results processed by the discovery engine' },
+  { n: '85k+', label: 'search results turned into website profiles' },
+  { n: '9', label: 'engines & platforms: Google, Bing, YouTube, TikTok, Twitch, Kick, Snapchat, Telegram, Facebook Ad Library' },
+  { n: '10', label: 'contact channels found per site — email, phone, contact form and 7 socials' },
+  { n: '8,294', label: 'property owners mapped by the property module for one market' },
 ]
 
 const JOURNEY = [
   {
     icon: Search,
-    stage: 'Find',
-    title: 'The people already visible in your market',
-    body: 'Owners listing property without an agent. Websites ranking for your keywords in your countries. Every result becomes one record with the listing or page it was found on.',
+    stage: 'Scrape',
+    title: 'Every site and creator ranking for your keywords',
+    body: 'Paste a keyword list, pick a country and language, choose Google, Bing or a creator platform. Desktop and mobile results, organic and paid, land as one profile per website — never counted twice.',
   },
   {
     icon: Brain,
-    stage: 'Qualify',
-    title: 'Noise out, before you spend a minute',
-    body: 'One profile per website, AI that judges relevance to the keyword, obvious non-fits flagged automatically, and cross-matches (Airbnb, licence register) that tell you who is really worth a call.',
+    stage: 'Classify',
+    title: 'Relevant? An affiliate? Promoting whom?',
+    body: 'AI reads each site and answers: on-keyword or noise, affiliate or brand, and which programmes it already promotes through its tracking links. System flags drop social hosts, operators and known non-affiliates automatically.',
+  },
+  {
+    icon: AtSign,
+    stage: 'Contacts',
+    title: 'The person behind the site, with provenance',
+    body: 'Emails, phone numbers, contact forms, Telegram, WhatsApp, Discord, X, LinkedIn, Instagram and Facebook — each with the page it was found on and a confidence score, so you know what to trust.',
   },
   {
     icon: Send,
-    stage: 'Reach',
-    title: 'Contact details and context in the same row',
-    body: 'Phone, email, contact page, socials — with the source. Mark each lead contacted, replied, won or not now, keep a note, and hand the list to a teammate without a spreadsheet.',
+    stage: 'Outreach',
+    title: 'Status, note and next step on every row',
+    body: 'Mark a site contacted, replied, won or not now, keep the note beside the contact, and share one list with the team. No spreadsheet, no double-contacting.',
   },
   {
     icon: CalendarClock,
     stage: 'Monitor',
     title: 'Know when to follow up and what changed',
-    body: 'Follow-up reminders on the day, an outreach pulse on your home page, workflows that rerun weekly and merge only what is new, and verdicts that expire and re-check themselves.',
+    body: 'Follow-up reminders on the day. Workflows that rerun your keywords weekly and merge only what is new. Verdicts and contact checks that expire and re-run themselves.',
   },
 ]
 
 const INDUSTRIES = [
-  {
-    name: 'Property management & letting agencies',
-    find: 'owners listing without an agent, licensed short-lets, self-managing Airbnb hosts',
-    proven: true,
-  },
-  { name: 'VPN & privacy apps', find: 'review sites, “best VPN for…” pages and streaming-unblock guides ranking in each country' },
-  { name: 'Web hosting & domains', find: 'hosting comparisons, WordPress blogs and tutorial sites that already recommend providers' },
-  { name: 'B2B SaaS', find: 'software directories, alternatives pages and niche newsletters in your category' },
-  { name: 'Fintech, brokers & exchanges', find: 'comparison sites, finance educators and calculators ranking for money keywords' },
-  { name: 'E-commerce & DTC brands', find: 'product reviewers, gift guides and coupon publishers in your niche' },
+  { name: 'VPN & privacy', find: '“best VPN for…” reviewers, streaming-unblock guides and privacy YouTubers in each country' },
+  { name: 'Web hosting & domains', find: 'hosting comparisons, WordPress tutorial blogs and speed-test publishers' },
+  { name: 'B2B SaaS & productivity', find: 'software directories, alternatives pages, newsletter writers and tool reviewers' },
+  { name: 'Fintech, brokers & exchanges', find: 'comparison sites, finance educators, calculators and trading channels' },
   { name: 'Cybersecurity & antivirus', find: 'security blogs, IT communities and “is it safe” pages by market' },
+  { name: 'E-commerce & DTC brands', find: 'product reviewers, gift guides, coupon publishers and TikTok creators' },
   { name: 'Online education & courses', find: 'course reviewers, study blogs and career-change communities' },
   { name: 'Travel & booking', find: 'destination guides, itinerary blogs and local-experience publishers' },
   { name: 'Insurance & loan comparison', find: 'finance publishers and local advisors ranking for quote keywords' },
+  { name: 'Health, fitness & supplements', find: 'fitness creators, nutrition blogs and product comparison sites' },
 ]
 
 const SERVICES = [
   {
-    icon: Building2,
-    title: 'Property owner leads',
-    body: 'Owners who list without an agent — name, phone and listing in one row — from direct-from-owner sites, classifieds and the official short-let register. Filter to “has phone” and start calling.',
-  },
-  {
-    icon: BedDouble,
-    title: 'Short-let & Airbnb intelligence',
-    body: 'A real-browser Airbnb crawl, cross-matched against your leads and the licence register, surfaces self-managing hosts — the warmest audience for a management pitch.',
-  },
-  {
     icon: Radar,
-    title: 'Partner & publisher discovery',
-    body: 'Every site ranking for your keywords in your countries, one profile each, judged by AI for relevance and for which brands it already promotes — with the owner’s contact details.',
+    title: 'Affiliate & publisher discovery',
+    body: 'Keyword × country × engine, in one batch. Every ranking website becomes a profile with its keywords, positions, countries and how often it appears — the map of who owns your search results.',
+  },
+  {
+    icon: Brain,
+    title: 'AI classification',
+    body: 'Relevance to the keyword, affiliate-or-not with the reason, and the brands a site already promotes, resolved from its outbound tracking links. Verdicts expire on a schedule so the picture stays current.',
+  },
+  {
+    icon: AtSign,
+    title: 'Contact enrichment',
+    body: 'Emails, phones, contact forms and socials pulled from the site itself, each with source page and confidence. Filter to “has contacts” and your outreach list is ready.',
+  },
+  {
+    icon: Users,
+    title: 'Creator & channel discovery',
+    body: 'The same search on YouTube, TikTok, Twitch, Kick, Snapchat and Telegram, plus Facebook’s Ad Library to see who is already advertising in your niche. Scored, with contacts.',
   },
   {
     icon: Send,
-    title: 'Outreach tracking',
-    body: 'Status, note and next follow-up on every lead. Click-to-call and click-to-email from the row; a follow-ups-due list on the home page every morning.',
+    title: 'Outreach tracking & monitoring',
+    body: 'Status, note and follow-up date on every site. A pulse of contacted, replied, won and due-today on your home page. Workflows rerun weekly and merge only what is new.',
   },
   {
-    icon: Workflow,
-    title: 'Workflows & monitoring',
-    body: 'Save the sources, keyword and cross-match you run every week as a recipe. One click reruns it, merges only what is new, and notifies the team when it finishes.',
-  },
-  {
-    icon: KeyRound,
-    title: 'Your sources, your keys, your team',
-    body: 'Describe any JSON listings API in a short YAML file and it becomes a source. Connect your own API keys for cheaper crawls. Invite teammates, set roles, switch workspaces.',
+    icon: Building2,
+    title: 'Property owner leads (module)',
+    body: 'For property managers: owners listing without an agent, cross-matched with Airbnb and the short-let licence register, with the same outreach tracking. Switch it on per workspace.',
   },
 ]
 
@@ -118,16 +119,16 @@ export default function LandingPage() {
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-1 text-[12px] text-[color:var(--color-text-secondary)]">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Find → qualify → reach → monitor
+            Scrape → classify → contacts → outreach → monitor
           </p>
           <h1 className="mt-4 text-[34px] font-semibold leading-[1.1] tracking-tight md:text-[44px]">
-            Find the right people. Reach them. Never miss the follow-up.
+            Recruit the affiliates your competitors already have.
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-[color:var(--color-text-secondary)]">
-            Lead Engine turns the websites and listings already ranking in your market into a
-            working outreach list — the person behind each one, an AI relevance check, a status on
-            every conversation and a reminder on the day it is due. From first lead to closed
-            conversation, in one place.
+            Lead Engine scrapes every website and creator ranking for your keywords in every
+            country, classifies them with AI, finds the person behind each one, and tracks the
+            outreach until it converts. Built for brands and affiliate managers in VPN, hosting,
+            SaaS, fintech and any market where partners drive growth.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
@@ -149,7 +150,7 @@ export default function LandingPage() {
       <section className="border-y border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-5 py-8 md:grid-cols-4">
           {PROOF.map(p => (
-            <div key={p.n}>
+            <div key={p.label}>
               <p className="text-[26px] font-semibold tabular-nums leading-none">{p.n}</p>
               <p className="mt-1.5 text-[12px] leading-snug text-[color:var(--color-text-secondary)]">{p.label}</p>
             </div>
@@ -161,13 +162,14 @@ export default function LandingPage() {
       <section id="how" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">What it is</p>
         <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">
-          Not a scraper. The whole road from a name on a website to a conversation you are tracking.
+          Not a scraper. The whole road from a search result to a partner you are talking to.
         </h2>
         <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-          Discovery tools stop at a list. Outreach tools start from one you already have. Lead
-          Engine is the four steps in between, built to run our own outbound first.
+          Affiliate networks show you who applied. Discovery tools stop at a list of domains.
+          Outreach tools start from a list you already have. Lead Engine is the five steps in
+          between, built to run our own partner recruitment first.
         </p>
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {JOURNEY.map((j, i) => (
             <div key={j.stage} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-5">
               <div className="flex items-center gap-2">
@@ -190,41 +192,35 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-5 py-16">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Who it’s for</p>
           <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">
-            Any business whose next customer or partner is already visible on a website.
+            Any brand that grows through partners, publishers and creators.
           </h2>
           <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-            If the people you want are listing, publishing, ranking or reviewing in public, Lead
-            Engine can find them, tell you which ones matter, and keep the conversation on track.
+            If your competitors are being reviewed, compared and recommended on websites and
+            channels you have never contacted, those are your next affiliates. Ten markets where
+            that is the whole game:
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {INDUSTRIES.map(ind => (
-              <div
-                key={ind.name}
-                className={[
-                  'rounded-xl border bg-[color:var(--color-bg-primary)] p-4',
-                  ind.proven ? 'border-[color:var(--color-accent-hover)] ring-1 ring-[color:var(--color-accent-hover)]' : 'border-[color:var(--color-border)]',
-                ].join(' ')}
-              >
-                <p className="flex items-start gap-1.5 text-[13px] font-semibold leading-snug">
-                  {ind.proven && <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />}
-                  {ind.name}
-                </p>
+              <div key={ind.name} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
+                <p className="text-[13px] font-semibold leading-snug">{ind.name}</p>
                 <p className="mt-1.5 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
                   <span className="font-medium text-[color:var(--color-text-primary)]">Find:</span> {ind.find}
                 </p>
-                {ind.proven && (
-                  <p className="mt-2 text-[11px] font-medium text-emerald-700">Live today — Malta, with real data</p>
-                )}
               </div>
             ))}
           </div>
+          <p className="mt-6 text-[13px] text-[color:var(--color-text-secondary)]">
+            Also in the box: a <strong className="font-medium text-[color:var(--color-text-primary)]">property owner leads</strong> module
+            for letting agencies and property managers — live today in Malta with real data — using the
+            same outreach tracking.
+          </p>
         </div>
       </section>
 
       {/* Services */}
       <section id="services" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Services</p>
-        <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">Everything between “who should we contact?” and “when do I follow up?”</h2>
+        <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">Everything between “who is ranking for this?” and “when do I follow up?”</h2>
         <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {SERVICES.map(s => (
             <div key={s.title} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-5">
@@ -239,17 +235,17 @@ export default function LandingPage() {
 
         <div className="mt-8 grid gap-4 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5 md:grid-cols-3">
           <div className="flex items-start gap-3">
-            <Brain className="mt-0.5 h-5 w-5 shrink-0" />
+            <KeyRound className="mt-0.5 h-5 w-5 shrink-0" />
             <p className="text-[13px] leading-relaxed">
-              <strong>Our work, not yours:</strong> scrapers that adapt when a site changes, one record
-              per website so nothing is counted twice, verdicts that expire and re-check themselves.
+              <strong>Our work, not yours:</strong> proxies, CAPTCHAs, mobile-vs-desktop result sets,
+              dedupe across batches, and verdicts that re-check themselves. You paste keywords.
             </p>
           </div>
           <div className="flex items-start gap-3">
             <Coins className="mt-0.5 h-5 w-5 shrink-0" />
             <p className="text-[13px] leading-relaxed">
-              <strong>Predictable cost:</strong> every run is priced in credits before it starts, every
-              credit is on a ledger, and outreach tracking is free on every plan.
+              <strong>Predictable cost:</strong> keyword searches are metered by a daily quota, source
+              runs are priced in credits before they start, and outreach tracking is free on every plan.
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -267,17 +263,18 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-6xl gap-8 px-5 py-14 lg:grid-cols-[1fr_1fr] lg:items-center">
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Built for the team, not the tab</p>
-            <h2 className="mt-2 text-[24px] font-semibold leading-tight">One list, everyone on it.</h2>
+            <h2 className="mt-2 text-[24px] font-semibold leading-tight">One list, every affiliate manager on it.</h2>
             <p className="mt-3 text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-              Invite the people who do the calling. Everyone sees the same statuses, notes and
-              follow-ups; nobody double-contacts an owner. Roles, ownership transfer and separate
-              workspaces per business are built in, and every credit and every change is logged.
+              Invite the people who do the outreach. Everyone sees the same verdicts, contacts,
+              statuses and notes; nobody pitches the same publisher twice. Roles, ownership
+              transfer and separate workspaces per brand are built in, and every credit and every
+              change is logged.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               [Users, 'Roles & invites', 'Owner, admin, member — invite by link, transfer ownership when someone leaves.'],
-              [Workflow, 'Workspaces', 'Run more than one business? Switch between them; data never crosses.'],
+              [Workflow, 'Workspaces', 'Run more than one brand or market? Switch between them; data never crosses.'],
               [CalendarClock, 'Follow-up pulse', 'Contacted, replied, won and due-today counts on the home page.'],
               [Coins, 'Ledger', 'Every credit spent, every gift, every top-up, with a reason.'],
             ].map(([Icon, t, b]) => {
@@ -325,10 +322,11 @@ export default function LandingPage() {
       {/* Closing CTA */}
       <section>
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-5 py-16 text-center">
-          <h2 className="text-[28px] font-semibold leading-tight">Your first pilot batch is 100 credits away.</h2>
+          <h2 className="text-[28px] font-semibold leading-tight">Your first keyword batch is 100 credits away.</h2>
           <p className="max-w-xl text-[14px] text-[color:var(--color-text-secondary)]">
-            Create a workspace, take the 60-second tour, run your first sources and have people worth
-            contacting — with a place to track every reply — before your coffee is cold.
+            Create a workspace, take the 60-second tour, paste the keywords your competitors rank
+            for, and have partners worth contacting — with a place to track every reply — before
+            your coffee is cold.
           </p>
           <Link
             href="/signup"

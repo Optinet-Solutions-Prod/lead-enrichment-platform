@@ -16,7 +16,7 @@ export async function createOrganizationAction(
   if (name.length < 2) {
     return { error: 'Organization name must be at least 2 characters.' }
   }
-  const vertical = String(formData.get('vertical') ?? 'property')
+  const vertical = String(formData.get('vertical') ?? 'affiliate')
   const modules = vertical === 'affiliate' ? ['affiliate'] : ['property']
 
   const supabase = await createClient()

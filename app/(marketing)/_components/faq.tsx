@@ -1,11 +1,11 @@
 const FAQ = [
   {
     q: 'Where does the data come from?',
-    a: 'From public sources we scrape on your behalf: direct-from-owner property sites, Maltapark classifieds, the MTA licence register, Airbnb (via a real-browser crawl), and Google / Bing search results for partner and publisher discovery. Every lead links back to the listing or page it was found on.',
+    a: 'From public sources we scrape on your behalf: Google and Bing results for your keywords in each country (desktop and mobile, organic and paid), creator platforms (YouTube, TikTok, Twitch, Kick, Snapchat, Telegram) and Facebook’s Ad Library, plus the websites themselves for contact details. The property module adds direct-from-owner listing sites, classifieds, the short-let licence register and Airbnb. Every record links back to the page it was found on.',
   },
   {
     q: 'What is a credit, and what does one cost?',
-    a: 'A credit is one source run — one pass over one source. Most runs are 1 credit; the Airbnb crawl is 5 on your own Apify key or 15 on ours because it uses real browser compute. Filters, exports, cross-matching and workflows are free. New workspaces start with 100 credits.',
+    a: 'Keyword searches are metered by a daily quota per user (one keyword on one engine in one country is one search), not by credits. Credits pay for source runs: most are 1 credit; the Airbnb crawl is 5 on your own Apify key or 15 on ours because it uses real browser compute. AI classification, contact enrichment, filters, exports, outreach tracking and workflows are included. New workspaces start with 100 credits.',
   },
   {
     q: 'Do I need my own API keys?',
@@ -17,11 +17,11 @@ const FAQ = [
   },
   {
     q: 'Is this compliant with the platforms you scrape?',
-    a: 'We only collect what a listing or page shows publicly, keep one record per website, and never automate bulk contact reveals on login-gated platforms (Maltapark accounts, Airbnb messaging) — those are worked by hand, sustainably. You are responsible for how you contact people under GDPR.',
+    a: 'We only collect what a page or profile shows publicly, keep one record per website, and never automate bulk messaging or contact reveals on login-gated platforms — you send every message yourself, from your own accounts. You are responsible for how you contact people under GDPR.',
   },
   {
     q: 'Does it send the outreach for me?',
-    a: 'Not yet. It gives you the contact, the context, a status on every lead and a follow-up reminder on the day — you send from your own email or WhatsApp, so deliverability and tone stay yours. Sequences are on the roadmap.',
+    a: 'Not yet. It gives you the contact, the context (which brands they promote, how they rank), a status on every site and a follow-up reminder on the day — you send from your own email, Telegram or LinkedIn, so deliverability and tone stay yours. Sequences are on the roadmap.',
   },
   {
     q: 'What happens when I run out of credits?',

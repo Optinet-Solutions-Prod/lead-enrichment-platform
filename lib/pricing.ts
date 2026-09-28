@@ -31,15 +31,16 @@ export const PLANS: Plan[] = [
   {
     key: 'free',
     name: 'Free',
-    tagline: 'Try the whole pipeline on real data.',
+    tagline: 'Try the whole pipeline on your own keywords.',
     monthly: { eur: 0, usd: 0 },
     yearly: { eur: 0, usd: 0 },
     credits: 100,
     creditsNote: '100 credits, once',
     members: '1 member',
     features: [
-      'Every data page: Owner Leads, PM Prospects, Airbnb, licence register',
-      'All built-in sources',
+      'Keyword × country search on Google and Bing',
+      'One profile per website with contact enrichment',
+      'Creator search: YouTube, TikTok, Twitch, Kick, Snapchat, Telegram',
       'Outreach status, notes and follow-up reminders',
       'Guided tour + getting-started checklist',
       'Community help',
@@ -58,8 +59,9 @@ export const PLANS: Plan[] = [
     features: [
       'Everything in Free',
       'Workflows — save a recipe, run it in one click',
+      'Facebook Ad Library — who already advertises in your niche',
+      'Property owner leads module (Airbnb + licence cross-match)',
       'Custom YAML sources (bring any JSON API)',
-      'Airbnb cross-match',
       'Email support',
     ],
     cta: 'Start free, upgrade later',
@@ -67,7 +69,7 @@ export const PLANS: Plan[] = [
   {
     key: 'growth',
     name: 'Growth',
-    tagline: 'For agencies running several campaigns.',
+    tagline: 'For affiliate teams running several markets.',
     monthly: { eur: 149, usd: 165 },
     yearly: { eur: 119, usd: 132 },
     credits: 1500,
@@ -75,8 +77,8 @@ export const PLANS: Plan[] = [
     members: 'Up to 10 members',
     features: [
       'Everything in Starter',
-      'Bring your own API keys — Airbnb crawls drop from 15 to 5 credits',
       'AI relevance screening of every search result',
+      'Bring your own API keys — crawls on your keys cost fewer credits',
       'Advanced batch search',
       'Priority support',
     ],
@@ -94,8 +96,8 @@ export const PLANS: Plan[] = [
     members: 'Unlimited members & workspaces',
     features: [
       'Everything in Growth',
-      'AI partner analysis — which brands a site already promotes',
-      'Website profiles with verdict expiry & system flags',
+      'AI affiliate analysis — which brands a site already promotes',
+      'Verdict expiry & system flags — the picture re-checks itself',
       'Invoiced billing (EUR or USD)',
       'Dedicated onboarding',
     ],
@@ -147,6 +149,8 @@ export const CREDIT_PACKS: CreditPack[] = [
 
 /** What one credit buys — the public version of lib/credits CREDIT_COSTS. */
 export const CREDIT_USAGE = [
+  { action: 'Keyword search (one keyword × engine × country)', credits: 'daily quota' },
+  { action: 'AI classification, contact enrichment, outreach tracking', credits: 'free' },
   { action: 'Source run (any built-in or custom source)', credits: '1' },
   { action: 'Licence-register refresh', credits: '1' },
   { action: 'Airbnb crawl on your own Apify key', credits: '5' },

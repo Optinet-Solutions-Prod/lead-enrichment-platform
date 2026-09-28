@@ -314,7 +314,7 @@ export function EnqueueForm({
               // can't leak onto a different batch.
               if (overrideRef.current) overrideRef.current.value = ''
             }}
-            placeholder={'best online casinos\ntop 10 casinos 2026\nneue online casinos'}
+            placeholder={'best vpn for streaming\ntop 10 vpn 2026\nbester vpn anbieter'}
             className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] text-[color:var(--color-text-primary)] placeholder:text-[color:var(--color-text-secondary)] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)]"
           />
         </label>

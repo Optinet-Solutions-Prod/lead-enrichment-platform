@@ -28,24 +28,24 @@ export function CreateOrgForm() {
           What are you here for?
         </legend>
         <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
-          <input type="radio" name="vertical" value="property" defaultChecked className="mt-0.5" />
+          <input type="radio" name="vertical" value="affiliate" defaultChecked className="mt-0.5" />
+          <span>
+            <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
+              Affiliate &amp; publisher discovery
+            </span>
+            <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
+              Scrape the sites and creators ranking for your keywords, classify them, get contacts, track outreach.
+            </span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
+          <input type="radio" name="vertical" value="property" className="mt-0.5" />
           <span>
             <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
               Property owner leads
             </span>
             <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-              Find property owners, cross-match Airbnb, win management clients.
-            </span>
-          </span>
-        </label>
-        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[color:var(--color-border)] p-3 hover:bg-[color:var(--color-bg-secondary)]">
-          <input type="radio" name="vertical" value="affiliate" className="mt-0.5" />
-          <span>
-            <span className="block text-[13px] font-medium text-[color:var(--color-text-primary)]">
-              Partner &amp; publisher discovery
-            </span>
-            <span className="block text-[12px] text-[color:var(--color-text-secondary)]">
-              Find the websites ranking for your keywords, the people behind them, and reach out.
+              Find property owners listing without an agent, cross-match Airbnb, win management clients.
             </span>
           </span>
         </label>
