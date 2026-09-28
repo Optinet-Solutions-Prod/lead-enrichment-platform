@@ -31,8 +31,8 @@ import { decodeAdUrl } from '@/lib/decode-ad-url'
 import { logActivity } from '@/lib/activity-log'
 import { checkQuota } from '@/lib/scrape-quota'
 import { filterOutInFlight } from '@/lib/scrape/filter-in-flight'
+import { kickoffPendingGoogleJobs } from '@/lib/scrape/apify-google'
 import { findCompletedSiblings, siblingRowKey } from '@/lib/scrape/find-completed-siblings'
-import { getFleetQueueSnapshot } from './_lib/queries'
 import { verifyUserPassword } from '@/lib/auth/verify-password'
 import { translateKeywordsToEnglish } from '@/lib/translate'
 
@@ -56,7 +56,7 @@ export type DuplicateHit = {
 }
 
 export type EnqueueState =
-  | { status: 'ok'; message: string }
+  | { status: 'ok'; message: string; startedNow?: number }
   | { status: 'error'; error: string }
   // Duplicate guard tripped: one or more keywords already completed
   // before. Nothing was inserted. The form lists these with their last
@@ -87,7 +87,20 @@ export async function enqueueScrape(
       : String(formData.get('country_code') ?? '').trim().toUpperCase()
   const pages = clampInt(formData.get('pages'), 1, 10, 1)
   const priority = clampInt(formData.get('priority'), 0, 100, 0)
-  const withEnrichment = formData.get('with_enrichment') === 'on'
+  const withEnrichmentRaw = formData.get('with_enrichment') === 'on'
+  // Which stages run automatically once the scrape lands. The wizard sends a
+  // comma list. Affiliate detection rides the existing enrichment chain
+  // (with_enrichment); contact extraction is enqueued by the in-app runner
+  // once that chain (if any) is complete. See lib/scrape/inline-enrich.ts.
+  const autoStages = Array.from(
+    new Set(
+      String(formData.get('enrichment_stages') ?? '')
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(s => s === 'affiliate' || s === 'contact'),
+    ),
+  )
+  const withEnrichment = autoStages.length > 0 ? autoStages.includes('affiliate') : withEnrichmentRaw
   const languageRaw = String(formData.get('language') ?? '').trim().toLowerCase()
   // Allow only 2-letter ISO 639-1 codes; default to English.
   const language = /^[a-z]{2}$/.test(languageRaw) ? languageRaw : 'en'
@@ -129,6 +142,16 @@ export async function enqueueScrape(
     ? (enginesToRun.filter(e => e !== 'bing') as typeof enginesToRun)
     : enginesToRun
   const enginesRun: typeof enginesToRun = enginesActive.length > 0 ? enginesActive : (['google'] as typeof enginesToRun)
+  // Only Google runs on this deployment (the in-app Apify runner). Every
+  // other source needs the browser worker fleet, which is not connected.
+  const INLINE_ENGINES = new Set<string>(['google'])
+  const unsupportedEngines = enginesRun.filter(e => !INLINE_ENGINES.has(e))
+  if (unsupportedEngines.length > 0) {
+    return {
+      status: 'error',
+      error: `${unsupportedEngines.join(', ')} is not available on this deployment yet — only Google runs here. Pick Google as the source.`,
+    }
+  }
   // view_mode controls whether the scraper runs desktop, mobile (iPhone
   // UA + 375x812 viewport via CDP), or both passes. 'both' is the
   // default — catches mobile-only PPC ads + mobile-ranked organic that
@@ -255,6 +278,7 @@ export async function enqueueScrape(
       language: finalLang,
       search_engine: engine,
       view_mode: viewMode,
+      auto_stages: autoStages.length > 0 ? autoStages : null,
       // Only stamp on engines whose scraper honours the cap today
       // (twitch / youtube / kick / snapchat — each has a size metric
       // available at search time). TikTok and X return no follower
@@ -311,29 +335,15 @@ export async function enqueueScrape(
     }
   }
 
-  // One scrape per engine, but Google runs as TWO linked jobs (same
-  // batch_group_id) so the fast organic path isn't held back by the slow PPC one:
-  //   • Apify ORGANIC — captcha-free, ships in seconds. This is the job the
-  //     operator's results appear under; it completes as soon as organic lands.
-  //   • VM PPC — a PPC-ONLY pass on the real logged-in browser (Apify can't read
-  //     Google's ad markup). It runs in the BACKGROUND with captcha-solve + a
-  //     GoLogin IP refresh, and folds its ads into the same batch when done.
-  // The UI groups the two by batch_group_id into ONE batch (organic delivered +
-  // "PPC still running"), so the operator never sees two rows or a held status.
-  // BING carries the casino ad inventory and Apify's Bing paidResults are clean,
-  // so Bing stays a single Apify job (organic + PPC together). Non-google/bing
-  // engines are unchanged.
+  // One Apify job per Google keyword. The prod repo splits Google into an
+  // Apify organic job plus a VM-only PPC job; there is no VM fleet here, and
+  // the Apify actor returns the page-one paid results inside the same run, so
+  // one job carries both result types (result_type_filter stays null).
   const insertRows = rows.flatMap(r => {
     const eng = r.search_engine ?? 'google'
     if (eng !== 'google' && eng !== 'bing') return [r]
     const groupId = crypto.randomUUID()
-    if (eng === 'bing') {
-      return [{ ...r, scrape_source: 'apify', batch_group_id: groupId, priority: (r.priority ?? 5) + 10 }]
-    }
-    return [
-      { ...r, scrape_source: 'apify', result_type_filter: 'Organic', batch_group_id: groupId, priority: (r.priority ?? 5) + 10 },
-      { ...r, scrape_source: 'vm', result_type_filter: 'PPC', batch_group_id: groupId },
-    ]
+    return [{ ...r, scrape_source: 'apify', batch_group_id: groupId, priority: (r.priority ?? 5) + 10 }]
   })
 
   // Daily-quota gate. Admins are exempt; everyone else gets up to
@@ -362,6 +372,17 @@ export async function enqueueScrape(
     .select('id')
   if (insertError) return { status: 'error', error: safeError(insertError, 'Failed to queue the scrape.') }
   const insertedIds = new Set(((insertedRows ?? []) as { id: string }[]).map(r => r.id))
+
+  // Start the Google runs straight away so the operator sees "running", not
+  // "pending". A scheduled batch is left for the runner's tick at its time.
+  let startedNow = 0
+  if (!scheduledAtIso) {
+    try {
+      startedNow = (await kickoffPendingGoogleJobs(svc, { limit: 5, ids: [...insertedIds] })).started
+    } catch (err) {
+      console.error('[scrape/actions] kickoff failed:', err)
+    }
+  }
 
   const flag = withEnrichment ? ' with full enrichment pipeline' : ''
   const when = scheduledAtIso
@@ -415,39 +436,24 @@ export async function enqueueScrape(
   // fleet is picking their job up immediately or parking it behind a
   // backlog. Failure here is non-fatal; base success message still lands.
   let queuePosSuffix = ''
-  try {
-    const snap = await getFleetQueueSnapshot()
-    // Find this submit's OWN earliest row (min position) on its country —
-    // that's the first of this submit's jobs to start.
-    let minPosition = Infinity
-    let minEta: number | null = null
-    for (const id of insertedIds) {
-      const pos = snap.positionsByJobId[id]
-      if (pos && pos.position < minPosition) {
-        minPosition = pos.position
-        minEta = pos.etaMinutes
-      }
-    }
-    if (Number.isFinite(minPosition)) {
-      const bits: string[] = []
-      bits.push(`you're #${minPosition} in the ${country_code} queue`)
-      if (minEta !== null && minEta >= 1) {
-        bits.push(`come back in ~${Math.round(minEta)} min`)
-      } else if (minEta === 0) {
-        bits.push('starting now')
-      }
-      queuePosSuffix = ` — ${bits.join(' · ')}.`
-    }
-  } catch (err) {
-    console.error('[scrape/actions] queue-peek failed:', err)
+  if (scheduledAtIso) {
+    queuePosSuffix = ''
+  } else if (startedNow >= insertRows.length) {
+    queuePosSuffix = ' Running on Google now — results land in about a minute per keyword.'
+  } else if (startedNow > 0) {
+    queuePosSuffix = ` ${startedNow} of ${insertRows.length} started now; the rest start on the next refresh.`
+  } else {
+    queuePosSuffix = ' It starts on the next refresh of the scraping table.'
   }
+  void insertedIds
 
   return {
     status: 'ok',
+    startedNow,
     message:
       keywords.length === 1
-        ? `Added "${keywords[0]}" to the queue for ${country_code}${engineDescription}${flag}${when}${rowsLabel}.${queuePosSuffix}`
-        : `Added ${keywords.length} keyword${keywords.length === 1 ? '' : 's'} to the queue for ${country_code}${engineDescription}${flag}${when}${rowsLabel}.${queuePosSuffix}`,
+        ? `Added "${keywords[0]}" for ${country_code}${engineDescription}${flag}${when}${rowsLabel}.${queuePosSuffix}`
+        : `Added ${keywords.length} keyword${keywords.length === 1 ? '' : 's'} for ${country_code}${engineDescription}${flag}${when}${rowsLabel}.${queuePosSuffix}`,
   }
 }
 
@@ -600,7 +606,7 @@ export async function runAffiliateDetection(
   revalidatePath(`/scrape/${jobId}`)
   return {
     status: 'ok',
-    message: `Enqueued ${enqueueable.length} fetch job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will process and score them within ~30 s.`,
+    message: `Enqueued ${enqueueable.length} fetch job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. The in-app worker will process and score them within ~30 s.`,
   }
 }
 
@@ -685,7 +691,7 @@ export async function runContactExtraction(
   revalidatePath(`/scrape/${jobId}`)
   return {
     status: 'ok',
-    message: `Enqueued ${enqueueable.length} contact-extraction job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will visit homepage + contact pages, then escalate to GPT-4o / Hunter.io if regex finds nothing.`,
+    message: `Enqueued ${enqueueable.length} contact-extraction job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. The in-app worker will visit homepage + contact pages, then escalate to GPT-4o / Hunter.io if regex finds nothing.`,
   }
 }
 
@@ -775,7 +781,7 @@ export async function runStagExtraction(
   revalidatePath(`/scrape/${jobId}`)
   return {
     status: 'ok',
-    message: `Enqueued ${enqueueable.length} s-tag job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. VM workers will crawl listing pages and follow tracking redirects in the country profile.`,
+    message: `Enqueued ${enqueueable.length} s-tag job${enqueueable.length === 1 ? '' : 's'}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}. The in-app worker will crawl listing pages and follow tracking redirects in the country profile.`,
   }
 }
 

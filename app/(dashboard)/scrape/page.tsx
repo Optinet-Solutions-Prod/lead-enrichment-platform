@@ -3,7 +3,6 @@ import { JOBS_COLUMNS } from '@/lib/filters/columns-jobs'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import type { ColumnDef } from '@/lib/filters/types'
 import { clampPageSize } from '@/lib/page-size'
-import { getQuotaForCurrentUser } from '@/lib/scrape-quota'
 import { applyShadowFilter, getShadowContext } from '@/lib/shadow-filter'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/user-preferences'
@@ -11,11 +10,12 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
 import { TourController } from '../_components/tour-controller'
 import { Pagination } from '../_components/pagination'
-import { AdvancedSearch, type SearchFacets } from './_components/advanced-search'
 import { AutoRefresh } from './_components/auto-refresh'
-import { EnqueueForm } from './_components/enqueue-form'
 import { JobsCardList, JobsTable } from './_components/jobs-table'
-import { OwnerScopeToggle } from './_components/owner-scope-toggle'
+import { ScopeBar, type ScopeUser } from './_components/scope-bar'
+import { CreateScrapeFab, CreateScrapeHeaderButton } from './_components/create-scrape-button'
+import { EmptyDay } from './_components/empty-day'
+import { AdvancedSearch, type SearchFacets } from './_components/advanced-search'
 import { getFleetQueueSnapshot, listActiveProfiles, queryJobs } from './_lib/queries'
 
 type SearchParams = Record<string, string | string[] | undefined>
@@ -42,22 +42,37 @@ export default async function ScrapePage({
   const sorts = parseSorts(sp.s)
   const hasAnyFilter = q.length > 0 || filters.length > 0 || sorts.length > 0
 
-  // Mine / All scope toggle. Default Mine — operators usually want
-  // to see their own work first; ?owner=all opens the full view.
-  const ownerScope: 'mine' | 'all' = sp.owner === 'all' ? 'all' : 'mine'
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   const callerEmail = (user?.email ?? '').toLowerCase() || null
 
+  // Day scope. Default today (UTC) so the list opens on what is happening
+  // now; ?day=all widens it, ?day=YYYY-MM-DD picks a past day.
+  const today = new Date().toISOString().slice(0, 10)
+  const dayParam = typeof sp.day === 'string' ? sp.day : ''
+  // A search is a lookup across everything, so it widens the day scope on its
+  // own — otherwise searching on a quiet day returns nothing and looks
+  // broken. An explicitly chosen day still wins.
+  const day: string =
+    dayParam === 'all' ? 'all'
+      : /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam
+      : q.trim().length > 0 ? 'all'
+      : today
+
+  // Owner scope. Default mine; 'all' drops the filter; anything else is a
+  // specific person's email chosen from the picker.
+  const ownerParam = typeof sp.owner === 'string' ? sp.owner.toLowerCase() : ''
+  const ownerScope = ownerParam === 'all' ? 'all' : ownerParam.includes('@') ? ownerParam : 'mine'
+
   // Only filter to Mine when we have an email to filter by — anonymous
-  // / missing-email accounts fall through to the All view so the page
+  // / missing-email accounts fall through to the everyone view so the page
   // isn't blank for them.
   const restrictToOwnerEmail =
-    ownerScope === 'mine' && callerEmail ? callerEmail : undefined
+    ownerScope === 'mine' ? (callerEmail ?? undefined) : ownerScope === 'all' ? undefined : ownerScope
 
-  const [profiles, jobsResult, isAdmin, prefs, quotaSnap, fleet, mineCount, allCount, searchFacets, tourSeen] = await Promise.all([
+  const [profiles, jobsResult, isAdmin, prefs, fleet, scopeUsers, searchFacets, tourSeen] = await Promise.all([
     listActiveProfiles(),
     queryJobs({
       page,
@@ -66,6 +81,7 @@ export default async function ScrapePage({
       filters,
       sorts,
       ...(restrictToOwnerEmail ? { restrictToOwnerEmail } : {}),
+      ...(day !== 'all' ? { onDay: day } : {}),
     }),
     (async () => {
       if (!user) return false
@@ -74,38 +90,33 @@ export default async function ScrapePage({
       return data === true
     })(),
     getUserPreferences(),
-    getQuotaForCurrentUser(),
     getFleetQueueSnapshot(),
-    // Independent counts for the toggle pills. Head-only queries; the
-    // shadow filter still applies so the Mine / All numbers respect
-    // shadow isolation. The two filters mirror what queryJobs hides so the
-    // pills match the visible row count: parent_scrape_job_id is null (drops
-    // kick phase-2 child jobs) and the .or (drops the auto Google PPC sibling —
-    // result_type_filter='PPC' with a batch_group_id — which is folded into its
-    // organic row in the list).
-    (async () => {
-      if (!callerEmail) return 0
-      const svc = createServiceClient()
-      const ctx = await getShadowContext()
-      const base = svc
-        .from('scrape_queue')
-        .select('id', { count: 'exact', head: true })
-        .is('parent_scrape_job_id', null)
-        .or('result_type_filter.is.null,result_type_filter.neq.PPC,batch_group_id.is.null')
-        .eq('created_by_email', callerEmail)
-      const { count } = await (applyShadowFilter(base, ctx) as typeof base)
-      return count ?? 0
-    })(),
+    // People who have queued a scrape, for the "someone else" picker. The
+    // shadow filter applies so a non-shadow viewer never sees shadow owners.
     (async () => {
       const svc = createServiceClient()
       const ctx = await getShadowContext()
       const base = svc
         .from('scrape_queue')
-        .select('id', { count: 'exact', head: true })
-        .is('parent_scrape_job_id', null)
-        .or('result_type_filter.is.null,result_type_filter.neq.PPC,batch_group_id.is.null')
-      const { count } = await (applyShadowFilter(base, ctx) as typeof base)
-      return count ?? 0
+        .select('created_by_email, created_by_display, created_by_username')
+        .not('created_by_email', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(2000)
+      const { data } = await (applyShadowFilter(base, ctx) as typeof base)
+      const seen = new Map<string, ScopeUser>()
+      for (const r of (data ?? []) as Array<{
+        created_by_email: string | null
+        created_by_display: string | null
+        created_by_username: string | null
+      }>) {
+        const email = (r.created_by_email ?? '').toLowerCase()
+        if (!email || seen.has(email)) continue
+        seen.set(email, {
+          email,
+          label: r.created_by_display || r.created_by_username || email.split('@')[0] || email,
+        })
+      }
+      return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label))
     })(),
     // Options for the advanced-search panel, in one round trip.
     (async () => {
@@ -121,19 +132,62 @@ export default async function ScrapePage({
       return data?.tour_state != null
     })(),
   ])
-  // Pass through only non-exempt snapshots so the EnqueueForm
-  // doesn't render the badge for admins or when caps are disabled.
-  const quota =
-    !quotaSnap.exempt && quotaSnap.cap !== null && quotaSnap.remaining !== null
-      ? { cap: quotaSnap.cap, usedToday: quotaSnap.usedToday, remaining: quotaSnap.remaining }
-      : null
   const { rows, total, searchNotes } = jobsResult
+
+  // When the scope is empty, work out WHY before rendering a blank page.
+  //
+  // The list defaults to today + your own work, and different people run the
+  // scrapes on different days. So picking a past date very often lands on a
+  // day somebody else was working, and the page looked broken when the date
+  // was fine and the owner scope was hiding everything. Count what is there
+  // for everyone on the chosen day and say so.
+  let latestDay: string | null = null
+  let latestDayAnyone: string | null = null
+  let othersOnDay = 0
+  if (rows.length === 0) {
+    const svc = createServiceClient()
+    const ctx = await getShadowContext()
+
+    const newestIn = async (ownerEmail?: string) => {
+      let probe = svc
+        .from('scrape_queue')
+        .select('created_at')
+        .is('parent_scrape_job_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (ownerEmail) probe = probe.eq('created_by_email', ownerEmail)
+      const { data } = await (applyShadowFilter(probe, ctx) as typeof probe)
+      const newest = ((data ?? []) as Array<{ created_at: string }>)[0]?.created_at
+      return newest ? newest.slice(0, 10) : null
+    }
+
+    const countOnDay = async () => {
+      if (day === 'all') return 0
+      const probe = svc
+        .from('scrape_queue')
+        .select('id', { head: true, count: 'exact' })
+        .is('parent_scrape_job_id', null)
+        .gte('created_at', `${day}T00:00:00.000Z`)
+        .lte('created_at', `${day}T23:59:59.999Z`)
+      const { count } = await (applyShadowFilter(probe, ctx) as typeof probe)
+      return count ?? 0
+    }
+
+    const [mineLatest, anyoneLatest, onDay] = await Promise.all([
+      restrictToOwnerEmail ? newestIn(restrictToOwnerEmail) : Promise.resolve(null),
+      newestIn(),
+      countOnDay(),
+    ])
+    latestDay = mineLatest
+    latestDayAnyone = anyoneLatest
+    othersOnDay = onDay
+  }
 
   // Auto-refresh stays on while either the scrape itself OR a follow-on
   // enrichment chain is still in flight, so the badge can transition from
-  // "enriching" to "completed" without a manual reload. It also stays on while a
-  // Google batch's hidden background PPC sibling is still working, so the
-  // "PPC scraping…" chip flips to "+N ads" on its own once the VM finishes.
+  // "enriching" to "completed" without a manual reload. The refresh also
+  // drives the in-app runner (see AutoRefresh), which is what moves a job
+  // from pending to completed on this deployment.
   const hasActive = rows.some(
     j =>
       j.status === 'pending' ||
@@ -164,65 +218,83 @@ export default async function ScrapePage({
       <Suspense fallback={null}>
         <TourController autoStart={!tourSeen} script="affiliate" />
       </Suspense>
-      <header>
-        <h1 className="text-[16px] font-semibold text-[color:var(--color-text-primary)]">
-          Scrape
-        </h1>
-        <p className="mt-0.5 text-[12px] text-[color:var(--color-text-secondary)]">
-          Queue a keyword for a country. A VM worker picks it up within ~5 seconds and
-          the results land in the Lead Generator table once complete.
-        </p>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-[16px] font-semibold text-[color:var(--color-text-primary)]">
+            Scraping batches
+          </h1>
+          {hasActive && (
+            <p className="text-[11px] text-[color:var(--color-text-secondary)]">
+              auto-refreshing every 5 s
+            </p>
+          )}
+        </div>
+        <CreateScrapeHeaderButton />
       </header>
 
-      <div data-tour="scrape-form">
-        <EnqueueForm profiles={profiles} quota={quota} fleet={fleet} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ScopeBar today={today} day={day} owner={ownerScope} meEmail={callerEmail} users={scopeUsers} />
+        <AdvancedSearch facets={searchFacets} />
       </div>
 
       <section data-tour="jobs-table" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-[13px] font-semibold text-[color:var(--color-text-primary)]">
-              {hasAnyFilter
-                ? `${total.toLocaleString()} matching jobs`
-                : ownerScope === 'mine'
-                  ? 'My recent jobs'
-                  : 'Recent jobs'}
-            </h2>
-            <OwnerScopeToggle
-              current={ownerScope}
-              mineCount={mineCount}
-              allCount={allCount}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            {hasActive && (
-              <p className="text-[11px] text-[color:var(--color-text-secondary)]">
-                auto-refreshing every 5 s
-              </p>
-            )}
-            <AdvancedSearch facets={searchFacets} />
-          </div>
-        </div>
-
         <AdvancedFilters columns={columns} />
 
         {q && searchNotes && searchNotes.length > 0 && (
-          <p className="text-[11px] text-[color:var(--color-text-secondary)]">
-            Searched as: {searchNotes.join(' · ')}
+          <p className="text-[11.5px] text-[color:var(--color-text-secondary)]">
+            Search read: {searchNotes.join(' · ')}
           </p>
         )}
 
-        <JobsTable
-          jobs={rows}
-          isAdmin={isAdmin}
-          pageInfo={{ page, size, total }}
-          infiniteScrollEnabled={prefs.infiniteScrollEnabled}
-          pendingPositions={fleet.positionsByJobId}
-        />
-        <JobsCardList jobs={rows} pendingPositions={fleet.positionsByJobId} />
+        {rows.length > 0 && (
+        <p className="text-[11.5px] text-[color:var(--color-text-secondary)]">
+          {total.toLocaleString()} {total === 1 ? 'batch' : 'batches'}
+          {day !== 'all' && ` on ${day === today ? 'today' : day}`}
+          {ownerScope === 'mine' ? ', queued by me' : ownerScope === 'all' ? ', queued by anyone' : ''}
+          {hasAnyFilter && ' · extra filters applied'}
+        </p>
+        )}
+
+        {rows.length === 0 ? (
+          <EmptyDay
+            day={day}
+            today={today}
+            ownerScope={ownerScope}
+            latestDay={latestDay}
+            latestDayAnyone={latestDayAnyone}
+            othersOnDay={othersOnDay}
+            params={new URLSearchParams(
+              Object.entries(sp).flatMap(([k, v]) =>
+                typeof v === 'string' ? [[k, v] as [string, string]] : [],
+              ),
+            ).toString()}
+          />
+        ) : (
+          <>
+            <JobsTable
+              jobs={rows}
+              isAdmin={isAdmin}
+              pageInfo={{ page, size, total }}
+              infiniteScrollEnabled={prefs.infiniteScrollEnabled}
+              pendingPositions={fleet.positionsByJobId}
+            />
+            <JobsCardList
+              jobs={rows}
+              pendingPositions={fleet.positionsByJobId}
+              pageInfo={{ page, size, total }}
+            />
+          </>
+        )}
       </section>
 
-      <Pagination page={page} size={size} total={total} pageSizeOptions={PAGE_SIZES} />
+      {/* Desktop pages via the chevrons; phones and tablets use the card
+          list's own "Load more" instead, so this would be a second,
+          contradictory control there. */}
+      <div className="hidden lg:block">
+        <Pagination page={page} size={size} total={total} pageSizeOptions={PAGE_SIZES} />
+      </div>
+
+      <CreateScrapeFab />
 
       <AutoRefresh enabled={hasActive} />
     </div>
@@ -240,4 +312,3 @@ function clampInt(
   if (!Number.isFinite(n)) return fallback
   return Math.min(Math.max(n, min), max)
 }
-

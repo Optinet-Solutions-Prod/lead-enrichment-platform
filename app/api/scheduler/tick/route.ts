@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { requireBearer } from '@/lib/auth/bearer'
 import { decodeAdUrl } from '@/lib/decode-ad-url'
 import { runSystemFlagLlmPass } from '@/lib/website-profiles/system-flag-llm'
+import { runScrapeTick } from '@/lib/scrape/runner'
 
 // Vercel cron sends GET — alias to the same handler as manual POSTs.
 export async function GET(request: NextRequest) {
@@ -29,6 +30,11 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient()
   const now = new Date()
+
+  // In-app scrape runner: start ready Google jobs on Apify, ingest finished
+  // runs, work the enrichment queue. The scrape pages tick this themselves
+  // while open; the cron keeps it moving when nobody is looking.
+  const runner = await runScrapeTick().catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
 
   // Housekeeping: cancel orphaned interactive checkpoints — ones left
   // status='waiting' after their scrape job already finished
@@ -216,6 +222,7 @@ export async function POST(request: NextRequest) {
   return Response.json({
     ok: true,
     now: now.toISOString(),
+    runner,
     enrichment_advances: advances,
     ppc_screenshot_enqueued: ppcEnqueued,
     affiliate_scoring_enqueued: affEnqueued,

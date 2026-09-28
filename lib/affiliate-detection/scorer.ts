@@ -173,6 +173,7 @@ function countCasinoOutboundLinks(
   html: string,
   currentUrl: string,
   brandDomains: ReadonlySet<string> = new Set(),
+  nicheKeywords: ReadonlyArray<string> = [],
 ): number {
   let currentDomain = ''
   try {
@@ -218,7 +219,8 @@ function countCasinoOutboundLinks(
           [...brandDomains].some(b => linkDomain.endsWith('.' + b))
         if (
           isBrandLink ||
-          CASINO_KEYWORDS.some(kw => linkDomain.includes(kw) || linkLower.includes(kw))
+          CASINO_KEYWORDS.some(kw => linkDomain.includes(kw) || linkLower.includes(kw)) ||
+          nicheKeywords.some(kw => linkDomain.includes(kw))
         ) {
           externalCasinoDomains.add(linkDomain)
         }
@@ -235,6 +237,10 @@ export type ScoreAffiliateOptions = {
    *  domain doesn't contain a CASINO_KEYWORD. Optional — omit for the
    *  legacy keyword-only behaviour. */
   brandDomains?: ReadonlyArray<string>
+  /** Words that name the niche being scraped ("vpn", "hosting"). An outbound
+   *  link to a domain containing one counts like a casino-outbound link, so
+   *  the scorer works for verticals other than the one it was tuned on. */
+  nicheKeywords?: ReadonlyArray<string>
 }
 
 export function scoreAffiliate(
@@ -264,7 +270,8 @@ export function scoreAffiliate(
   let casinoScore = 0
   const indicators: string[] = []
 
-  const externalCasinoCount = countCasinoOutboundLinks(html, inputUrl, brandDomains)
+  const nicheKeywords = (opts.nicheKeywords ?? []).map(k => k.toLowerCase()).filter(k => k.length >= 3)
+  const externalCasinoCount = countCasinoOutboundLinks(html, inputUrl, brandDomains, nicheKeywords)
 
   // === PRIMARY DECISION FACTOR: External Casino Links ===
   if (externalCasinoCount >= 5) {

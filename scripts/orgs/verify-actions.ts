@@ -82,8 +82,9 @@ async function main() {
     // The affiliate workspace has its own script. Reset the profile so it
     // counts as a first visit again, then open the affiliate home.
     await svc.from('user_profiles').update({ tour_state: null }).eq('id', userId)
-    await page.goto(`${APP}/scrape`)
-    await page.waitForLoadState('networkidle')
+    // 'load', not 'networkidle': while a scrape is active the page ticks the
+    // runner every 5 s and the network never goes quiet.
+    await page.goto(`${APP}/scrape`, { waitUntil: 'load' })
     const sawAffiliateTour = await page
       .locator('#driver-popover-content')
       .waitFor({ timeout: 6000 })

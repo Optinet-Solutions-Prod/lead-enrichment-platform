@@ -79,11 +79,11 @@ const AFFILIATE_STEPS: DriveStep[] = [
     },
   },
   {
-    element: '[data-tour="scrape-form"]',
+    element: '[data-tour="new-scrape"]',
     popover: {
-      title: 'Queue a scrape',
+      title: 'Start a scrape',
       description:
-        'A keyword and a country. The engine collects the search results (and paid ads), one profile per website, and merges only what is new.',
+        'Pick a source, a country and your keywords — or use a one-click demo. Google runs in about a minute per keyword; the results, one profile per website, land in this table.',
     },
   },
   {

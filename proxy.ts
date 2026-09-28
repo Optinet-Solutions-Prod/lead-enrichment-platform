@@ -32,6 +32,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/enrichment/') ||
     pathname.startsWith('/api/stripe/webhook') || // Stripe calls this server-to-server; auth = signature verification
     pathname.startsWith('/api/ai-analysis/') || // Bearer CRON_SECRET, called by a scheduler / operator, never a browser session
+    pathname.startsWith('/api/scrape/apify-webhook') || // Apify server-to-server; auth = key derived from CRON_SECRET
+    pathname.startsWith('/api/scrape/tick') || // session OR Bearer CRON_SECRET, checked inside the route
     pathname === '/' ||
     pathname.startsWith('/pricing') ||
     pathname.startsWith('/login') ||

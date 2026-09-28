@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireBearer } from '@/lib/auth/bearer'
-import { scoreAffiliate, shouldSkipDomain } from '@/lib/affiliate-detection/scorer'
+import { shouldSkipDomain } from '@/lib/affiliate-detection/scorer'
 import { findRoosterBrandLinks } from '@/lib/affiliate-detection/rooster'
-import { extractContacts, type ContactItem } from '@/lib/contact-extraction/extract'
-import { findContactsWithOpenAI } from '@/lib/contact-extraction/llm-fallback'
-import { findContactsWithHunter } from '@/lib/contact-extraction/hunter'
-import { validatePhones } from '@/lib/contact-extraction/phone-validate'
-import {
-  classifyAffiliateBorderline,
-  classifyRoosterBorderline,
-} from '@/lib/llm-fallback/borderline-classifier'
+import { runAffiliateStage, runContactStage } from '@/lib/enrichment/score-stage'
+import { classifyRoosterBorderline } from '@/lib/llm-fallback/borderline-classifier'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,13 +84,17 @@ export async function POST(req: Request): Promise<Response> {
 
   switch (stage) {
     case 'affiliate':
-      return await scoreAffiliateStage()
+      return NextResponse.json(
+        await runAffiliateStage(svc, { leadId, url, domain, countryCode, html, fetchError, contactOverridden }),
+      )
     case 'rooster':
       return await scoreRoosterStage()
     case 'rooster_deep':
       return await scoreRoosterDeepStage()
     case 'contact':
-      return await scoreContactStage()
+      return NextResponse.json(
+        await runContactStage(svc, { leadId, url, domain, countryCode, html, fetchError, contactOverridden }),
+      )
     case 'stag':
       return await scoreStagStage()
     default:
@@ -106,92 +104,7 @@ export async function POST(req: Request): Promise<Response> {
       )
   }
 
-  // ----- inner handlers -----
-  async function scoreAffiliateStage(): Promise<Response> {
-    if (fetchError) {
-      await svc
-        .from('google_lead_gen_table')
-        .update({
-          is_affiliate: null,
-          affiliate_confidence: 'ERROR',
-          affiliate_indicators: [`Fetch failed: ${fetchError}`],
-          affiliate_checked_at: now,
-        })
-        .eq('id', leadId)
-      return NextResponse.json({ ok: true, status: 'fetch_error_recorded' })
-    }
-    if (shouldSkipDomain(domain)) {
-      await svc
-        .from('google_lead_gen_table')
-        .update({
-          is_affiliate: false,
-          affiliate_score: 0,
-          affiliate_casino_score: 0,
-          affiliate_confidence: 'SKIPPED',
-          affiliate_external_links: 0,
-          affiliate_indicators: ['Skipped — known social/non-affiliate domain'],
-          affiliate_checked_at: now,
-        })
-        .eq('id', leadId)
-      return NextResponse.json({ ok: true, status: 'skipped' })
-    }
-    // Pull the active brand domains so a direct link to a Rooster brand
-    // counts as a casino-outbound signal even on non-English pages where
-    // the brand domain doesn't contain an English CASINO_KEYWORD.
-    const { data: brandRows } = await svc.rpc('list_rooster_brand_domains')
-    const brandDomains = ((brandRows ?? []) as Array<{ domain: string }>)
-      .map(b => b.domain)
-      .filter((d): d is string => typeof d === 'string' && d.length > 0)
-
-    const result = scoreAffiliate(html, url, { brandDomains })
-    let isAffiliate = result.classification === 'AFFILIATE'
-    // Confidence is widened to string since the LLM-tie-broken paths
-    // produce composite labels like LOW_LLM_AFFILIATE that the scorer's
-    // narrow union doesn't list.
-    let confidence: string = result.confidence
-    let indicators = [...result.indicators]
-    let llmConsulted = false
-
-    // LLM tie-breaker for borderline cases. The heuristic catches the
-    // obvious affiliates and obvious non-affiliates well; the LOW/MEDIUM
-    // band is where the model adds the most value.
-    if (confidence === 'LOW' || confidence === 'MEDIUM') {
-      const llm = await classifyAffiliateBorderline({
-        url,
-        html,
-        affiliateScore: result.affiliateScore,
-        casinoScore: result.casinoScore,
-        externalCasinoLinks: result.externalCasinoLinks,
-        priorIndicators: result.indicators,
-      })
-      if (llm) {
-        llmConsulted = true
-        isAffiliate = llm.isAffiliate
-        confidence = `${confidence}_LLM_${llm.isAffiliate ? 'AFFILIATE' : 'NOT_AFFILIATE'}`
-        indicators = [`LLM (${llm.isAffiliate ? 'yes' : 'no'}): ${llm.reasoning}`, ...indicators]
-      }
-    }
-
-    await svc
-      .from('google_lead_gen_table')
-      .update({
-        is_affiliate: isAffiliate,
-        affiliate_score: result.affiliateScore,
-        affiliate_casino_score: result.casinoScore,
-        affiliate_confidence: confidence,
-        affiliate_external_links: result.externalCasinoLinks,
-        affiliate_indicators: indicators,
-        affiliate_checked_at: now,
-      })
-      .eq('id', leadId)
-    return NextResponse.json({
-      ok: true,
-      classification: isAffiliate ? 'AFFILIATE' : 'NOT_AFFILIATE',
-      confidence,
-      llm_consulted: llmConsulted,
-    })
-  }
-
+  // ----- inner handlers (affiliate + contact live in lib/enrichment/score-stage) -----
   async function scoreRoosterStage(): Promise<Response> {
     if (fetchError) {
       await svc
@@ -421,178 +334,6 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     return NextResponse.json({ ok: true, partner: true, match_count: matches.length })
-  }
-
-  /**
-   * Contact-extraction cascade (matches user-spec):
-   *   1. Regex on the cached multi-page HTML (homepage + /contact etc.)
-   *   2. If empty, escalate to GPT-4o + web_search
-   *   3. If still empty, fall back to Hunter.io domain-search
-   *   4. Validate any phone numbers via libphonenumber-js
-   *   5. Persist via upsert_contact_for_lead RPC (preserves manual rows)
-   */
-  async function scoreContactStage(): Promise<Response> {
-    if (contactOverridden) {
-      return NextResponse.json({ ok: true, status: 'manually_overridden' })
-    }
-
-    if (fetchError) {
-      // Even on fetch failure we still try the LLM + Hunter — they can find
-      // contacts from public sources independent of the lead's site.
-      const tier = await runLlmThenHunter()
-      await persistContact(tier)
-      return NextResponse.json({ ok: true, ...tier.summary })
-    }
-
-    if (shouldSkipDomain(domain)) {
-      await svc
-        .from('google_lead_gen_table')
-        .update({ has_contact_details: false, contact_checked_at: now })
-        .eq('id', leadId)
-      return NextResponse.json({ ok: true, status: 'skipped' })
-    }
-
-    // Tier 1 — v2 extractor on the multi-page HTML (per-item provenance,
-    // ranked links, forms, socials, JSON-LD, address).
-    const regex = extractContacts(html, url)
-    let emails = regex.emails
-    let phones = regex.phones
-    let contactPageUrl = regex.contactPageUrl
-    // Each contact carries its own method now; `source` stays as the
-    // coarse primary tier for back-compat + the audit rollups.
-    let source: 'regex' | 'multi_page' | 'openai' | 'hunter' = 'regex'
-    let raw: Record<string, unknown> = { regex: regex.raw }
-    const items: ContactItem[] = [...regex.items]
-    const socials = regex.socials
-    const address = regex.address
-    const contactForms = regex.contactForms
-    if (html.includes('<!-- PAGE: ')) source = 'multi_page'
-
-    // Productive now counts ANY reachable channel — a social handle or a
-    // contact form is a valid outreach path even with no scrapable email.
-    const tier1Productive =
-      emails.length > 0 || phones.length > 0 || contactPageUrl !== null ||
-      socials.length > 0 || contactForms.length > 0
-
-    if (!tier1Productive) {
-      // Tier 2 — OpenAI + web_search
-      const llm = await findContactsWithOpenAI(domain ?? '', url)
-      if (llm) {
-        emails = llm.emails
-        phones = llm.phones
-        contactPageUrl = llm.contactPageUrl ?? contactPageUrl
-        source = 'openai'
-        raw = { ...raw, openai: { reasoning: llm.reasoning } }
-        const via = llm.contactPageUrl ?? url
-        for (const e of llm.emails) items.push({ kind: 'email', value: e, method: 'openai', sourceUrl: via, confidence: 0.5 })
-        for (const p of llm.phones) items.push({ kind: 'phone', value: p, method: 'openai', sourceUrl: via, confidence: 0.5 })
-      }
-
-      // Tier 3 — Hunter.io (only if LLM still produced no emails)
-      if (emails.length === 0) {
-        const hunter = await findContactsWithHunter(domain ?? '')
-        if (hunter && hunter.emails.length > 0) {
-          emails = hunter.emails
-          source = 'hunter'
-          raw = { ...raw, hunter: hunter.raw }
-          for (const e of hunter.emails) {
-            const conf = hunter.confidenceByEmail?.[e]
-            items.push({ kind: 'email', value: e, method: 'hunter', sourceUrl: `https://${domain ?? ''}`, confidence: typeof conf === 'number' ? conf / 100 : 0.4, label: 'hunter.io' })
-          }
-        }
-      }
-    }
-
-    // Tier 4 — phone validation (regex phones are already E.164; this
-    // catches LLM/Hunter-supplied numbers + normalises format).
-    phones = validatePhones(phones, countryCode)
-
-    await svc.rpc('upsert_contact_for_lead_v2', {
-      p_lead_id: leadId,
-      p_emails: emails,
-      p_phones: phones,
-      p_contact_page_url: contactPageUrl,
-      p_source: source,
-      p_raw: raw,
-      p_items: items,
-      p_socials: socials,
-      p_address: address,
-      p_contact_forms: contactForms,
-    })
-
-    return NextResponse.json({
-      ok: true,
-      source,
-      emails: emails.length,
-      phones: phones.length,
-      socials: socials.length,
-      contact_forms: contactForms.length,
-      contact_page: contactPageUrl !== null,
-    })
-
-    async function runLlmThenHunter() {
-      let emails: string[] = []
-      let phones: string[] = []
-      let contactPageUrl: string | null = null
-      let source: 'openai' | 'hunter' | 'regex' = 'regex'
-      const raw: Record<string, unknown> = { fetch_error: fetchError }
-      const items: ContactItem[] = []
-
-      const llm = await findContactsWithOpenAI(domain ?? '', url)
-      if (llm) {
-        emails = llm.emails
-        phones = llm.phones
-        contactPageUrl = llm.contactPageUrl
-        source = 'openai'
-        raw.openai = { reasoning: llm.reasoning }
-        const via = llm.contactPageUrl ?? `https://${domain ?? ''}`
-        for (const e of llm.emails) items.push({ kind: 'email', value: e, method: 'openai', sourceUrl: via, confidence: 0.5 })
-        for (const p of llm.phones) items.push({ kind: 'phone', value: p, method: 'openai', sourceUrl: via, confidence: 0.5 })
-      }
-      if (emails.length === 0) {
-        const hunter = await findContactsWithHunter(domain ?? '')
-        if (hunter && hunter.emails.length > 0) {
-          emails = hunter.emails
-          source = 'hunter'
-          raw.hunter = hunter.raw
-          for (const e of hunter.emails) {
-            const conf = hunter.confidenceByEmail?.[e]
-            items.push({ kind: 'email', value: e, method: 'hunter', sourceUrl: `https://${domain ?? ''}`, confidence: typeof conf === 'number' ? conf / 100 : 0.4, label: 'hunter.io' })
-          }
-        }
-      }
-      return {
-        summary: { source, emails: emails.length, phones: phones.length },
-        emails,
-        phones: validatePhones(phones, countryCode),
-        contactPageUrl,
-        source,
-        raw,
-        items,
-      }
-    }
-
-    async function persistContact(tier: {
-      emails: string[]
-      phones: string[]
-      contactPageUrl: string | null
-      source: 'openai' | 'hunter' | 'regex' | 'multi_page'
-      raw: Record<string, unknown>
-      items: ContactItem[]
-    }) {
-      await svc.rpc('upsert_contact_for_lead_v2', {
-        p_lead_id: leadId,
-        p_emails: tier.emails,
-        p_phones: tier.phones,
-        p_contact_page_url: tier.contactPageUrl,
-        p_source: tier.source,
-        p_raw: tier.raw,
-        p_items: tier.items,
-        p_socials: [],
-        p_address: null,
-        p_contact_forms: [],
-      })
-    }
   }
 
   /**

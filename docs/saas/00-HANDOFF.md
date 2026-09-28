@@ -320,6 +320,35 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   keyword placeholder is a VPN example, not casino. ⚠ Consequence: the default signup path
   now needs the scraping worker connected (owner-side pending item) — a new affiliate org
   that queues a keyword today sees the job wait forever.
+- ✅ **Scraping actually runs here (2026-09-29, migration `20260929120000`, applied live):**
+  the SaaS had no worker consuming `scrape_queue` (prod runs scraper.py on GoLogin VMs), so
+  every scrape sat pending. Now: **Google jobs run on Apify's `google-search-scraper`**
+  started from the app (`lib/scrape/apify-google.ts`), ingested through the same
+  `complete_scrape_job` RPC the VM worker would call (so website profiles, dedupe, chain all
+  work unchanged). **Enrichment runs in-app** (`lib/scrape/inline-enrich.ts`): claims
+  `enrichment_fetch_queue` rows, plain-fetches homepage (+ contact pages for the contact
+  stage), writes `fetched_html_cache`, scores via `lib/enrichment/score-stage.ts` (shared
+  with `/api/enrichment/score-row`). Affiliate scorer gained `nicheKeywords` (from the job
+  keyword) so VPN/hosting outbound links count like casino ones. **Driver:**
+  `POST /api/scrape/tick` (session or Bearer CRON_SECRET) — called by AutoRefresh on the
+  scrape pages every 5 s, by the Apify webhook (`/api/scrape/apify-webhook?key=<derived
+  from CRON_SECRET>`) and by `/api/scheduler/tick`. Enqueue starts the runs immediately.
+  One Apify job per Google keyword now (no VM PPC sibling; Apify returns page-one ads).
+  Only Google is offered; other sources are "coming soon" in the wizard. **Token:** Vercel
+  has no APIFY_TOKEN (`.env.vercel` lists only 5 vars, Vercel CLI not logged in) → the
+  platform token lives in `platform_secrets` (RLS, service-role only; system_settings is
+  readable by every user via get_system_setting so it must NOT go there). Resolver: env
+  APIFY_TOKEN first. **Countries:** 32 rows seeded in `gologin_profiles` with
+  `gologin_profile_id='apify-google'` (FK needs them). Settings: `apify_google_max_pages`
+  (2), `inline_runner_enabled`. **UI port from prod** (Monday stripped): `/scrape` list
+  (scope bar day+owner, Create button, EmptyDay, card paging, flags/source icons),
+  `/scrape/new` wizard (desktop form + phone stepper, saved setup, quota pill, ticket),
+  `/scrape/today`, duplicate-warning modal, `?demo=casino|vpn|property` one-click presets
+  (2 keywords × 2 pages, affiliate+contact). `scripts/orgs/verify-scrape-runner.ts` runs a
+  real demo end to end (costs 2 Apify runs); `scripts/orgs/seed-demo-scrapes.ts` queues the
+  three demo batches under the admin account. ⚠ Not run here: s-tag extraction, PPC
+  screenshots, social engines (all need the browser fleet). ⚠ Apify Starter has no
+  concurrency cap but each run costs ~$0.003/page.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

@@ -1547,6 +1547,10 @@ export type JobsQueryOptions = {
    *  created_by_email matches. Powers the "Mine / All" toggle on
    *  /scrape — default "mine" so operators land on their own work. */
   restrictToOwnerEmail?: string
+  /** Only jobs created on this UTC day (YYYY-MM-DD). The /scrape list
+   *  defaults to today so it opens on what is happening now; the scope bar
+   *  widens it. */
+  onDay?: string
   /** Restrict to these job ids. Used by advanced search, which ranks in SQL
    *  and then reuses this function purely for row hydration. */
   restrictToIds?: string[]
@@ -1629,6 +1633,9 @@ export async function queryJobs(opts: JobsQueryOptions): Promise<JobsQueryResult
   // own work; flip to All via the toggle in the page header.
   if (opts.restrictToOwnerEmail && opts.restrictToOwnerEmail.length > 0) {
     query = query.eq('created_by_email', opts.restrictToOwnerEmail.toLowerCase())
+  }
+  if (opts.onDay) {
+    query = query.gte('created_at', `${opts.onDay}T00:00:00.000Z`).lte('created_at', `${opts.onDay}T23:59:59.999Z`)
   }
 
   if (opts.restrictToIds) {
