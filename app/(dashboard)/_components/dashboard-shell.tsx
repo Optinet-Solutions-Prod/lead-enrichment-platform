@@ -83,9 +83,9 @@ const NAV_GROUPS: NavGroup[] = [
         // avoids the "Dashboards > Dashboard" awkwardness.
         label: 'Overview',
         hidden: true,
-        href: '/',
+        href: '/overview',
         icon: LayoutDashboard,
-        match: (p: string) => p === '/',
+        match: (p: string) => p.startsWith('/overview'),
       },
       {
         label: 'Operations',
@@ -172,6 +172,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/leads',
         icon: ListChecks,
         match: (p: string) => p.startsWith('/leads') || p.startsWith('/websites'),
+        tourId: 'nav-leads',
       },
       {
         // What the AI analysis found: confirmed affiliates, the brands they
@@ -181,6 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/affiliates',
         icon: Sparkles,
         match: (p: string) => p.startsWith('/affiliates'),
+        tourId: 'nav-affiliates',
       },
       {
         // Open to all signed-in users so the whole ops team can clear
@@ -615,7 +617,7 @@ function SidebarBandwidth({
     // Collapsed sidebar: gauge icon + thin bar, full readout in tooltip.
     return (
       <Link
-        href="/"
+        href="/overview"
         title={`Proxy bandwidth: ${remaining} of ${formatGb(bw.limitBytes)} remaining`}
         className="mb-1 flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[color:var(--color-text-secondary)] transition-colors hover:bg-[color:var(--color-bg-secondary)] hover:text-[color:var(--color-text-primary)]"
       >
@@ -633,7 +635,7 @@ function SidebarBandwidth({
 
   return (
     <Link
-      href="/"
+      href="/overview"
       title={bw.stale ? 'Reading is stale — the bandwidth poller may not be running' : 'View on Dashboard'}
       className="mb-2 block rounded-md px-2 py-1.5 transition-colors hover:bg-[color:var(--color-bg-secondary)]"
     >

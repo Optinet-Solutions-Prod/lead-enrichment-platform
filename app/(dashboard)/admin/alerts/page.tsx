@@ -26,7 +26,7 @@ export default async function AlertRecipientsPage() {
 
   const svc = createServiceClient()
   const { data: callerIsAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (!callerIsAdmin) redirect('/')
+  if (!callerIsAdmin) redirect('/overview')
 
   const [{ data: recipients }, { data: countries }] = await Promise.all([
     svc

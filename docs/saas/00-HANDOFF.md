@@ -260,6 +260,28 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   checks incl. the brief's §12 regression (re-scrape of known sites keeps its rows) — plus
   smoke (26 pages), verify-actions (real browser), tenancy 30/30: all green. Note: with
   loading.tsx, notFound()/redirect() stream in-page (HTTP 200 + meta refresh) — expected.
+- ✅ **Public site + new auth UI + tour on signup (2026-09-28):** `/` is now the marketing
+  landing page (route group `app/(marketing)`: hero with a JSX product mock — no real
+  screenshots, they would expose real owners' phones — proof numbers, what-it-is, six
+  services, how-it-works, pricing, FAQ, closing CTA) and `/pricing`; both are public via
+  the proxy allowlist (`pathname === '/'`, `/pricing`). The old dashboard Overview moved to
+  `/overview` (admin-gate redirects and the sidebar bandwidth link follow). **Pricing
+  decision (research: Apollo/Clay/Hunter/PhantomBuster all converged on it) = hybrid:**
+  monthly plans that include credits — Free €0/100 once · Starter €49 (€39 yearly)/400 ·
+  Growth €149 (€119)/1,500 · Scale €399 (€319)/5,000, USD ≈ ×1.1 — plus the existing
+  never-expiring top-up packs; single source of truth `lib/pricing.ts` (lib/billing
+  re-exports the packs). Plans are MARKETING today: every CTA lands on the free signup
+  (`?plan=` is only echoed as a notice); subscription checkout is the next Stripe step
+  after packs. Auth pages moved to `app/(auth)/{login,signup}` with a shared split-panel
+  `AuthShell` (brand panel + form; password show/hide; strength hint on signup; input
+  names unchanged so the action + verify-actions selectors still hold). **Tour:** the
+  TourController now has `script: 'property' | 'affiliate'`; the affiliate script is
+  mounted on `/scrape` (anchors `scrape-form`, `jobs-table`, nav `nav-leads`,
+  `nav-affiliates`), so a brand-new account gets a guided tour whichever vertical it
+  picks; welcome copy says so; Help offers the restart for both. verify-actions now
+  ASSERTS both tours auto-start; smoke checks `/`, `/pricing`, `/login` are reachable
+  signed-out and the app redirects signed-out (29 pages + 4 auth-gate checks). Gate:
+  tsc, eslint, build, smoke, verify-actions, verify-websites 21/21, tenancy 30/30 — green.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { JOBS_COLUMNS } from '@/lib/filters/columns-jobs'
 import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import type { ColumnDef } from '@/lib/filters/types'
@@ -8,6 +9,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getUserPreferences } from '@/lib/user-preferences'
 import { createServiceClient } from '@/lib/supabase/service'
 import { AdvancedFilters } from '../_components/advanced-filters'
+import { TourController } from '../_components/tour-controller'
 import { Pagination } from '../_components/pagination'
 import { AdvancedSearch, type SearchFacets } from './_components/advanced-search'
 import { AutoRefresh } from './_components/auto-refresh'
@@ -55,7 +57,7 @@ export default async function ScrapePage({
   const restrictToOwnerEmail =
     ownerScope === 'mine' && callerEmail ? callerEmail : undefined
 
-  const [profiles, jobsResult, isAdmin, prefs, quotaSnap, fleet, mineCount, allCount, searchFacets] = await Promise.all([
+  const [profiles, jobsResult, isAdmin, prefs, quotaSnap, fleet, mineCount, allCount, searchFacets, tourSeen] = await Promise.all([
     listActiveProfiles(),
     queryJobs({
       page,
@@ -111,6 +113,13 @@ export default async function ScrapePage({
       const { data } = await svc.rpc('job_search_facets')
       return (data ?? { countries: [], engines: [], statuses: [], sources: [], owners: [] }) as SearchFacets
     })(),
+    // First visit? The guided tour auto-starts once per user.
+    (async () => {
+      if (!user) return true
+      const svc = createServiceClient()
+      const { data } = await svc.from('user_profiles').select('tour_state').eq('id', user.id).maybeSingle()
+      return data?.tour_state != null
+    })(),
   ])
   // Pass through only non-exempt snapshots so the EnqueueForm
   // doesn't render the badge for admins or when caps are disabled.
@@ -152,6 +161,9 @@ export default async function ScrapePage({
 
   return (
     <div className="flex min-w-0 flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
+      <Suspense fallback={null}>
+        <TourController autoStart={!tourSeen} script="affiliate" />
+      </Suspense>
       <header>
         <h1 className="text-[16px] font-semibold text-[color:var(--color-text-primary)]">
           Scrape
@@ -162,9 +174,11 @@ export default async function ScrapePage({
         </p>
       </header>
 
-      <EnqueueForm profiles={profiles} quota={quota} fleet={fleet} />
+      <div data-tour="scrape-form">
+        <EnqueueForm profiles={profiles} quota={quota} fleet={fleet} />
+      </div>
 
-      <section className="flex flex-col gap-3">
+      <section data-tour="jobs-table" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-[13px] font-semibold text-[color:var(--color-text-primary)]">

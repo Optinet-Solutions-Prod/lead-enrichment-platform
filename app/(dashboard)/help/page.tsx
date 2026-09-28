@@ -73,9 +73,9 @@ export default async function HelpPage() {
         </p>
       </header>
 
-      {isProperty && (
+      {(isProperty || ctx.modules.includes('affiliate')) && (
         <Link
-          href="/property-scrape?tour=1"
+          href={isProperty ? '/property-scrape?tour=1' : '/scrape?tour=1'}
           className="flex items-center gap-3 rounded-lg border border-[color:var(--color-accent-hover)] bg-[color:var(--color-bg-primary)] p-4 ring-1 ring-[color:var(--color-accent-hover)] transition-colors hover:bg-[color:var(--color-bg-secondary)]"
         >
           <Play className="h-5 w-5 shrink-0 text-[color:var(--color-accent-hover)]" />

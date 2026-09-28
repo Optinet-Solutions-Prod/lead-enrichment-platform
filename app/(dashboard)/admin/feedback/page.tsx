@@ -30,7 +30,7 @@ export default async function AdminFeedbackPage({
 
   const svc = createServiceClient()
   const { data: callerIsAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (!callerIsAdmin) redirect('/')
+  if (!callerIsAdmin) redirect('/overview')
 
   const sp = await searchParams
   const statusFilter =

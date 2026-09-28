@@ -66,14 +66,33 @@ async function main() {
     await page.waitForLoadState('networkidle')
     check('login lands on a dashboard page', !page.url().includes('/login'), page.url())
 
-    // Dismiss the auto-started tour so it can't block clicks — Escape both
-    // closes it and exercises saveTourStateAction (a real action POST).
-    try {
-      await page.locator('#driver-popover-content').waitFor({ timeout: 4000 })
+    // A brand-new account gets the guided tour automatically. Escape both
+    // dismisses it and exercises saveTourStateAction (a real action POST).
+    const sawPropertyTour = await page
+      .locator('#driver-popover-content')
+      .waitFor({ timeout: 6000 })
+      .then(() => true)
+      .catch(() => false)
+    check('guided tour auto-starts for a new account (property workspace)', sawPropertyTour)
+    if (sawPropertyTour) {
       await page.keyboard.press('Escape')
-      await page.waitForTimeout(600)
-    } catch {
-      // no tour — fine
+      await page.waitForTimeout(800)
+    }
+
+    // The affiliate workspace has its own script. Reset the profile so it
+    // counts as a first visit again, then open the affiliate home.
+    await svc.from('user_profiles').update({ tour_state: null }).eq('id', userId)
+    await page.goto(`${APP}/scrape`)
+    await page.waitForLoadState('networkidle')
+    const sawAffiliateTour = await page
+      .locator('#driver-popover-content')
+      .waitFor({ timeout: 6000 })
+      .then(() => true)
+      .catch(() => false)
+    check('guided tour auto-starts on the affiliate workspace', sawAffiliateTour)
+    if (sawAffiliateTour) {
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(800)
     }
 
     for (let round = 1; round <= 3; round++) {

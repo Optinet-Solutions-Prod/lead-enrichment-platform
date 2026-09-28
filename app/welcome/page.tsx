@@ -19,8 +19,9 @@ export default async function WelcomePage() {
         </h1>
         <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
           Scrapes, leads, and settings live inside an organization. You&apos;ll be its owner
-          and can invite teammates afterwards. Joining someone else&apos;s org instead? Ask
-          them for an invite link.
+          and can invite teammates afterwards. A 60-second guided tour starts as soon as your
+          workspace opens — skip it any time, restart it from Help. Joining someone else&apos;s
+          org instead? Ask them for an invite link.
         </p>
         <div className="mt-4">
           <CreateOrgForm />

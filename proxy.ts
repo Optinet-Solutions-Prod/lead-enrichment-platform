@@ -7,6 +7,7 @@ import { updateSession } from '@/lib/supabase/middleware'
  *   /auth/portal-callback   — cross-dashboard SSO landing; authenticates via a
  *                             portal-signed JWT and CREATES the session, so it
  *                             necessarily arrives without one
+ *   /, /pricing            — the public marketing site (landing + pricing)
  *   /signup, /invite/<token> — public auth pages (signup + invite acceptance)
  *   /api/scheduler/tick     — Vercel cron authenticates via Bearer CRON_SECRET
  *   /api/proxy/bandwidth/refresh — Vercel cron authenticates via Bearer CRON_SECRET
@@ -31,6 +32,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/enrichment/') ||
     pathname.startsWith('/api/stripe/webhook') || // Stripe calls this server-to-server; auth = signature verification
     pathname.startsWith('/api/ai-analysis/') || // Bearer CRON_SECRET, called by a scheduler / operator, never a browser session
+    pathname === '/' ||
+    pathname.startsWith('/pricing') ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
     pathname.startsWith('/invite/')

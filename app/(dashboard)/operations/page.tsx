@@ -33,7 +33,7 @@ export default async function OperationsPage({
 }) {
   // Admin-only dashboard (2026-07-27): non-admins only get Overview.
   const admin = await requireAdmin()
-  if (!admin.ok) redirect('/')
+  if (!admin.ok) redirect('/overview')
 
   const sp = await searchParams
   const range = parseDateRange(sp.range)

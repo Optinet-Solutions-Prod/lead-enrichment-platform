@@ -27,7 +27,7 @@ export default async function UtilizationPage({
 
   const svc = createServiceClient()
   const { data: isAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (!isAdmin) redirect('/')
+  if (!isAdmin) redirect('/overview')
 
   const sp = await searchParams
   // Per-user cap window. Default to a rolling 7 days; the toggle

@@ -20,11 +20,11 @@ export default async function MaintenancePage() {
     p_key: 'maintenance_mode',
   })
   const maintenanceEnabled = maintRaw === true
-  if (!maintenanceEnabled) redirect('/')
+  if (!maintenanceEnabled) redirect('/overview')
 
   if (user?.id) {
     const { data: isAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-    if (isAdmin) redirect('/')
+    if (isAdmin) redirect('/overview')
   }
 
   return (

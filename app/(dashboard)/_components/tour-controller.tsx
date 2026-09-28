@@ -8,10 +8,12 @@ import { saveTourStateAction } from '../_actions/tour'
 
 export const TOUR_VERSION = 1
 
+export type TourScript = 'property' | 'affiliate'
+
 /** Steps target stable data-tour attributes; anything not present or not
  *  visible on this viewport (e.g. the sidebar on mobile) is filtered out at
  *  start, so the tour degrades gracefully instead of erroring. */
-const ALL_STEPS: DriveStep[] = [
+const PROPERTY_STEPS: DriveStep[] = [
   {
     element: '[data-tour="org-switcher"]',
     popover: {
@@ -67,12 +69,72 @@ const ALL_STEPS: DriveStep[] = [
   },
 ]
 
+const AFFILIATE_STEPS: DriveStep[] = [
+  {
+    element: '[data-tour="org-switcher"]',
+    popover: {
+      title: 'Your workspace',
+      description:
+        'Everything — batches, leads, credits, settings — lives inside an organization. When you belong to more than one, switch here.',
+    },
+  },
+  {
+    element: '[data-tour="scrape-form"]',
+    popover: {
+      title: 'Queue a scrape',
+      description:
+        'A keyword and a country. The engine collects the search results (and paid ads), one profile per website, and merges only what is new.',
+    },
+  },
+  {
+    element: '[data-tour="jobs-table"]',
+    popover: {
+      title: 'Your batches',
+      description:
+        'Every scrape you queue shows up here with how many rows it stored and how far enrichment got. Open a batch to see its results.',
+    },
+  },
+  {
+    element: '[data-tour="nav-leads"]',
+    popover: {
+      title: 'Leads',
+      description:
+        'All results across batches. A domain opens its website page: appearances, contacts, brands and whether it was seen before.',
+    },
+  },
+  {
+    element: '[data-tour="nav-affiliates"]',
+    popover: {
+      title: 'Affiliates (AI)',
+      description:
+        'What the AI analysis found: confirmed affiliates, the brands they promote and their outbound links — when the analysis is enabled.',
+    },
+  },
+  {
+    element: '[data-tour="nav-billing"]',
+    popover: {
+      title: 'Billing & Credits',
+      description: 'Your balance, the price list, and a ledger of where every credit went.',
+    },
+  },
+  {
+    element: '[data-tour="bell"]',
+    popover: {
+      title: 'Notifications',
+      description:
+        'Finished runs, low balance and team events appear here. That’s the tour — queue your first keyword!',
+    },
+  },
+]
+
 type Props = {
   /** True on the first dashboard visit (no tour_state on the profile). */
   autoStart: boolean
+  /** Which walkthrough to run — matches the workspace's module. */
+  script?: TourScript
 }
 
-export function TourController({ autoStart }: Props) {
+export function TourController({ autoStart, script = 'property' }: Props) {
   const searchParams = useSearchParams()
   const forced = searchParams.get('tour') === '1'
   const startedRef = useRef(false)
@@ -83,7 +145,8 @@ export function TourController({ autoStart }: Props) {
 
     // Give the page a beat to paint before measuring highlight targets.
     const timer = setTimeout(() => {
-      const steps = ALL_STEPS.filter(s => {
+      const all = script === 'affiliate' ? AFFILIATE_STEPS : PROPERTY_STEPS
+      const steps = all.filter(s => {
         const el = document.querySelector(s.element as string)
         return el instanceof HTMLElement && el.offsetParent !== null
       })
@@ -111,7 +174,7 @@ export function TourController({ autoStart }: Props) {
       d.drive()
     }, 600)
     return () => clearTimeout(timer)
-  }, [autoStart, forced])
+  }, [autoStart, forced, script])
 
   return null
 }

@@ -32,7 +32,7 @@ export default async function AdminUsersPage() {
 
   const svc = createServiceClient()
   const { data: callerIsAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (!callerIsAdmin) redirect('/')
+  if (!callerIsAdmin) redirect('/overview')
   const { data: callerIsShadow } = await svc.rpc('is_shadow_user', { p_user_id: user.id })
   const viewerIsShadow = callerIsShadow === true
 

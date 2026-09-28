@@ -227,7 +227,7 @@ export default function OnboardingPage() {
               doing right now, and the most recent batches. Always start there.
             </Tip>
             <TryItRow>
-              <TryIt href="/" label="Open the dashboard" />
+              <TryIt href="/overview" label="Open the dashboard" />
             </TryItRow>
           </Section>
 

@@ -21,6 +21,8 @@ const svc = createClient(URL, SERVICE, { auth: { persistSession: false } })
 
 const PAGES = [
   '/',
+  '/pricing',
+  '/overview',
   '/property-scrape',
   '/pipeline',
   '/property-leads',
@@ -106,6 +108,16 @@ async function main() {
       }
     }
     const cookieHeader = cookies.join('; ')
+
+    // The marketing site must be reachable WITHOUT a session, and the app
+    // must not be — the proxy allowlist is easy to get wrong in either
+    // direction.
+    for (const [page, want] of [['/', 200], ['/pricing', 200], ['/login', 200], ['/property-scrape', 307]] as const) {
+      const res = await fetch(`${APP}${page}`, { redirect: 'manual' })
+      const ok = want === 200 ? res.status === 200 : res.status >= 300 && res.status < 400
+      if (!ok) failures++
+      console.log(`${ok ? 'PASS' : 'FAIL'}  ${res.status}  ${page}  (signed out, expected ${want === 200 ? '200' : 'redirect'})`)
+    }
 
     for (const page of PAGES) {
       const res = await fetch(`${APP}${page}`, {

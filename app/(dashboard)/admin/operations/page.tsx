@@ -22,7 +22,7 @@ export default async function OperationsPage({
 
   const svc = createServiceClient()
   const { data: isAdmin } = await svc.rpc('is_admin', { p_user_id: user.id })
-  if (!isAdmin) redirect('/')
+  if (!isAdmin) redirect('/overview')
 
   const sp = await searchParams
   const sinceParam =

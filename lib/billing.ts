@@ -8,49 +8,9 @@ import { createServiceClient } from '@/lib/supabase/service'
  * billing page but purchases stay disabled until Stripe keys exist.
  */
 
-export type Currency = 'EUR' | 'USD'
-
-export type CreditPack = {
-  key: string
-  name: string
-  credits: number
-  eur: number
-  usd: number
-  perCreditEur: string
-  popular?: boolean
-  blurb: string
-}
-
-export const CREDIT_PACKS: CreditPack[] = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    credits: 100,
-    eur: 25,
-    usd: 29,
-    perCreditEur: '0.25',
-    blurb: 'A pilot batch: ~100 source runs or a few full collection days.',
-  },
-  {
-    key: 'growth',
-    name: 'Growth',
-    credits: 500,
-    eur: 99,
-    usd: 115,
-    perCreditEur: '0.20',
-    popular: true,
-    blurb: 'Weekly workflows across every source with room to spare.',
-  },
-  {
-    key: 'scale',
-    name: 'Scale',
-    credits: 2000,
-    eur: 299,
-    usd: 345,
-    perCreditEur: '0.15',
-    blurb: 'Agency volume — run everything, often, in multiple markets.',
-  },
-]
+export type { Currency, CreditPack } from './pricing'
+export { CREDIT_PACKS } from './pricing'
+import type { Currency, CreditPack } from './pricing'
 
 export function formatPackPrice(pack: CreditPack, currency: Currency): string {
   return currency === 'EUR' ? `€${pack.eur}` : `$${pack.usd}`

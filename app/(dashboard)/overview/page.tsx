@@ -12,7 +12,7 @@ import {
   Search,
   TrendingUp,
 } from 'lucide-react'
-import { AutoRefresh } from './scrape/_components/auto-refresh'
+import { AutoRefresh } from '../scrape/_components/auto-refresh'
 import { formatGb } from '@/lib/proxy-bandwidth'
 import {
   loadDashboardData,
@@ -24,18 +24,18 @@ import {
   type ProxyBandwidth,
   type RecentBatch,
   type ActivityRow,
-} from './_lib/dashboard-queries'
-import { parseDateRange } from './_lib/date-range'
-import { loadDailyReport, type DailyReport } from './_lib/daily-report-queries'
-import { DateRangeToggle } from './_components/dashboards/date-range-toggle'
-import { DayToggle } from './_components/dashboards/day-toggle'
-import { DashboardSection } from './_components/dashboards/dashboard-section'
-import { StatCard } from './_components/dashboards/stat-card'
-import { TrendChart } from './_components/dashboards/trend-chart'
-import { HeatMap, bucketToHeatmap } from './_components/dashboards/heat-map'
-import { Leaderboard } from './_components/dashboards/leaderboard'
-import { loadSystemDashboardData } from './_lib/system-dashboard-queries'
-import { bucketByDayInWindow, bucketByHourInDay } from './_lib/bucket-timestamps'
+} from '../_lib/dashboard-queries'
+import { parseDateRange } from '../_lib/date-range'
+import { loadDailyReport, type DailyReport } from '../_lib/daily-report-queries'
+import { DateRangeToggle } from '../_components/dashboards/date-range-toggle'
+import { DayToggle } from '../_components/dashboards/day-toggle'
+import { DashboardSection } from '../_components/dashboards/dashboard-section'
+import { StatCard } from '../_components/dashboards/stat-card'
+import { TrendChart } from '../_components/dashboards/trend-chart'
+import { HeatMap, bucketToHeatmap } from '../_components/dashboards/heat-map'
+import { Leaderboard } from '../_components/dashboards/leaderboard'
+import { loadSystemDashboardData } from '../_lib/system-dashboard-queries'
+import { bucketByDayInWindow, bucketByHourInDay } from '../_lib/bucket-timestamps'
 
 export const dynamic = 'force-dynamic'
 
