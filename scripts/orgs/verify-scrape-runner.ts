@@ -60,7 +60,7 @@ async function main() {
   const { data: orgs } = await svc
     .from('organizations')
     .select('id')
-    .in('slug', ['property-management', 'optinet-solutions'])
+    .in('slug', ['optinet-discovery', 'optinet-solutions'])
   for (const org of orgs ?? []) {
     await svc.from('org_members').insert({ org_id: org.id, user_id: userId, role: 'member' })
   }

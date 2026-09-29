@@ -42,8 +42,8 @@ async function main() {
   const { data: orgs } = await svc
     .from('organizations')
     .select('id, name, slug')
-    .in('slug', ['property-management', 'optinet-solutions'])
-  if (!orgs || orgs.length < 2) throw new Error('need the two property orgs to exist')
+    .in('slug', ['optinet-discovery', 'optinet-solutions'])
+  if (!orgs || orgs.length < 2) throw new Error('need the two admin orgs to exist')
 
   const browser = await chromium.launch()
   try {

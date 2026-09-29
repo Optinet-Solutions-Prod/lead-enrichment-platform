@@ -369,7 +369,10 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   Malta" Google demo preset still on the landing page and in the wizard: every property example
   is gone now (landing presets VPN / hosting / SaaS / fitness; wizard + seeder casino / VPN /
   hosting; the seeded property batches were deleted). Rule: no property or Malta-rental wording
-  anywhere a visitor or user can see.
+  anywhere a visitor or user can see. The "Property Management" org was renamed **Optinet
+  Discovery** (slug `optinet-discovery`; verify-actions / verify-scrape-runner use it) and both
+  admin orgs now have `enabled_modules = {affiliate}`. activity_log and notifications held no
+  property rows. The property tables still hold the Malta data under that org_id, invisible.
 - ✅ **Landing page = live demo (2026-09-29, migration `20260929130000` applied live):** the
   owner wants visitors to run the product without signing up. Hero is now a 4-slide carousel
   (tagline "Type a keyword. Meet the sites that rank for it — and the people behind them.") whose
