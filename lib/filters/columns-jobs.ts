@@ -28,7 +28,6 @@ const SEARCH_ENGINE_OPTIONS = [
   { value: 'tiktok', label: 'TikTok' },
   { value: 'snapchat', label: 'Snapchat' },
   { value: 'telegram', label: 'Telegram' },
-  { value: 'maltapark', label: 'Maltapark' },
 ] as const
 
 const VIEW_MODE_OPTIONS = [

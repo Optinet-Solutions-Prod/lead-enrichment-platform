@@ -1,6 +1,6 @@
 /**
  * Queue the three one-click demo batches (casino affiliates, VPN affiliates,
- * property management) under the admin account and drive the in-app runner
+ * web hosting) under the admin account and drive the in-app runner
  * until Google results, affiliate verdicts and contacts have landed — so the
  * product has live examples to show before anyone touches the wizard.
  *
@@ -22,7 +22,7 @@ const svc = createClient(SUPA, SERVICE, { auth: { persistSession: false } })
 const PRESETS = [
   { key: 'casino', country: 'GB', keywords: ['best online casinos', 'new online casinos 2026'], stages: ['affiliate', 'contact'] },
   { key: 'vpn', country: 'GB', keywords: ['best vpn for streaming', 'best vpn 2026'], stages: ['affiliate', 'contact'] },
-  { key: 'property', country: 'MT', keywords: ['apartments for rent by owner malta', 'property to let malta direct from owner'], stages: ['contact'] },
+  { key: 'hosting', country: 'US', keywords: ['best web hosting for small business', 'best wordpress hosting 2026'], stages: ['affiliate', 'contact'] },
 ]
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))

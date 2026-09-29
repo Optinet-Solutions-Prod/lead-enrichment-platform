@@ -246,7 +246,7 @@ export default function OnboardingPage() {
               in the chosen country, the results (organic and page-one ads) land
               in about a minute per keyword, and the enrichment stages you picked
               run inside the app afterwards. The one-click demos on that page
-              fill everything in for a casino, VPN or property run.
+              fill everything in for a casino, VPN or hosting run.
             </p>
             <ul>
               <li>

@@ -176,5 +176,5 @@ export async function leaveOrgAction(
 
   const ctx = await getOrgContext()
   if (!ctx) redirect('/welcome')
-  redirect(ctx.modules.includes('property') ? '/property-scrape' : '/scrape')
+  redirect('/scrape')
 }

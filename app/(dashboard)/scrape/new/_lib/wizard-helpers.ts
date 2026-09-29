@@ -245,15 +245,15 @@ export const DEMO_PRESETS: ReadonlyArray<DemoPreset> = [
     stages: ['affiliate', 'contact'],
   },
   {
-    key: 'property',
-    title: 'Property management',
-    blurb: 'Owners and portals listing rentals in Malta — the leads a property manager pitches.',
+    key: 'hosting',
+    title: 'Web hosting',
+    blurb: 'Hosting comparison publishers and WordPress blogs in the US — who a host recruits.',
     search_engine: 'google',
-    country_code: 'MT',
+    country_code: 'US',
     language: 'en',
     pages: 2,
-    keywords: ['apartments for rent by owner malta', 'property to let malta direct from owner'],
-    stages: ['contact'],
+    keywords: ['best web hosting for small business', 'best wordpress hosting 2026'],
+    stages: ['affiliate', 'contact'],
   },
 ]
 

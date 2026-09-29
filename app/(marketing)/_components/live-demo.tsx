@@ -83,7 +83,7 @@ const PRESETS = [
   { key: 'vpn', label: 'VPN brand', keyword: 'best vpn for streaming', country: 'GB', blurb: 'Who reviews VPNs in the UK' },
   { key: 'hosting', label: 'Web hosting', keyword: 'best web hosting for small business', country: 'US', blurb: 'Hosting comparison publishers' },
   { key: 'saas', label: 'B2B SaaS', keyword: 'best crm for small business', country: 'US', blurb: 'Software reviewers and directories' },
-  { key: 'property', label: 'Property management', keyword: 'apartments for rent in malta', country: 'MT', blurb: 'Portals and owners listing in Malta' },
+  { key: 'fitness', label: 'Fitness & supplements', keyword: 'best protein powder', country: 'GB', blurb: 'Fitness creators and comparison sites' },
 ]
 
 const POLL_MS = 3000

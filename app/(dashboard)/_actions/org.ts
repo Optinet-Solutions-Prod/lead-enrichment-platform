@@ -1,5 +1,6 @@
 'use server'
 
+import { PROPERTY_MODULE_ENABLED } from '@/lib/modules'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -22,7 +23,7 @@ export async function switchOrgAction(formData: FormData): Promise<void> {
   revalidatePath('/', 'layout')
 
   const ctx = await getOrgContext()
-  const home = ctx?.modules.includes('property')
+  const home = ctx?.modules.includes('property') && PROPERTY_MODULE_ENABLED
     ? '/property-scrape'
     : ctx?.modules.includes('affiliate')
       ? '/scrape'
