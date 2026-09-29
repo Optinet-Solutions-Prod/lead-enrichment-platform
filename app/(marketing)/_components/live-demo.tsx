@@ -218,6 +218,14 @@ export function LiveDemo() {
 
   useEffect(() => () => stopPolling(), [stopPolling])
 
+  // Elapsed seconds since the run started, shown while Google is slow to answer.
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (startedAt === null || !run || (run.status !== 'searching' && run.status !== 'enriching')) return
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [startedAt, run])
+
   async function start() {
     stopPolling()
     setError(null)
@@ -236,6 +244,7 @@ export function LiveDemo() {
         return
       }
       setStartedAt(Date.now())
+      setElapsed(0)
       setRun({ id: body.id, ai: false, status: 'searching', keyword, country_code: country, results: [], total: 0, enriched: 0, error: null })
       pollRef.current = setTimeout(() => void poll(body.id!), 1500)
     } catch {
@@ -257,7 +266,10 @@ export function LiveDemo() {
   const steps: Array<{ label: string; state: 'todo' | 'doing' | 'done' }> = run
     ? [
         {
-          label: `Searching Google as someone in ${countryName(run.country_code)}`,
+          label:
+            run.status === 'searching'
+              ? `Searching Google as someone in ${countryName(run.country_code)}${elapsed >= 15 ? ` · ${elapsed}s — Google is slow to answer for some countries; this can take up to a minute` : ''}`
+              : `Searched Google as someone in ${countryName(run.country_code)}`,
           state: run.status === 'searching' ? 'doing' : 'done',
         },
         {

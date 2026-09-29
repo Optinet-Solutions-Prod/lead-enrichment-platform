@@ -413,6 +413,18 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   exists; heuristics stand in otherwise. ⚠ Local `.env.local` has NO OpenAI key — the AI path is
   only testable against production. ⚠ `rooster_brands` (29 casino brands from prod) is still the
   global "our brands" list the audit is shown; a per-org brand list is future work.
+- ✅ **Demo latency (2026-09-29, "why is the UK taking so long"):** every demo and workspace
+  country exists in Apify (`apify/google-search-scraper` build 0.0.451 lists 241 countries; all
+  12 demo + 32 workspace codes present). The delay is the actor itself: the same GB input took
+  10 s / 58 s / 63 s / 196 s on four runs (boot + Google bot-check retries), an AE run took 5 s.
+  Nothing in our code was slow, but the poll route could exceed its 60 s limit when two OpenAI
+  audits ran inside one poll (Vercel then answered with non-JSON and the page kept spinning).
+  Changes: `GET /api/demo/[id]` now returns the state at once and moves the run forward in
+  `after()` (`maxDuration=120`); `ENRICH_BATCH` 2→4 (all 8 crawls in two batches), enriching
+  lock 75 s; the progress step shows elapsed seconds after 15 s with an honest note. **Fast
+  path:** `lib/scrape/serper.ts` — when `SERPER_API_KEY` is set (google.serper.dev, ~1–2 s, free
+  2,500 queries) the demo searches through Serper inside `/api/demo/start` and skips the
+  searching stage; Apify remains the fallback and the workspace engine. ⚠ Not set on Vercel yet.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

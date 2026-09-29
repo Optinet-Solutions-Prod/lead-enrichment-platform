@@ -7,7 +7,9 @@ import {
   mapItemsToResults,
   resolvePlatformApify,
   startRun,
+  type ResultRow,
 } from '@/lib/scrape/apify-google'
+import { searchSerper, serperKey } from '@/lib/scrape/serper'
 import { fetchPageHtml, findContactPages } from '@/lib/scrape/inline-enrich'
 import { scoreAffiliate, shouldSkipDomain } from '@/lib/affiliate-detection/scorer'
 import { extractContacts } from '@/lib/contact-extraction/extract'
@@ -63,7 +65,7 @@ export const DEMO_COUNTRIES: ReadonlyArray<{ code: string; name: string; lang: s
 
 /** How many relevant results get opened. The rest are shown from the SERP only. */
 export const DEMO_ENRICH_LIMIT = 8
-const ENRICH_BATCH = 2
+const ENRICH_BATCH = 4
 const LEAD_DEADLINE_MS = 42_000
 const SEARCH_STALE_MS = 5 * 60 * 1000
 const MAX_CTA_UNMASK = 6
@@ -190,6 +192,36 @@ export async function startDemoRun(input: {
     return { ok: false, error: 'The public demo has hit its daily limit. Create a free account to run your own scrape.', status: 429 }
   }
 
+  // Serper answers in a second or two, so the search completes inside this
+  // request and the run starts life already in the enriching stage.
+  const serper = serperKey()
+  if (serper) {
+    try {
+      const rows = await searchSerper(serper, { keyword, countryCode: country.code, language: country.lang })
+      const leads = toLeads(rows, keyword)
+      await judgeRelevanceWithAi(svc, keyword, leads)
+      const status = crawlable(leads).length === 0 ? 'done' : 'enriching'
+      const { data: inserted, error: insErr } = await svc
+        .from('demo_runs')
+        .insert({
+          ip_hash: input.ipHash,
+          keyword,
+          country_code: country.code,
+          language: country.lang,
+          status,
+          results: leads,
+          total: leads.length,
+          apify_run_id: null,
+        })
+        .select('id')
+        .single()
+      if (insErr || !inserted) return { ok: false, error: 'Could not start the demo. Try again in a moment.', status: 500 }
+      return { ok: true, id: (inserted as { id: string }).id }
+    } catch (e) {
+      console.error('[demo] serper failed, falling back to Apify', e instanceof Error ? e.message : e)
+    }
+  }
+
   const apify = await resolvePlatformApify(svc)
   if (!apify) return { ok: false, error: 'The demo is not configured on this deployment.', status: 503 }
 
@@ -268,8 +300,7 @@ export function judgeRelevanceHeuristic(keyword: string, lead: Pick<DemoLead, 't
   return hits >= Math.max(1, Math.ceil(words.length / 2)) ? 'relevant' : 'off_topic'
 }
 
-function toLeads(items: unknown[], keyword: string, runId: string): DemoLead[] {
-  const { results } = mapItemsToResults(items, { keyword, view_mode: 'desktop' }, { runId })
+function toLeads(results: ResultRow[], keyword: string): DemoLead[] {
   return results.slice(0, 12).map((r, i) => {
     const domain = hostOf(r.url) || r.url
     const skipped = shouldSkipDomain(domain) || PLATFORM_HOSTS.test(domain)
@@ -602,7 +633,7 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
     if (run.status === 'SUCCEEDED') {
       const datasetId = row.dataset_id ?? run.datasetId
       const items = datasetId ? await getDatasetItems(apify.token, datasetId).catch(() => []) : []
-      const leads = toLeads(items, row.keyword, row.apify_run_id)
+      const leads = toLeads(mapItemsToResults(items, { keyword: row.keyword, view_mode: 'desktop' }, { runId: row.apify_run_id }).results, row.keyword)
       await judgeRelevanceWithAi(svc, row.keyword, leads)
       const next = crawlable(leads).length === 0 ? 'done' : 'enriching'
       const { data: updated } = await svc
@@ -630,7 +661,7 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
   const nowIso = new Date().toISOString()
   const { data: locked } = await svc
     .from('demo_runs')
-    .update({ lock_until: new Date(Date.now() + 55_000).toISOString() })
+    .update({ lock_until: new Date(Date.now() + 75_000).toISOString() })
     .eq('id', id)
     .eq('status', 'enriching')
     .or(`lock_until.is.null,lock_until.lt.${nowIso}`)
