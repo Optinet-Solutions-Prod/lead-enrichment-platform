@@ -14,15 +14,20 @@ import { extractContacts } from '@/lib/contact-extraction/extract'
 import { validatePhones } from '@/lib/contact-extraction/phone-validate'
 import { nicheKeywordsFrom } from '@/lib/enrichment/score-stage'
 import {
+  audit,
+  auditInstructions,
   brandFromLabel,
   ctaCandidates,
   extractLinks,
   hostOf,
+  htmlToText,
   isOutboundCta,
   siteLabel,
   unmask,
   type PageLink,
 } from '@/lib/ai-analysis/core'
+import { judgeRelevance } from '@/lib/ai-analysis/relevance'
+import { readKey } from '@/lib/ai-analysis/run'
 
 /**
  * The landing-page demo, end to end, for a visitor with no account:
@@ -36,9 +41,9 @@ import {
  *                behind them (tracking redirects followed to the destination)
  *   6. Contacts  emails, phones, socials, contact page
  *
- * Steps 2 and 4 are heuristic here: the OpenAI judges in lib/ai-analysis run
- * in the workspace once an API key is configured; the demo has to answer in
- * seconds and for free. Lives in `demo_runs`, never in the org tables.
+ * Steps 2 and 4 use the same OpenAI judges as the workspace (lib/ai-analysis)
+ * when an API key is configured, and fall back to heuristics when it is not
+ * or when a call fails. Lives in `demo_runs`, never in the org tables.
  */
 
 export const DEMO_COUNTRIES: ReadonlyArray<{ code: string; name: string; lang: string }> = [
@@ -58,10 +63,11 @@ export const DEMO_COUNTRIES: ReadonlyArray<{ code: string; name: string; lang: s
 
 /** How many relevant results get opened. The rest are shown from the SERP only. */
 export const DEMO_ENRICH_LIMIT = 8
-const ENRICH_BATCH = 3
-const LEAD_DEADLINE_MS = 18_000
+const ENRICH_BATCH = 2
+const LEAD_DEADLINE_MS = 42_000
 const SEARCH_STALE_MS = 5 * 60 * 1000
 const MAX_CTA_UNMASK = 6
+const AI_AUDIT_TIMEOUT_MS = 32_000
 
 export type DemoVerdict = 'affiliate' | 'not_affiliate' | 'unclear' | 'unknown'
 export type DemoRelevance = 'relevant' | 'off_topic' | 'unknown'
@@ -87,6 +93,11 @@ export type DemoLead = {
   position: number
   /** Judged against the keyword before anything is opened. */
   relevance: DemoRelevance
+  relevanceReason: string | null
+  /** What the site is, in a dozen words (from the relevance judge). */
+  siteDescription: string | null
+  /** The market the audit placed the site in ("VPN services"). */
+  market: string | null
   /** Opened and scored (true), or left as a SERP-only row. */
   enriched: boolean
   /** Known platform / non-business host — never opened. */
@@ -106,6 +117,8 @@ export type DemoLead = {
 
 export type DemoRun = {
   id: string
+  /** True when the OpenAI judges are on for this deployment. */
+  ai: boolean
   status: 'searching' | 'enriching' | 'done' | 'failed'
   keyword: string
   country_code: string
@@ -212,6 +225,7 @@ export async function startDemoRun(input: {
 function publicView(row: Row): DemoRun {
   return {
     id: row.id,
+    ai: Boolean((process.env.OPENAI_API_KEY ?? '').trim()),
     status: row.status,
     keyword: row.keyword,
     country_code: row.country_code,
@@ -269,6 +283,9 @@ function toLeads(items: unknown[], keyword: string, runId: string): DemoLead[] {
       type: r.resultType,
       position: r.overall_position,
       relevance: judgeRelevanceHeuristic(keyword, base),
+      relevanceReason: null,
+      siteDescription: null,
+      market: null,
       enriched: false,
       skipped,
       fetchError: null,
@@ -424,7 +441,53 @@ function kindOf(verdict: DemoVerdict, brands: DemoBrand[], ctaLinks: number, dom
   return 'publisher'
 }
 
-async function enrichLead(lead: DemoLead, keyword: string, country: string): Promise<DemoLead> {
+type AiConfig = { key: string; triageModel: string; auditModel: string }
+
+async function aiConfig(svc: Svc): Promise<AiConfig | null> {
+  const key = await readKey(svc)
+  if (!key) return null
+  const t = await setting(svc, 'ai_triage_model')
+  const a = await setting(svc, 'ai_crawl_model')
+  return {
+    key,
+    triageModel: typeof t === 'string' && t ? t : 'gpt-5-mini',
+    auditModel: typeof a === 'string' && a ? a : 'gpt-5-mini',
+  }
+}
+
+/** The same relevance judge the workspace uses, over the SERP rows. Any
+ *  failure leaves the heuristic verdicts in place. */
+async function judgeRelevanceWithAi(svc: Svc, keyword: string, leads: DemoLead[]): Promise<void> {
+  const ai = await aiConfig(svc)
+  if (!ai || leads.length === 0) return
+  try {
+    const { verdicts } = await judgeRelevance(
+      ai.key,
+      ai.triageModel,
+      leads.map(l => ({
+        lead_id: l.id,
+        profile_id: null,
+        keyword,
+        serp_title: l.title,
+        serp_description: l.snippet,
+        domain: l.domain,
+      })),
+    )
+    for (const v of verdicts) {
+      const lead = leads.find(l => l.id === v.lead_id)
+      if (!lead) continue
+      lead.relevance = v.relevant ? 'relevant' : 'off_topic'
+      lead.relevanceReason = v.reason || null
+      lead.siteDescription = v.description || null
+    }
+  } catch {
+    /* heuristics stand */
+  }
+}
+
+const AI_KIND: Record<string, DemoKind> = { affiliate: 'affiliate', operator: 'operator', publisher: 'publisher', other: 'unknown' }
+
+async function enrichLead(lead: DemoLead, keyword: string, country: string, ai: AiConfig | null): Promise<DemoLead> {
   const home = await fetchPageHtml(lead.url, 7000)
   if (!home.html) {
     return { ...lead, enriched: true, fetchError: home.error ?? 'Could not open the site', kind: 'unknown', verdict: 'unknown' }
@@ -443,8 +506,45 @@ async function enrichLead(lead: DemoLead, keyword: string, country: string): Pro
   const score = scoreAffiliate(home.html, lead.url, { nicheKeywords: niche })
   const verdict = verdictOf(score.classification, score.confidence)
   const contacts = extractContacts(joined, lead.url)
-  const phones = validatePhones(contacts.phones, country)
-  const kind = kindOf(verdict, brandsOut.brands, brandsOut.ctaLinks, lead.domain, niche)
+  let phones = validatePhones(contacts.phones, country)
+  let emails = contacts.emails.slice(0, 3)
+  let kind = kindOf(verdict, brandsOut.brands, brandsOut.ctaLinks, lead.domain, niche)
+  let brands = brandsOut.brands
+  let market: string | null = null
+  let contactPage = contacts.contactPageUrl
+  let indicators = score.indicators.slice(0, 3)
+
+  // The workspace's audit judge, on the text we already fetched: what the
+  // site is, which brands it endorses, the owner's contact details.
+  if (ai) {
+    try {
+      const text = pages.map(p => ({ url: p.url, text: htmlToText(p.html!).slice(0, 12_000) }))
+      const links = extractLinks(home.html, home.url).slice(0, 150)
+      const { verdict: v } = await audit(ai.key, ai.auditModel, auditInstructions([]), text, links, AI_AUDIT_TIMEOUT_MS)
+      if (v) {
+        kind = AI_KIND[v.site_kind] ?? kind
+        market = v.market?.trim() || null
+        if (v.affiliate_reasoning) indicators = [v.affiliate_reasoning.slice(0, 160), ...indicators].slice(0, 3)
+        // Model brand names first (they read well), link counts attached where
+        // a name matches a resolved host; then the link-derived rest.
+        const named: DemoBrand[] = []
+        for (const name of v.brands.slice(0, 8)) {
+          const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+          const hit = brandsOut.brands.find(b => slug.includes(siteLabel(b.host).slice(0, 5)) || b.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(slug.slice(0, 5)))
+          named.push({ name, host: hit?.host ?? name, links: hit?.links ?? 0 })
+        }
+        const rest = brandsOut.brands.filter(b => !named.some(n => n.host === b.host))
+        brands = [...named, ...rest].slice(0, 8)
+        const cleanEmails = v.emails.filter(e => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(e) && !/email protected/i.test(e))
+        emails = [...new Set([...emails, ...cleanEmails])].slice(0, 3)
+        phones = [...new Set([...phones, ...validatePhones(v.phones, country)])].slice(0, 2)
+        if (!contactPage && v.contact_page_url) contactPage = v.contact_page_url
+      }
+    } catch {
+      /* heuristics stand */
+    }
+  }
+
   return {
     ...lead,
     enriched: true,
@@ -453,14 +553,15 @@ async function enrichLead(lead: DemoLead, keyword: string, country: string): Pro
     verdict,
     confidence: score.confidence,
     score: score.affiliateScore,
-    indicators: score.indicators.slice(0, 3),
-    brands: kind === 'affiliate' ? brandsOut.brands : brandsOut.brands.slice(0, 2),
+    indicators,
+    market,
+    brands: kind === 'affiliate' ? brands : brands.slice(0, 3),
     ctaLinks: brandsOut.ctaLinks,
     contacts: {
-      emails: contacts.emails.slice(0, 3),
-      phones: phones.slice(0, 2),
+      emails,
+      phones,
       socials: contacts.socials.slice(0, 4).map(s => ({ platform: s.platform, url: s.url })),
-      contactPage: contacts.contactPageUrl,
+      contactPage,
       forms: contacts.contactForms.length,
     },
   }
@@ -502,6 +603,7 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
       const datasetId = row.dataset_id ?? run.datasetId
       const items = datasetId ? await getDatasetItems(apify.token, datasetId).catch(() => []) : []
       const leads = toLeads(items, row.keyword, row.apify_run_id)
+      await judgeRelevanceWithAi(svc, row.keyword, leads)
       const next = crawlable(leads).length === 0 ? 'done' : 'enriching'
       const { data: updated } = await svc
         .from('demo_runs')
@@ -528,7 +630,7 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
   const nowIso = new Date().toISOString()
   const { data: locked } = await svc
     .from('demo_runs')
-    .update({ lock_until: new Date(Date.now() + 25_000).toISOString() })
+    .update({ lock_until: new Date(Date.now() + 55_000).toISOString() })
     .eq('id', id)
     .eq('status', 'enriching')
     .or(`lock_until.is.null,lock_until.lt.${nowIso}`)
@@ -540,9 +642,10 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
 
   const todo = crawlable(leads).filter(l => !l.enriched).slice(0, ENRICH_BATCH)
   if (todo.length > 0) {
+    const ai = await aiConfig(svc)
     const done = await Promise.all(
       todo.map(l =>
-        withDeadline(enrichLead(l, fresh.keyword, fresh.country_code), LEAD_DEADLINE_MS, {
+        withDeadline(enrichLead(l, fresh.keyword, fresh.country_code, ai), LEAD_DEADLINE_MS, {
           ...l,
           enriched: true,
           fetchError: 'Timed out',

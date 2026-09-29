@@ -19,9 +19,9 @@ import { callOpenAI, costOf, type Usage } from './core'
  */
 
 const RELEVANCE_INSTRUCTIONS = [
-  'You are screening search results for a team that finds online-casino and sports-betting AFFILIATE websites.',
+  'You are screening search results for a team that recruits AFFILIATE and PARTNER websites for a brand. The brand sells whatever the KEYWORD is about (a VPN, web hosting, a casino, a CRM, protein powder, an insurance product — any market). Infer the market from the keyword.',
   '',
-  'For each numbered result you get the KEYWORD that was searched, the result TITLE, its SNIPPET and its DOMAIN. Decide whether the result is a plausible lead for that keyword — i.e. a website in the online gambling space that could be an affiliate, a comparison site, a review site, a streamer/influencer page promoting casinos, or an operator.',
+  'For each numbered result you get the KEYWORD that was searched, the result TITLE, its SNIPPET and its DOMAIN. Decide whether the result is a plausible lead for that keyword — i.e. a website in that market that could be an affiliate, a comparison or review site, a blog or publisher covering the topic, a creator/influencer page promoting products in it, or a brand in that market itself.',
   '',
   'Mark relevant = false for anything the keyword clearly did not intend, even when it looks commercial:',
   '  - pornography or adult content',
@@ -30,7 +30,7 @@ const RELEVANCE_INSTRUCTIONS = [
   '  - shops, jobs, real estate, travel and other unrelated businesses',
   '  - pages about a DIFFERENT subject that merely share a word with the keyword',
   '',
-  'Also give a short description: what the website IS, in at most 12 words, plainly ("Norwegian casino review and bonus comparison site"). Describe the site, not the page.',
+  'Also give a short description: what the website IS, in at most 12 words, plainly ("German VPN and software comparison site", "UK casino review and bonus site"). Describe the site, not the page.',
   '',
   'Be decisive. If the title and snippet genuinely do not say enough, mark relevant = true and say so in the reason — a wrong rejection costs a lead, a wrong acceptance only costs a fraction of a cent.',
   '',

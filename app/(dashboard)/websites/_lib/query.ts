@@ -32,6 +32,8 @@ export type WebsiteProfile = {
   ai_site_description: string | null
   ai_site_category: string | null
   ai_is_affiliate: boolean | null
+  ai_site_kind: 'affiliate' | 'operator' | 'publisher' | 'other' | null
+  ai_market: string | null
   ai_affiliate_reason: string | null
   ai_contact_page_url: string | null
   ai_cta_count: number | null
@@ -153,7 +155,7 @@ export async function loadWebsiteSummary(rawDomain: string): Promise<WebsiteSumm
         'first_seen_at, last_seen_at, appearance_count',
         'is_not_relevant, system_flag, system_flag_reason',
         'ai_site_description, ai_site_category',
-        'ai_is_affiliate, ai_affiliate_reason, ai_contact_page_url',
+        'ai_is_affiliate, ai_site_kind, ai_market, ai_affiliate_reason, ai_contact_page_url',
         'ai_cta_count, ai_brand_count',
         'is_affiliate, is_rooster_partner, brand, has_contact_details, has_s_tags',
         'outreach_status, contacted_at, next_follow_up_at, outreach_note',

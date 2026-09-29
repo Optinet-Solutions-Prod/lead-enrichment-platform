@@ -322,12 +322,12 @@ const reasoningFor = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { effort: 
 // ----- stage 1: triage (no page fetch) -----
 
 const TRIAGE_INSTRUCTIONS = [
-  'You screen websites for a team that hunts online-casino / sports-betting AFFILIATE sites: sites whose business is sending players to casino or bookmaker brands for commission (review listicles, "top 10 casinos", bonus aggregators, comparison pages with outbound tracking links, streamer link pages).',
+  'You screen websites for a team that recruits AFFILIATE and PARTNER sites for a brand: sites whose business is sending visitors to brands in a market for commission (review listicles, "best X" and "top 10" pages, comparison and coupon sites, aggregators with outbound tracking links, creator link pages). The market is whatever the keywords are about — VPNs, hosting, casinos, software, supplements, insurance, anything.',
   '',
   'You are given ONLY a domain and the search keywords it ranked for. Do NOT browse. Judge from the domain name, its shape, and the keywords.',
   '',
-  'Set worth_checking = true when the site plausibly earns commission sending players to gambling brands, so it is worth paying to open and audit.',
-  'Set worth_checking = false for: the casino / bookmaker OPERATOR itself (its own brand domain), news and media sites, regulators and government, responsible-gambling charities, payment providers, software vendors, forums and social platforms, shops, and anything clearly unrelated to gambling.',
+  'Set worth_checking = true when the site plausibly earns commission sending visitors to brands in that market, so it is worth paying to open and audit.',
+  'Set worth_checking = false for: a brand in the market itself (its own product domain), news and media giants, regulators and government, charities, payment providers, forums and social platforms, marketplaces, and anything clearly unrelated to the keywords.',
   '',
   'When you are genuinely unsure, answer true — opening the page is cheap compared with missing a real affiliate. Reply strict JSON only.',
 ].join('\n')
@@ -392,15 +392,17 @@ export function auditInstructions(brands: Brand[]): string {
       ]
     : ['2. rooster_brands_found - always return an empty array.']
   return [
-    'You are an analyst auditing websites in the online-casino / sports-betting affiliate space. You are given the visible TEXT of one or two pages from a single site, and the list of LINKS found in the HTML (href followed by the link text). Judge only from what you are given. Do not browse.',
+    'You are an analyst auditing websites for a team that recruits affiliate and partner sites for a brand. You are given the visible TEXT of one or two pages from a single site, and the list of LINKS found in the HTML (href followed by the link text). Judge only from what you are given. Do not browse. First work out the MARKET the site operates in (VPNs, web hosting, online casinos, CRM software, supplements, insurance, …) and return it in `market` in at most 6 words.',
     '',
-    "1. is_affiliate - true if the site's primary purpose is to drive traffic to OTHER casino or betting brands for commission (review listicles, \"top 10 casinos\", bonus aggregators, comparison pages with outbound CTAs / tracking links). A site that is itself a casino or bookmaker (login / deposit / withdraw) is NOT an affiliate. Pure responsible-gambling information with no brand promotion is NOT an affiliate. If the page could not be read, set null.",
+    "1. is_affiliate - true if the site's primary purpose is to drive traffic to OTHER brands in its market for commission (review listicles, \"best X\" and \"top 10\" pages, coupon and bonus aggregators, comparison pages with outbound CTAs / tracking links). A brand's own site — it sells or provides the product itself (pricing, checkout, sign up, login, deposit) — is NOT an affiliate. A pure information or news page with no brand promotion is NOT an affiliate. If the page could not be read, set null.",
+    '',
+    "1b. site_kind - one of: 'affiliate' (sends visitors to other brands for commission), 'operator' (a brand's own site: it sells the product or service itself), 'publisher' (covers the topic — news, blog, forum, guide — without a partner funnel), 'other' (unrelated, unreadable, or none of the above).",
     '',
     ...ourBrands,
     '',
-    '3. brands - EVERY casino or betting brand the page displays, reviews, ranks, lists, compares or endorses. Give the brand name as shown on the page. Do not repeat a brand. Maximum 60. Do NOT return URLs — the links are extracted separately.',
+    '3. brands - EVERY brand or product in that market the page displays, reviews, ranks, lists, compares or endorses (for an operator: its own brand). Give the brand name as shown on the page. Do not repeat a brand. Maximum 60. Do NOT return URLs — the links are extracted separately.',
     '',
-    '4. emails / phones - public BUSINESS contact details for the SITE OPERATOR (contact, about, imprint / impressum, footer). Never invent; never include an email belonging to one of the casino brands being reviewed. The literal text "[email protected]" is a Cloudflare placeholder, NOT an address: never return it. If an address is obfuscated, omit it and set email_obfuscated true.',
+    '4. emails / phones - public BUSINESS contact details for the SITE OWNER (contact, about, imprint / impressum, footer). Never invent; never include an email belonging to one of the brands being reviewed. The literal text "[email protected]" is a Cloudflare placeholder, NOT an address: never return it. If an address is obfuscated, omit it and set email_obfuscated true.',
     '',
     '5. contact_page_url - the canonical "Contact us" / imprint page URL on this site if one appears in the links, else null.',
     '',
@@ -412,7 +414,9 @@ const AUDIT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    market: { type: 'string' },
     is_affiliate: { type: ['boolean', 'null'] },
+    site_kind: { type: 'string', enum: ['affiliate', 'operator', 'publisher', 'other'] },
     affiliate_reasoning: { type: 'string' },
     rooster_brands_found: { type: 'array', items: { type: 'string' } },
     brands: { type: 'array', items: { type: 'string' } },
@@ -422,13 +426,17 @@ const AUDIT_SCHEMA = {
     contact_page_url: { type: ['string', 'null'] },
   },
   required: [
-    'is_affiliate', 'affiliate_reasoning', 'rooster_brands_found', 'brands',
+    'market', 'is_affiliate', 'site_kind', 'affiliate_reasoning', 'rooster_brands_found', 'brands',
     'emails', 'phones', 'email_obfuscated', 'contact_page_url',
   ],
 }
 
+export type SiteKind = 'affiliate' | 'operator' | 'publisher' | 'other'
+
 export type AuditVerdict = {
+  market: string
   is_affiliate: boolean | null
+  site_kind: SiteKind
   affiliate_reasoning: string
   rooster_brands_found: string[]
   brands: string[]
@@ -444,6 +452,7 @@ export async function audit(
   instructions: string,
   pages: Array<{ url: string; text: string }>,
   links: PageLink[],
+  timeoutMs = 120_000,
 ): Promise<{ verdict: AuditVerdict | null; usage: Usage; cost: number; error?: string }> {
   const linkLines = links.slice(0, 150).map(l => `${l.href}  ||  ${l.label}`).join('\n')
   const input = [
@@ -461,7 +470,7 @@ export async function audit(
   const r = reasoningFor(model)
   if (r) body.reasoning = r
 
-  const res = await callOpenAI(key, body)
+  const res = await callOpenAI(key, body, timeoutMs)
   if (!res.parsed) {
     return {
       verdict: null,

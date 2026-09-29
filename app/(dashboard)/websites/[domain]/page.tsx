@@ -218,11 +218,29 @@ function Verdicts({ site }: { site: WebsiteSummary }) {
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       <Tile label="Already exists?" value={exists.label} tone={exists.tone} />
       <Tile label="Relevant?" value={relevance.label} tone={relevance.tone} />
-      <Tile
-        label="Affiliate?"
-        value={isAffiliate === null ? 'Unchecked' : isAffiliate ? 'Yes' : 'No'}
-        tone={isAffiliate === true ? 'good' : isAffiliate === false ? 'muted' : 'idle'}
-      />
+      {/* The AI audit says WHAT the site is; until it has run, the heuristic
+          affiliate verdict answers the narrower question. */}
+      {profile?.ai_site_kind ? (
+        <Tile
+          label={profile.ai_market ? `What is it? · ${profile.ai_market}` : 'What is it?'}
+          value={
+            profile.ai_site_kind === 'affiliate'
+              ? 'Affiliate'
+              : profile.ai_site_kind === 'operator'
+                ? 'Operator (own brand)'
+                : profile.ai_site_kind === 'publisher'
+                  ? 'Publisher'
+                  : 'Other'
+          }
+          tone={profile.ai_site_kind === 'affiliate' ? 'good' : profile.ai_site_kind === 'other' ? 'muted' : 'warn'}
+        />
+      ) : (
+        <Tile
+          label="Affiliate?"
+          value={isAffiliate === null ? 'Unchecked' : isAffiliate ? 'Yes' : 'No'}
+          tone={isAffiliate === true ? 'good' : isAffiliate === false ? 'muted' : 'idle'}
+        />
+      )}
       <Tile
         label="CTA links"
         value={

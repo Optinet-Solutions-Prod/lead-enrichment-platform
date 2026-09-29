@@ -4,7 +4,7 @@ import { runScrapeTick } from '@/lib/scrape/runner'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 /**
  * Drive the in-app scrape runner one step: start ready Google jobs on

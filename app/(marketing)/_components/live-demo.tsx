@@ -45,6 +45,9 @@ type Lead = {
   type: 'Organic' | 'PPC'
   position: number
   relevance: Relevance
+  relevanceReason: string | null
+  siteDescription: string | null
+  market: string | null
   enriched: boolean
   skipped: boolean
   fetchError: string | null
@@ -65,6 +68,7 @@ type Lead = {
 }
 type Run = {
   id: string
+  ai: boolean
   status: 'searching' | 'enriching' | 'done' | 'failed'
   keyword: string
   country_code: string
@@ -232,7 +236,7 @@ export function LiveDemo() {
         return
       }
       setStartedAt(Date.now())
-      setRun({ id: body.id, status: 'searching', keyword, country_code: country, results: [], total: 0, enriched: 0, error: null })
+      setRun({ id: body.id, ai: false, status: 'searching', keyword, country_code: country, results: [], total: 0, enriched: 0, error: null })
       pollRef.current = setTimeout(() => void poll(body.id!), 1500)
     } catch {
       setError('Could not reach the server. Check your connection and try again.')
@@ -259,15 +263,15 @@ export function LiveDemo() {
         {
           label:
             run.status === 'searching'
-              ? `Checking which results are about “${run.keyword}”`
-              : `${relevant.length} of ${run.total} results are about “${run.keyword}”`,
+              ? `${run.ai ? 'AI is checking' : 'Checking'} which results are about “${run.keyword}”`
+              : `${relevant.length} of ${run.total} results are about “${run.keyword}”${run.ai ? ' (AI judged)' : ''}`,
           state: run.status === 'searching' ? 'todo' : 'done',
         },
         {
           label:
             run.status === 'searching'
-              ? 'Opening the relevant sites: affiliate, operator or publisher?'
-              : `Opening the relevant sites · ${opened}/${toOpen.length} classified`,
+              ? `Opening the relevant sites${run.ai ? ' — the AI decides' : ''}: affiliate, operator or publisher?`
+              : `Opening the relevant sites · ${opened}/${toOpen.length} classified${run.ai ? ' by AI' : ''}`,
           state: run.status === 'searching' ? 'todo' : run.status === 'enriching' ? 'doing' : 'done',
         },
         {
@@ -289,9 +293,9 @@ export function LiveDemo() {
           </p>
           <h2 className="mt-2 text-[28px] font-semibold leading-tight">Run a real scrape. No account, about a minute.</h2>
           <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
-            One page of Google for your keyword. Every result is checked against the keyword, the relevant sites are
-            opened and classified as affiliate, operator or publisher, the brands they endorse and their contacts are
-            pulled, and an outreach draft is ready. Nothing is sent from the demo.
+            One page of Google for your keyword. An AI judge checks every result against the keyword, the relevant
+            sites are opened and classified as affiliate, operator or publisher, the brands they endorse and their
+            contacts are pulled, and an outreach draft is ready. Nothing is sent from the demo.
           </p>
         </div>
 
@@ -676,7 +680,15 @@ function LeadCard({
               {lead.type === 'PPC' ? 'Ad' : `#${lead.position}`}
             </span>
           </div>
-          <p className="truncate text-[12px] text-[color:var(--color-text-secondary)]">{lead.domain}</p>
+          <p className="truncate text-[12px] text-[color:var(--color-text-secondary)]">
+            {lead.domain}
+            {lead.market && <span> · {lead.market}</span>}
+          </p>
+          {lead.siteDescription && (
+            <p className="mt-0.5 line-clamp-1 text-[12px] italic text-[color:var(--color-text-secondary)]" title={lead.relevanceReason ?? undefined}>
+              {lead.siteDescription}
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -696,7 +708,7 @@ function LeadCard({
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {rel && <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${rel.cls}`}>{rel.label}</span>}
+        {rel && <span title={lead.relevanceReason ?? undefined} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${rel.cls}`}>{rel.label}</span>}
         {kind && <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${kind.cls}`}>{kind.label}</span>}
       </div>
 

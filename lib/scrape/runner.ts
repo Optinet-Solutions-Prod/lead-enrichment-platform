@@ -1,5 +1,6 @@
 import 'server-only'
 import { createServiceClient } from '@/lib/supabase/service'
+import { runAiAnalysis, readKey, type AiRunResult } from '@/lib/ai-analysis/run'
 import {
   kickoffPendingGoogleJobs,
   syncRunningGoogleJobs,
@@ -17,6 +18,12 @@ import {
  * One tick of the in-app scrape runner. Idempotent and safe to call often:
  * the /scrape pages call it on every auto-refresh, the Apify webhook calls
  * it when a run finishes, and the scheduler cron calls it as a fallback.
+ *
+ * Order: start Google runs → ingest finished runs → enrichment chain →
+ * contact stage → fetch queue → and, once the fetch queue is idle, a slice
+ * of the AI analysis (relevance judge, triage, audit of one site with the
+ * brands it endorses and its CTA links) so the website profiles fill in
+ * while someone is looking, without a separate scheduler.
  */
 export type TickReport = {
   enabled: boolean
@@ -25,6 +32,7 @@ export type TickReport = {
   chainsAdvanced: number
   contactJobsEnqueued: number
   enrich: InlineEnrichReport | null
+  ai: AiRunResult | { skipped: string } | null
   errors: string[]
   ms: number
 }
@@ -34,7 +42,13 @@ async function runnerEnabled(svc: ReturnType<typeof createServiceClient>): Promi
   return data !== false && data !== 'false'
 }
 
-export async function runScrapeTick(opts: { enrichRows?: number; enrichDeadlineMs?: number } = {}): Promise<TickReport> {
+/** One AI slice at a time per server instance; a second tick that arrives
+ *  while it runs just skips the stage. */
+let aiInFlight = false
+
+export async function runScrapeTick(
+  opts: { enrichRows?: number; enrichDeadlineMs?: number; ai?: boolean; aiDeadlineMs?: number } = {},
+): Promise<TickReport> {
   const t0 = Date.now()
   const svc = createServiceClient()
   const report: TickReport = {
@@ -44,6 +58,7 @@ export async function runScrapeTick(opts: { enrichRows?: number; enrichDeadlineM
     chainsAdvanced: 0,
     contactJobsEnqueued: 0,
     enrich: null,
+    ai: null,
     errors: [],
     ms: 0,
   }
@@ -75,6 +90,33 @@ export async function runScrapeTick(opts: { enrichRows?: number; enrichDeadlineM
   // complete on this tick instead of the next one.
   await step('chains', async () => { report.chainsAdvanced += await advanceEnrichmentChains(svc) })
   await step('contact', async () => { report.contactJobsEnqueued += await autoEnqueueContactStage(svc) })
+
+  // AI analysis: only when the fetch queue had nothing to do this tick, so
+  // the two never compete for the function's time budget.
+  if (opts.ai !== false && (report.enrich?.claimed ?? 0) === 0) {
+    await step('ai', async () => {
+      if (!(await readKey(svc))) {
+        report.ai = { skipped: 'no OpenAI key' }
+        return
+      }
+      if (aiInFlight) {
+        report.ai = { skipped: 'already running' }
+        return
+      }
+      aiInFlight = true
+      try {
+        report.ai = await runAiAnalysis(svc, {
+          days: 3,
+          triageLimit: 10,
+          auditLimit: 1,
+          concurrency: 2,
+          deadlineMs: opts.aiDeadlineMs ?? 20_000,
+        })
+      } finally {
+        aiInFlight = false
+      }
+    })
+  }
 
   report.ms = Date.now() - t0
   return report

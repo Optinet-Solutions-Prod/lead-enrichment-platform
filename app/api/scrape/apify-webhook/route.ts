@@ -5,7 +5,7 @@ import { runScrapeTick } from '@/lib/scrape/runner'
 import { createServiceClient } from '@/lib/supabase/service'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 /**
  * Apify calls this when an actor run we started finishes. The URL carries a

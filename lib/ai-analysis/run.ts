@@ -45,6 +45,9 @@ export type AiRunOptions = {
   concurrency?: number
   /** Skip the DB writes (rehearsal). */
   dryRun?: boolean
+  /** Stop starting new work after this many ms (the scrape tick runs inside
+   *  a serverless function). Fetch and model timeouts shrink to match. */
+  deadlineMs?: number
   onProgress?: (msg: string) => void
 }
 
@@ -86,9 +89,9 @@ async function setting<T>(svc: SupabaseClient, key: string, fallback: T): Promis
   return (data ?? fallback) as T
 }
 
-async function readKey(svc: SupabaseClient): Promise<string | null> {
-  const fromDb = await setting<string | null>(svc, 'openai_api_key', null)
-  if (typeof fromDb === 'string' && fromDb.trim()) return fromDb.trim()
+/** The OpenAI key comes from the environment only — system_settings is
+ *  readable by every signed-in user, so a key must never live there. */
+export async function readKey(_svc: SupabaseClient): Promise<string | null> {
   const env = (process.env.OPENAI_API_KEY ?? '').trim()
   return env || null
 }
@@ -132,6 +135,10 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
   const budget = opts.budgetUsd ?? (await setting<number>(svc, 'ai_crawl_budget_usd', 5))
   const concurrency = opts.concurrency ?? 4
   const dry = opts.dryRun === true
+  const deadline = opts.deadlineMs ?? Number.POSITIVE_INFINITY
+  const overdue = () => Date.now() - started > deadline
+  const fetchTimeout = opts.deadlineMs ? 10_000 : 25_000
+  const auditTimeout = opts.deadlineMs ? 40_000 : 120_000
 
   // Daily ceiling — count what today has already audited.
   const midnight = new Date()
@@ -166,7 +173,7 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
   // article that ranked for a casino keyword is never opened or charged for.
   let relevance: RelevanceRunResult | undefined
   if (!dry) {
-    relevance = await runRelevanceForJobs(svc, key, triageModel, jobIds, { limit: 300 })
+    relevance = await runRelevanceForJobs(svc, key, triageModel, jobIds, { limit: opts.deadlineMs ? 60 : 300 })
     if (relevance.checked > 0) {
       log(`relevance: ${relevance.checked} judged, ${relevance.rejected} rejected as off-keyword`)
     }
@@ -265,8 +272,9 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
 
   for (const c of toAudit) {
     if (cost >= budget) { log(`budget ${budget} reached, stopping`); break }
+    if (overdue()) { log('deadline reached, stopping'); break }
 
-    const page = await fetchPage(c.url)
+    const page = await fetchPage(c.url, fetchTimeout)
     const nowIso = new Date().toISOString()
 
     if (page.status !== 'ok' || page.text.length < 200) {
@@ -290,7 +298,7 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
     const contactUrl = contactPageCandidate(page)
     let allLinks: PageLink[] = page.links
     if (contactUrl && contactUrl !== page.finalUrl) {
-      const cp = await fetchPage(contactUrl, 15_000)
+      const cp = await fetchPage(contactUrl, Math.min(15_000, fetchTimeout))
       if (cp.status === 'ok' && cp.text.length > 100) {
         pages.push({ url: cp.finalUrl, text: cp.text.slice(0, 6_000) })
         allLinks = [...page.links, ...cp.links]
@@ -298,7 +306,7 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
       }
     }
 
-    const { verdict, cost: auditCost, error } = await audit(key, auditModel, instructions, pages, allLinks)
+    const { verdict, cost: auditCost, error } = await audit(key, auditModel, instructions, pages, allLinks, auditTimeout)
     cost += auditCost
 
     // ---- stage 3: CTA links, extracted and resolved in code ----
@@ -357,6 +365,8 @@ export async function runAiAnalysis(svc: SupabaseClient, opts: AiRunOptions = {}
         ai_crawl_model: auditModel,
         ai_crawl_status: verdict ? 'ok' : 'error',
         ai_is_affiliate: verdict?.is_affiliate ?? null,
+        ai_site_kind: verdict?.site_kind ?? null,
+        ai_market: (verdict?.market ?? '').slice(0, 80) || null,
         ai_affiliate_reason: (verdict?.affiliate_reasoning ?? error ?? '').slice(0, 1000),
         ai_brands: modelBrands,
         ai_brand_count: modelBrands.length,
