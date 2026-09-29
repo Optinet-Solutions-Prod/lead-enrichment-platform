@@ -15,40 +15,34 @@ import {
   Workflow,
 } from 'lucide-react'
 import { Faq } from './_components/faq'
+import { HeroCarousel } from './_components/hero-carousel'
+import { LiveDemo } from './_components/live-demo'
 import { Pricing } from './_components/pricing'
-import { ProductMock } from './_components/product-mock'
 
 export const metadata: Metadata = {
-  title: 'Lead Engine — find, classify and recruit the affiliates in your market',
+  title: 'Lead Engine — type a keyword, meet the sites that rank for it and the people behind them',
   description:
-    'Scrape every website and creator ranking for your keywords in every country, classify them with AI, pull the contact details, track the outreach and monitor what changes. Start with 100 free credits.',
+    'Run a real Google scrape without an account: the sites ranking for your keyword in any of 32 countries, which ones are affiliates, their contact details and a first outreach draft — in about a minute.',
 }
-
-const PROOF = [
-  { n: '85k+', label: 'search results turned into website profiles' },
-  { n: '9', label: 'engines & platforms: Google, Bing, YouTube, TikTok, Twitch, Kick, Snapchat, Telegram, Facebook Ad Library' },
-  { n: '10', label: 'contact channels found per site — email, phone, contact form and 7 socials' },
-  { n: '32', label: 'countries you can search as a local, from Malta to Japan' },
-]
 
 const JOURNEY = [
   {
     icon: Search,
     stage: 'Scrape',
     title: 'Every site and creator ranking for your keywords',
-    body: 'Paste a keyword list, pick a country and language, choose Google, Bing or a creator platform. Desktop and mobile results, organic and paid, land as one profile per website — never counted twice.',
+    body: 'Paste a keyword list, pick a country and language, choose Google or a creator platform. Desktop and mobile results, organic and paid, land as one profile per website — never counted twice.',
   },
   {
     icon: Brain,
     stage: 'Classify',
     title: 'Relevant? An affiliate? Promoting whom?',
-    body: 'AI reads each site and answers: on-keyword or noise, affiliate or brand, and which programmes it already promotes through its tracking links. System flags drop social hosts, operators and known non-affiliates automatically.',
+    body: 'Each site is read and scored: on-keyword or noise, affiliate or brand, and which programmes it already promotes through its tracking links. Platforms and known non-affiliates drop out automatically.',
   },
   {
     icon: AtSign,
     stage: 'Contacts',
     title: 'The person behind the site, with provenance',
-    body: 'Emails, phone numbers, contact forms, Telegram, WhatsApp, Discord, X, LinkedIn, Instagram and Facebook — each with the page it was found on and a confidence score, so you know what to trust.',
+    body: 'Emails, phone numbers, contact forms, Telegram, WhatsApp, Discord, X, LinkedIn, Instagram and Facebook — each with the page it was found on and a confidence score.',
   },
   {
     icon: Send,
@@ -85,7 +79,7 @@ const SERVICES = [
   },
   {
     icon: Brain,
-    title: 'AI classification',
+    title: 'Classification',
     body: 'Relevance to the keyword, affiliate-or-not with the reason, and the brands a site already promotes, resolved from its outbound tracking links. Verdicts expire on a schedule so the picture stays current.',
   },
   {
@@ -103,54 +97,19 @@ const SERVICES = [
     title: 'Outreach tracking & monitoring',
     body: 'Status, note and follow-up date on every site. A pulse of contacted, replied, won and due-today on your home page. Workflows rerun weekly and merge only what is new.',
   },
+  {
+    icon: KeyRound,
+    title: 'Your keys, your team, your workspaces',
+    body: 'Connect your own API keys for cheaper runs. Invite teammates, set roles, transfer ownership. Run more than one brand? Separate workspaces; data never crosses.',
+  },
 ]
 
 export default function LandingPage() {
   return (
     <>
-      {/* Hero */}
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 pb-16 pt-14 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:pt-20">
-        <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-1 text-[12px] text-[color:var(--color-text-secondary)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Scrape → classify → contacts → outreach → monitor
-          </p>
-          <h1 className="mt-4 text-[34px] font-semibold leading-[1.1] tracking-tight md:text-[44px]">
-            Recruit the affiliates your competitors already have.
-          </h1>
-          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-[color:var(--color-text-secondary)]">
-            Lead Engine scrapes every website and creator ranking for your keywords in every
-            country, classifies them with AI, finds the person behind each one, and tracks the
-            outreach until it converts. Built for brands and affiliate managers in VPN, hosting,
-            SaaS, fintech and any market where partners drive growth.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Link
-              href="/signup"
-              className="inline-flex min-h-12 items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-5 text-[14px] font-semibold text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)]"
-            >
-              Start free — 100 credits
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <span className="text-[12px] text-[color:var(--color-text-secondary)]">
-              No card needed · 2-minute setup · guided tour included
-            </span>
-          </div>
-        </div>
-        <ProductMock />
-      </section>
+      <HeroCarousel />
 
-      {/* Proof */}
-      <section className="border-y border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-5 py-8 md:grid-cols-4">
-          {PROOF.map(p => (
-            <div key={p.label}>
-              <p className="text-[26px] font-semibold tabular-nums leading-none">{p.n}</p>
-              <p className="mt-1.5 text-[12px] leading-snug text-[color:var(--color-text-secondary)]">{p.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <LiveDemo />
 
       {/* The journey */}
       <section id="how" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
@@ -161,7 +120,7 @@ export default function LandingPage() {
         <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
           Affiliate networks show you who applied. Discovery tools stop at a list of domains.
           Outreach tools start from a list you already have. Lead Engine is the five steps in
-          between, built to run our own partner recruitment first.
+          between — the demo above is the first three of them, live.
         </p>
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {JOURNEY.map((j, i) => (
@@ -224,7 +183,7 @@ export default function LandingPage() {
 
         <div className="mt-8 grid gap-4 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5 md:grid-cols-3">
           <div className="flex items-start gap-3">
-            <KeyRound className="mt-0.5 h-5 w-5 shrink-0" />
+            <Workflow className="mt-0.5 h-5 w-5 shrink-0" />
             <p className="text-[13px] leading-relaxed">
               <strong>Our work, not yours:</strong> proxies, CAPTCHAs, mobile-vs-desktop result sets,
               dedupe across batches, and verdicts that re-check themselves. You paste keywords.
@@ -247,75 +206,41 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Team */}
-      <section className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-14 lg:grid-cols-[1fr_1fr] lg:items-center">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Built for the team, not the tab</p>
-            <h2 className="mt-2 text-[24px] font-semibold leading-tight">One list, every affiliate manager on it.</h2>
-            <p className="mt-3 text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-              Invite the people who do the outreach. Everyone sees the same verdicts, contacts,
-              statuses and notes; nobody pitches the same publisher twice. Roles, ownership
-              transfer and separate workspaces per brand are built in, and every credit and every
-              change is logged.
+      {/* Pricing */}
+      <section id="pricing" className="scroll-mt-16 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+        <div className="mx-auto max-w-6xl px-5 py-16">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Pricing</p>
+            <h2 className="mt-2 text-[26px] font-semibold leading-tight">Start free. Pay for the runs you make.</h2>
+            <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
+              A monthly plan that includes credits, and top-ups that never expire. Outreach tracking
+              is free on every plan. Switch currency any time.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              [Users, 'Roles & invites', 'Owner, admin, member — invite by link, transfer ownership when someone leaves.'],
-              [Workflow, 'Workspaces', 'Run more than one brand or market? Switch between them; data never crosses.'],
-              [CalendarClock, 'Follow-up pulse', 'Contacted, replied, won and due-today counts on the home page.'],
-              [Coins, 'Ledger', 'Every credit spent, every gift, every top-up, with a reason.'],
-            ].map(([Icon, t, b]) => {
-              const I = Icon as typeof Users
-              return (
-                <div key={t as string} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
-                  <I className="h-4.5 w-4.5" />
-                  <p className="mt-2 text-[13px] font-semibold">{t as string}</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">{b as string}</p>
-                </div>
-              )
-            })}
+          <div className="mt-8">
+            <Pricing />
           </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Pricing</p>
-          <h2 className="mt-2 text-[26px] font-semibold leading-tight">Start free. Pay for the runs you make.</h2>
-          <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
-            A monthly plan that includes credits, and top-ups that never expire. Outreach tracking
-            is free on every plan. Switch currency any time.
-          </p>
-        </div>
-        <div className="mt-8">
-          <Pricing />
         </div>
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="scroll-mt-16 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto max-w-6xl px-5 py-16">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">FAQ</p>
-            <h2 className="mt-2 text-[26px] font-semibold leading-tight">Questions we get before the first scrape.</h2>
-          </div>
-          <div className="mt-8">
-            <Faq />
-          </div>
+      <section id="faq" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">FAQ</p>
+          <h2 className="mt-2 text-[26px] font-semibold leading-tight">Questions we get before the first scrape.</h2>
+        </div>
+        <div className="mt-8">
+          <Faq />
         </div>
       </section>
 
       {/* Closing CTA */}
-      <section>
+      <section className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-5 py-16 text-center">
-          <h2 className="text-[28px] font-semibold leading-tight">Your first keyword batch is 100 credits away.</h2>
+          <h2 className="text-[28px] font-semibold leading-tight">Liked the demo? The real thing keeps the list.</h2>
           <p className="max-w-xl text-[14px] text-[color:var(--color-text-secondary)]">
-            Create a workspace, take the 60-second tour, paste the keywords your competitors rank
-            for, and have partners worth contacting — with a place to track every reply — before
-            your coffee is cold.
+            Create a workspace with 100 free credits, run more pages in 32 countries, and send the
+            outreach for real — with a status and a follow-up date on every lead.
           </p>
           <Link
             href="/signup"

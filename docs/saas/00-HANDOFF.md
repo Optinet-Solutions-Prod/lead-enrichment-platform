@@ -367,6 +367,22 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   licence-register wording. Data (property_leads, airbnb_listings, hfps_register) is untouched
   in the SaaS DB until exported. The Google "Property management" demo preset stays — it is
   search discovery, not the listings module.
+- ✅ **Landing page = live demo (2026-09-29, migration `20260929130000` applied live):** the
+  owner wants visitors to run the product without signing up. Hero is now a 4-slide carousel
+  (tagline "Type a keyword. Meet the sites that rank for it — and the people behind them.") whose
+  "Try it now" scrolls to `#demo`. `LiveDemo` (`app/(marketing)/_components/live-demo.tsx`):
+  presets (VPN GB, hosting US, SaaS US, property MT — no casino on the public page), keyword +
+  country (12), Run → `POST /api/demo/start` → one Apify Google page → `GET /api/demo/[id]`
+  polled every 3 s advances a state machine in `lib/demo/run.ts` (searching → enriching → done):
+  up to 8 non-platform results are fetched (homepage + 1 contact page), scored with
+  `scoreAffiliate` (niche keywords) and mined with `extractContacts`. Results open in a modal:
+  cards with favicon, title, position/Ad, snippet, verdict chip (Affiliate / Possible / Publisher
+  / could not open), evidence, contact chips (emails, phone, socials, contact page), Email / SMS
+  buttons → prefilled draft → "Send" → confirmation that NOTHING was sent (no provider yet),
+  "Add to list" + signup CTA. Runs live in `demo_runs` (service-role only), never in org tables;
+  limits via system_settings `demo_enabled`, `demo_per_ip_per_hour` (3), `demo_per_day` (120);
+  IP hashed with CRON_SECRET. `/api/demo/` is public in proxy.ts. Proof strip, product mock and
+  team section removed from the landing. Test: `scripts/orgs/verify-demo.ts` (1 Apify page).
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing
