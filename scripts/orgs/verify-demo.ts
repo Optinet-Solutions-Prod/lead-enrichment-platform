@@ -64,8 +64,12 @@ async function main() {
     check('results modal opens when the run completes', true)
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/demo-results.png`, fullPage: false })
 
+    const onTop = await page.locator('[data-demo-card]').count()
+    const fold = page.locator('[role="dialog"] button[aria-expanded]')
+    if ((await fold.count()) > 0) await fold.first().click()
     const cards = await page.locator('[data-demo-card]').count()
-    check('result cards render', cards >= 5, `${cards} cards`)
+    check('result cards render', cards >= 5, `${cards} cards (${onTop} shown before expanding)`)
+    check('confirmed sites sit on top, the rest folded', onTop < cards || onTop >= 5, `${onTop} on top of ${cards}`)
     const kindChips = await page.locator('[data-demo-card] >> text=/^(Affiliate|Operator|Publisher)/').count()
     check('affiliate / operator / publisher chips are present', kindChips >= 1, `${kindChips}`)
     const relevantChips = await page.locator('[data-demo-card] >> text=/^Relevant$/').count()

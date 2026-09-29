@@ -479,12 +479,12 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
     }
   }, [compose, confirmation, onClose])
 
-  // Relevant first, then everything else, each in SERP order.
-  const leads = useMemo(() => {
-    const rel = run.results.filter(l => l.relevance !== 'off_topic' && !l.skipped)
-    const rest = run.results.filter(l => l.relevance === 'off_topic' || l.skipped)
-    return [...rel, ...rest]
-  }, [run.results])
+  // Ranked by usefulness, not by Google position: confirmed affiliates with
+  // a complete crawl first, then the other fully crawled sites, and the rest
+  // (blocked, not opened, off-topic, platforms) folded away at the bottom.
+  const groups = useMemo(() => rankLeads(run.results), [run.results])
+  const leads = run.results
+  const [showOthers, setShowOthers] = useState(false)
   const relevant = leads.filter(l => l.relevance !== 'off_topic' && !l.skipped).length
   const affiliates = leads.filter(l => l.kind === 'affiliate').length
   const operators = leads.filter(l => l.kind === 'operator').length
@@ -557,20 +557,75 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
               }}
             />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {leads.map(lead => (
-                <LeadCard
-                  key={lead.id}
-                  lead={lead}
-                  hearted={hearts.has(lead.id)}
-                  sentVia={sent[lead.id] ?? null}
-                  onToggleHeart={() => toggleHeart(lead.id)}
-                  onEmail={() => setCompose({ lead, channel: 'email' })}
-                  onSms={() => setCompose({ lead, channel: 'sms' })}
-                />
-              ))}
+            <div className="flex flex-col gap-5">
+              {groups.affiliates.length > 0 && (
+                <Group title="Affiliates" hint="Fully crawled and confirmed — the ones to pitch" count={groups.affiliates.length} tone="good">
+                  {groups.affiliates.map(lead => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      hearted={hearts.has(lead.id)}
+                      sentVia={sent[lead.id] ?? null}
+                      onToggleHeart={() => toggleHeart(lead.id)}
+                      onEmail={() => setCompose({ lead, channel: 'email' })}
+                      onSms={() => setCompose({ lead, channel: 'sms' })}
+                    />
+                  ))}
+                </Group>
+              )}
+              {groups.crawled.length > 0 && (
+                <Group title="Also crawled" hint="Operators and publishers in the same market" count={groups.crawled.length} tone="muted">
+                  {groups.crawled.map(lead => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      hearted={hearts.has(lead.id)}
+                      sentVia={sent[lead.id] ?? null}
+                      onToggleHeart={() => toggleHeart(lead.id)}
+                      onEmail={() => setCompose({ lead, channel: 'email' })}
+                      onSms={() => setCompose({ lead, channel: 'sms' })}
+                    />
+                  ))}
+                </Group>
+              )}
+              {groups.affiliates.length === 0 && groups.crawled.length === 0 && leads.length > 0 && (
+                <p className="rounded-md border border-dashed border-[color:var(--color-border-strong)] p-6 text-center text-[13px] text-[color:var(--color-text-secondary)]">
+                  None of the page-one results could be crawled and confirmed. The rest are below.
+                </p>
+              )}
+              {groups.others.length > 0 && (
+                <div className="rounded-xl border border-dashed border-[color:var(--color-border-strong)]">
+                  <button
+                    type="button"
+                    onClick={() => setShowOthers(v => !v)}
+                    aria-expanded={showOthers}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[13px] hover:bg-[color:var(--color-bg-secondary)]"
+                  >
+                    <span>
+                      <span className="font-medium">{groups.others.length} other result{groups.others.length === 1 ? '' : 's'}</span>
+                      <span className="text-[color:var(--color-text-secondary)]"> — {othersSummary(groups.others)}</span>
+                    </span>
+                    <span className="shrink-0 text-[12px] text-[color:var(--color-text-secondary)]">{showOthers ? 'Hide' : 'Show'}</span>
+                  </button>
+                  {showOthers && (
+                    <div className="grid gap-3 border-t border-dashed border-[color:var(--color-border-strong)] p-4 md:grid-cols-2">
+                      {groups.others.map(lead => (
+                        <LeadCard
+                          key={lead.id}
+                          lead={lead}
+                          hearted={hearts.has(lead.id)}
+                          sentVia={sent[lead.id] ?? null}
+                          onToggleHeart={() => toggleHeart(lead.id)}
+                          onEmail={() => setCompose({ lead, channel: 'email' })}
+                          onSms={() => setCompose({ lead, channel: 'sms' })}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {leads.length === 0 && (
-                <p className="col-span-full rounded-md border border-dashed border-[color:var(--color-border-strong)] p-6 text-center text-[13px] text-[color:var(--color-text-secondary)]">
+                <p className="rounded-md border border-dashed border-[color:var(--color-border-strong)] p-6 text-center text-[13px] text-[color:var(--color-text-secondary)]">
                   Google returned no results for this keyword in {countryName(run.country_code)}. Try another phrase.
                 </p>
               )}
@@ -596,6 +651,60 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Crawled to the end with no fetch error. */
+const complete = (l: Lead) => l.enriched && !l.fetchError && !l.skipped && l.relevance !== 'off_topic'
+
+/** Ties inside a group break on how much there is to work with. */
+function usefulness(l: Lead): number {
+  return l.brands.length * 3 + Math.min(l.ctaLinks, 20) + (hasContact(l) ? 5 : 0) + (l.contacts?.emails.length ? 3 : 0)
+}
+
+function rankLeads(results: Lead[]): { affiliates: Lead[]; crawled: Lead[]; others: Lead[] } {
+  const byUse = (a: Lead, b: Lead) => usefulness(b) - usefulness(a) || a.position - b.position
+  const affiliates = results.filter(l => complete(l) && l.kind === 'affiliate').sort(byUse)
+  const crawled = results.filter(l => complete(l) && l.kind !== 'affiliate').sort(byUse)
+  const done = new Set([...affiliates, ...crawled].map(l => l.id))
+  // Blocked and not-opened first (still relevant), then off-topic and platforms.
+  const others = results
+    .filter(l => !done.has(l.id))
+    .sort((a, b) => {
+      const ra = a.relevance === 'off_topic' || a.skipped ? 1 : 0
+      const rb = b.relevance === 'off_topic' || b.skipped ? 1 : 0
+      return ra - rb || a.position - b.position
+    })
+  return { affiliates, crawled, others }
+}
+
+function othersSummary(others: Lead[]): string {
+  const blocked = others.filter(l => l.enriched && l.fetchError).length
+  const notOpened = others.filter(l => !l.enriched && !l.skipped && l.relevance !== 'off_topic').length
+  const offTopic = others.filter(l => l.relevance === 'off_topic' && !l.skipped).length
+  const platforms = others.filter(l => l.skipped).length
+  const parts: string[] = []
+  if (blocked) parts.push(`${blocked} blocked the visit`)
+  if (notOpened) parts.push(`${notOpened} not opened`)
+  if (offTopic) parts.push(`${offTopic} off-topic`)
+  if (platforms) parts.push(`${platforms} platform${platforms === 1 ? '' : 's'}`)
+  return parts.join(', ')
+}
+
+function Group({ title, hint, count, tone, children }: { title: string; hint: string; count: number; tone: 'good' | 'muted'; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h4 className="text-[13px] font-semibold">
+          {title}{' '}
+          <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${tone === 'good' ? 'bg-emerald-100 text-emerald-800' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'}`}>
+            {count}
+          </span>
+        </h4>
+        <span className="text-[12px] text-[color:var(--color-text-secondary)]">{hint}</span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">{children}</div>
+    </section>
   )
 }
 

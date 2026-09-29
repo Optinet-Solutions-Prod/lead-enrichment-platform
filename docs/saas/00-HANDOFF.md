@@ -399,9 +399,20 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   show Relevant / kind chip / "Endorses: NordVPN ×3 · … — N CTA links" / contacts; the list
   button is a heart toggle (aria-label "Add to relevant list"). A "Casino brand" preset is on
   the landing (the owner asked; casino brands are customers, casino affiliates are not).
-  **OpenAI is NOT used anywhere yet** — no key exists; `lib/ai-analysis` (relevance + affiliate
-  + brands + CTA into website_profiles / website_cta_links) is the workspace path that switches
-  on with `OPENAI_API_KEY` + `ai_analysis_enabled`. `apifyJson` retries once on "fetch failed".
+  `apifyJson` retries once on "fetch failed".
+- ✅ **OpenAI on (2026-09-29, owner added `OPENAI_API_KEY` to Vercel; migration
+  `20260929140000` applied, `ai_analysis_enabled=true`):** prompts in `lib/ai-analysis`
+  (relevance, triage, audit) are vertical-neutral — the market is inferred from the keyword.
+  Audit returns `site_kind` (affiliate / operator / publisher / other) + `market`, saved to
+  `website_profiles.ai_site_kind / ai_market`; the website page tile "What is it?" shows them.
+  Key is env-only (`readKey` no longer reads system_settings). **Workspace trigger:** the scrape
+  tick runs an AI slice when the fetch queue is idle (`runAiAnalysis({days:3, triageLimit:10,
+  auditLimit:1, deadlineMs:20s})`, module-level in-flight guard); tick/webhook `maxDuration=120`.
+  `/api/ai-analysis/run?audit=N` (Bearer CRON_SECRET) still works for bulk runs. **Demo:** uses
+  the same judges (`judgeRelevance` on the SERP rows, `audit` on each opened page) when the key
+  exists; heuristics stand in otherwise. ⚠ Local `.env.local` has NO OpenAI key — the AI path is
+  only testable against production. ⚠ `rooster_brands` (29 casino brands from prod) is still the
+  global "our brands" list the audit is shown; a per-org brand list is future work.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing
