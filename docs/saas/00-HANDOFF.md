@@ -365,8 +365,11 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   /hfps-register|/pipeline` → `/scrape`, login/signup/welcome land on `/scrape`, the welcome
   picker no longer offers the vertical, landing/pricing/FAQ/billing/help lost the Airbnb and
   licence-register wording. Data (property_leads, airbnb_listings, hfps_register) is untouched
-  in the SaaS DB until exported. The Google "Property management" demo preset stays — it is
-  search discovery, not the listings module.
+  in the SaaS DB until exported. Later the same day the owner found a "Property management —
+  Malta" Google demo preset still on the landing page and in the wizard: every property example
+  is gone now (landing presets VPN / hosting / SaaS / fitness; wizard + seeder casino / VPN /
+  hosting; the seeded property batches were deleted). Rule: no property or Malta-rental wording
+  anywhere a visitor or user can see.
 - ✅ **Landing page = live demo (2026-09-29, migration `20260929130000` applied live):** the
   owner wants visitors to run the product without signing up. Hero is now a 4-slide carousel
   (tagline "Type a keyword. Meet the sites that rank for it — and the people behind them.") whose
