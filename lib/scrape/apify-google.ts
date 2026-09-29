@@ -101,12 +101,22 @@ export function buildActorInput(job: RunnerJob, pagesCap: number): Record<string
 }
 
 async function apifyJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(25_000) })
-  if (!res.ok) {
-    const text = (await res.text().catch(() => '')).slice(0, 300)
-    throw new Error(`Apify HTTP ${res.status}: ${text || res.statusText}`)
+  // One retry on a network-level failure ("fetch failed": DNS, TLS, reset).
+  // Apify's API itself is reliable; the first call after a cold start is not.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(25_000) })
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')).slice(0, 300)
+        throw new Error(`Apify HTTP ${res.status}: ${text || res.statusText}`)
+      }
+      return (await res.json()) as T
+    } catch (e) {
+      const network = e instanceof TypeError || (e instanceof Error && /fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(e.message))
+      if (attempt >= 1 || !network) throw e
+      await new Promise(r => setTimeout(r, 800))
+    }
   }
-  return (await res.json()) as T
 }
 
 export async function startRun(

@@ -389,6 +389,19 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   limits via system_settings `demo_enabled`, `demo_per_ip_per_hour` (3), `demo_per_day` (120);
   IP hashed with CRON_SECRET. `/api/demo/` is public in proxy.ts. Proof strip, product mock and
   team section removed from the landing. Test: `scripts/orgs/verify-demo.ts` (1 Apify page).
+  **Same day, owner's pipeline spec:** the demo now runs the full flow: (1) Apify Google page →
+  (2) relevance check per result (heuristic `judgeRelevanceHeuristic`: niche words + keyword
+  words in title/snippet/URL; off-topic results are shown dimmed and NEVER opened) → (3) only
+  relevant, non-platform results are crawled (max 8) → (4) classified affiliate / operator (a
+  brand's own site) / publisher → (5) brands endorsed + CTA links (`extractBrands`: direct
+  external CTAs via `ctaCandidates`, cloaked/tracking links unmasked with `unmask`, AND same-host
+  review links like `/vpn/nordvpn` "9.4 Review" counted as endorsements) → (6) contacts. Cards
+  show Relevant / kind chip / "Endorses: NordVPN ×3 · … — N CTA links" / contacts; the list
+  button is a heart toggle (aria-label "Add to relevant list"). A "Casino brand" preset is on
+  the landing (the owner asked; casino brands are customers, casino affiliates are not).
+  **OpenAI is NOT used anywhere yet** — no key exists; `lib/ai-analysis` (relevance + affiliate
+  + brands + CTA into website_profiles / website_cta_links) is the workspace path that switches
+  on with `OPENAI_API_KEY` + `ai_analysis_enabled`. `apifyJson` retries once on "fetch failed".
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

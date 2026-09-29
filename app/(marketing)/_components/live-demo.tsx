@@ -11,11 +11,12 @@ import {
   CircleDashed,
   ExternalLink,
   Globe,
+  Heart,
+  Link2,
   Loader2,
   Mail,
   MessageSquareText,
   Phone,
-  Plus,
   Search,
   Send,
   Sparkles,
@@ -23,13 +24,18 @@ import {
 } from 'lucide-react'
 
 /**
- * The landing-page demo: a real Google scrape for a keyword in a country,
- * the top results opened, classified and mined for contacts, and an
- * outreach draft for any of them — all without an account. The server keeps
- * the run in `demo_runs`; this component drives it by polling.
+ * The landing-page demo: a real Google scrape for a keyword in a country, a
+ * relevance check on every result, the relevant sites opened and classified
+ * (affiliate · operator · publisher), the brands they endorse and their CTA
+ * links, their contacts, and an outreach draft for any of them — all without
+ * an account. The server keeps the run in `demo_runs`; this drives it by
+ * polling.
  */
 
 type Verdict = 'affiliate' | 'not_affiliate' | 'unclear' | 'unknown'
+type Relevance = 'relevant' | 'off_topic' | 'unknown'
+type Kind = 'affiliate' | 'operator' | 'publisher' | 'unknown'
+type Brand = { name: string; host: string; links: number }
 type Lead = {
   id: number
   domain: string
@@ -38,13 +44,17 @@ type Lead = {
   snippet: string | null
   type: 'Organic' | 'PPC'
   position: number
+  relevance: Relevance
   enriched: boolean
   skipped: boolean
   fetchError: string | null
+  kind: Kind
   verdict: Verdict
   confidence: string | null
   score: number | null
   indicators: string[]
+  brands: Brand[]
+  ctaLinks: number
   contacts: {
     emails: string[]
     phones: string[]
@@ -81,6 +91,7 @@ const COUNTRIES = [
 
 const PRESETS = [
   { key: 'vpn', label: 'VPN brand', keyword: 'best vpn for streaming', country: 'GB', blurb: 'Who reviews VPNs in the UK' },
+  { key: 'casino', label: 'Casino brand', keyword: 'best online casinos', country: 'GB', blurb: 'Review and bonus sites an operator recruits' },
   { key: 'hosting', label: 'Web hosting', keyword: 'best web hosting for small business', country: 'US', blurb: 'Hosting comparison publishers' },
   { key: 'saas', label: 'B2B SaaS', keyword: 'best crm for small business', country: 'US', blurb: 'Software reviewers and directories' },
   { key: 'fitness', label: 'Fitness & supplements', keyword: 'best protein powder', country: 'GB', blurb: 'Fitness creators and comparison sites' },
@@ -107,17 +118,24 @@ function evidenceLabel(indicator: string): string {
     .replace(/casino/gi, 'niche')
 }
 
-function verdictChip(v: Verdict, fetchError: string | null, enriched: boolean, skipped: boolean) {
-  if (skipped) return { label: 'Platform · not a partner', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
-  if (!enriched) return { label: 'Not opened in the demo', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
-  if (fetchError) return { label: 'Site blocked the visit', cls: 'bg-amber-100 text-amber-900' }
-  switch (v) {
+function relevanceChip(r: Relevance) {
+  if (r === 'off_topic') return { label: 'Off-topic · not opened', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
+  if (r === 'relevant') return { label: 'Relevant', cls: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' }
+  return null
+}
+
+function kindChip(lead: Lead) {
+  if (lead.skipped) return { label: 'Platform · not a partner', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
+  if (lead.relevance === 'off_topic') return null
+  if (!lead.enriched) return { label: 'Not opened in the demo', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
+  if (lead.fetchError) return { label: 'Site blocked the visit', cls: 'bg-amber-100 text-amber-900' }
+  switch (lead.kind) {
     case 'affiliate':
       return { label: 'Affiliate', cls: 'bg-emerald-100 text-emerald-800' }
-    case 'not_affiliate':
-      return { label: 'Publisher · not an affiliate', cls: 'bg-sky-100 text-sky-800' }
-    case 'unclear':
-      return { label: 'Possible affiliate', cls: 'bg-amber-100 text-amber-900' }
+    case 'operator':
+      return { label: 'Operator · a brand’s own site', cls: 'bg-violet-100 text-violet-800' }
+    case 'publisher':
+      return { label: 'Publisher', cls: 'bg-sky-100 text-sky-800' }
     default:
       return { label: 'Unclear', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
   }
@@ -125,13 +143,15 @@ function verdictChip(v: Verdict, fetchError: string | null, enriched: boolean, s
 
 function emailDraft(lead: Lead, keyword: string, country: string) {
   const name = siteName(lead)
-  const kind = lead.verdict === 'affiliate' ? 'partner site' : 'publication'
+  const kind = lead.kind === 'affiliate' ? 'partner site' : 'publication'
+  const brands = lead.brands.slice(0, 2).map(b => b.name)
+  const mention = brands.length > 0 ? ` I see you already work with ${brands.join(' and ')} —` : ''
   return {
     subject: `Partnership idea for ${lead.domain}`,
     body:
       `Hi ${name} team,\n\n` +
-      `I came across ${lead.domain} while looking at who ranks for “${keyword}” in ${countryName(country)}. ` +
-      `A ${kind} like yours is exactly the kind of site we partner with.\n\n` +
+      `I came across ${lead.domain} while looking at who ranks for “${keyword}” in ${countryName(country)}.` +
+      `${mention} a ${kind} like yours is exactly the kind of site we partner with.\n\n` +
       `Would you be open to a quick call this week about a partnership? Happy to share our programme terms up front.\n\n` +
       `Best regards,\n[Your name]`,
   }
@@ -140,6 +160,9 @@ function emailDraft(lead: Lead, keyword: string, country: string) {
 function smsDraft(lead: Lead, keyword: string, country: string) {
   return `Hi ${siteName(lead)}, saw ${lead.domain} ranking for “${keyword}” in ${countryName(country)}. We'd love to talk about a partnership — can I email you the details? [Your name]`
 }
+
+const hasContact = (l: Lead) =>
+  !!l.contacts && (l.contacts.emails.length > 0 || l.contacts.phones.length > 0 || l.contacts.socials.length > 0 || !!l.contacts.contactPage)
 
 export function LiveDemo() {
   const [keyword, setKeyword] = useState(PRESETS[0]!.keyword)
@@ -208,8 +231,7 @@ export function LiveDemo() {
         setError(body.error ?? 'Could not start the demo. Try again in a moment.')
         return
       }
-      const t0 = Date.now()
-      setStartedAt(t0)
+      setStartedAt(Date.now())
       setRun({ id: body.id, status: 'searching', keyword, country_code: country, results: [], total: 0, enriched: 0, error: null })
       pollRef.current = setTimeout(() => void poll(body.id!), 1500)
     } catch {
@@ -220,12 +242,13 @@ export function LiveDemo() {
   }
 
   const active = run !== null && (run.status === 'searching' || run.status === 'enriching')
-  const enrichable = useMemo(() => (run ? run.results.filter(l => !l.skipped).slice(0, 8) : []), [run])
-  const opened = enrichable.filter(l => l.enriched).length
-  const withContacts = (run?.results ?? []).filter(
-    l => l.contacts && (l.contacts.emails.length || l.contacts.phones.length || l.contacts.socials.length || l.contacts.contactPage),
-  ).length
-  const affiliates = (run?.results ?? []).filter(l => l.verdict === 'affiliate' || l.verdict === 'unclear').length
+  const results = run?.results ?? []
+  const relevant = results.filter(l => l.relevance !== 'off_topic' && !l.skipped)
+  const toOpen = relevant.slice(0, 8)
+  const opened = toOpen.filter(l => l.enriched).length
+  const affiliates = results.filter(l => l.kind === 'affiliate').length
+  const withContacts = results.filter(hasContact).length
+  const brandsFound = new Set(results.flatMap(l => l.brands.map(b => b.host))).size
 
   const steps: Array<{ label: string; state: 'todo' | 'doing' | 'done' }> = run
     ? [
@@ -234,18 +257,24 @@ export function LiveDemo() {
           state: run.status === 'searching' ? 'doing' : 'done',
         },
         {
-          label: run.total > 0 ? `${run.total} websites found on page one` : 'Collecting the results',
+          label:
+            run.status === 'searching'
+              ? `Checking which results are about “${run.keyword}”`
+              : `${relevant.length} of ${run.total} results are about “${run.keyword}”`,
           state: run.status === 'searching' ? 'todo' : 'done',
         },
         {
           label:
             run.status === 'searching'
-              ? 'Opening the top sites'
-              : `Opening the top ${enrichable.length} sites and scoring them · ${opened}/${enrichable.length}`,
+              ? 'Opening the relevant sites: affiliate, operator or publisher?'
+              : `Opening the relevant sites · ${opened}/${toOpen.length} classified`,
           state: run.status === 'searching' ? 'todo' : run.status === 'enriching' ? 'doing' : 'done',
         },
         {
-          label: run.status === 'done' ? `${withContacts} with contact details · ${affiliates} likely partners` : 'Extracting emails, phones and socials',
+          label:
+            run.status === 'done'
+              ? `${affiliates} affiliates · ${brandsFound} brands endorsed · ${withContacts} with contacts`
+              : 'Extracting the brands endorsed, their CTA links and the contact details',
           state: run.status === 'done' ? 'done' : run.status === 'enriching' && opened > 0 ? 'doing' : 'todo',
         },
       ]
@@ -260,15 +289,16 @@ export function LiveDemo() {
           </p>
           <h2 className="mt-2 text-[28px] font-semibold leading-tight">Run a real scrape. No account, about a minute.</h2>
           <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
-            One page of Google for your keyword, the top sites opened and classified, their contacts pulled, and an
-            outreach draft ready. Nothing is sent from the demo.
+            One page of Google for your keyword. Every result is checked against the keyword, the relevant sites are
+            opened and classified as affiliate, operator or publisher, the brands they endorse and their contacts are
+            pulled, and an outreach draft is ready. Nothing is sent from the demo.
           </p>
         </div>
 
         <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-[color:var(--color-border-strong)] bg-[color:var(--color-bg-primary)] p-4 shadow-[0_30px_80px_-40px_rgba(26,26,26,0.35)] sm:p-6">
           {/* presets */}
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Start from an example</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-4">
+          <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {PRESETS.map(p => {
               const on = preset === p.key
               return (
@@ -394,18 +424,18 @@ export function LiveDemo() {
                   {run.error ?? 'The demo did not finish.'}
                 </p>
               )}
-              {run.status === 'enriching' && run.results.length > 0 && (
+              {run.status === 'enriching' && results.length > 0 && (
                 <p className="mt-3 text-[12px] text-[color:var(--color-text-secondary)]">
-                  First sites: {run.results.slice(0, 5).map(l => l.domain).join(' · ')}
-                  {run.results.length > 5 ? ' …' : ''}
+                  Opening: {toOpen.slice(0, 5).map(l => l.domain).join(' · ')}
+                  {toOpen.length > 5 ? ' …' : ''}
                 </p>
               )}
             </div>
           )}
 
           <p className="mt-4 text-[11.5px] text-[color:var(--color-text-secondary)]">
-            The demo runs one page per keyword and opens up to 8 sites. In your workspace: more pages, 32 countries,
-            weekly reruns and outreach that actually sends.
+            The demo runs one page per keyword and opens up to 8 relevant sites. In your workspace: more pages, 32
+            countries, AI relevance and brand checks, weekly reruns and outreach that actually sends.
           </p>
         </div>
       </div>
@@ -422,7 +452,7 @@ type Compose = { lead: Lead; channel: 'email' | 'sms' } | null
 function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
   const [compose, setCompose] = useState<Compose>(null)
   const [sent, setSent] = useState<Record<number, 'email' | 'sms'>>({})
-  const [list, setList] = useState<Set<number>>(new Set())
+  const [hearts, setHearts] = useState<Set<number>>(new Set())
   const [confirmation, setConfirmation] = useState<{ lead: Lead; channel: 'email' | 'sms'; to: string } | null>(null)
   const firstButton = useRef<HTMLButtonElement>(null)
 
@@ -445,15 +475,19 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
     }
   }, [compose, confirmation, onClose])
 
-  const leads = run.results
-  const affiliates = leads.filter(l => l.verdict === 'affiliate').length
-  const possible = leads.filter(l => l.verdict === 'unclear').length
-  const withContacts = leads.filter(
-    l => l.contacts && (l.contacts.emails.length || l.contacts.phones.length || l.contacts.socials.length || l.contacts.contactPage),
-  ).length
+  // Relevant first, then everything else, each in SERP order.
+  const leads = useMemo(() => {
+    const rel = run.results.filter(l => l.relevance !== 'off_topic' && !l.skipped)
+    const rest = run.results.filter(l => l.relevance === 'off_topic' || l.skipped)
+    return [...rel, ...rest]
+  }, [run.results])
+  const relevant = leads.filter(l => l.relevance !== 'off_topic' && !l.skipped).length
+  const affiliates = leads.filter(l => l.kind === 'affiliate').length
+  const operators = leads.filter(l => l.kind === 'operator').length
+  const withContacts = leads.filter(hasContact).length
 
-  const toggleList = (id: number) =>
-    setList(prev => {
+  const toggleHeart = (id: number) =>
+    setHearts(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -476,11 +510,12 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
             </p>
             <h3 className="mt-0.5 truncate text-[20px] font-semibold leading-tight">“{run.keyword}”</h3>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
-              <Stat label="websites" value={leads.length} />
+              <Stat label="results" value={leads.length} />
+              <Stat label="relevant" value={relevant} tone="good" />
               <Stat label="affiliates" value={affiliates} tone="good" />
-              {possible > 0 && <Stat label="possible" value={possible} tone="warn" />}
+              {operators > 0 && <Stat label={operators === 1 ? 'operator' : 'operators'} value={operators} tone="violet" />}
               <Stat label="with contacts" value={withContacts} tone="good" />
-              {list.size > 0 && <Stat label="in your list" value={list.size} tone="accent" />}
+              {hearts.size > 0 && <Stat label="in your list" value={hearts.size} tone="accent" />}
             </div>
           </div>
           <button
@@ -512,7 +547,7 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
               onBack={() => setCompose(null)}
               onSend={to => {
                 setSent(prev => ({ ...prev, [compose.lead.id]: compose.channel }))
-                setList(prev => new Set(prev).add(compose.lead.id))
+                setHearts(prev => new Set(prev).add(compose.lead.id))
                 setConfirmation({ lead: compose.lead, channel: compose.channel, to })
                 setCompose(null)
               }}
@@ -523,9 +558,9 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
                 <LeadCard
                   key={lead.id}
                   lead={lead}
-                  inList={list.has(lead.id)}
+                  hearted={hearts.has(lead.id)}
                   sentVia={sent[lead.id] ?? null}
-                  onToggleList={() => toggleList(lead.id)}
+                  onToggleHeart={() => toggleHeart(lead.id)}
                   onEmail={() => setCompose({ lead, channel: 'email' })}
                   onSms={() => setCompose({ lead, channel: 'sms' })}
                 />
@@ -541,10 +576,11 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
 
         {/* footer */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-5 py-3">
-          <p className="text-[12px] text-[color:var(--color-text-secondary)]">
-            {list.size > 0
-              ? `${list.size} lead${list.size === 1 ? '' : 's'} in your outreach list. Keep them, add follow-up dates and send for real in your workspace.`
-              : 'Add sites to your list, draft an email or SMS — then keep it all in a free workspace.'}
+          <p className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--color-text-secondary)]">
+            <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
+            {hearts.size > 0
+              ? `${hearts.size} in your relevant list. Keep them, add follow-up dates and send for real in your workspace.`
+              : 'Tap the heart on the sites worth a conversation, draft an email or SMS — then keep it all in a free workspace.'}
           </p>
           <Link
             href="/signup"
@@ -559,15 +595,17 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
   )
 }
 
-function Stat({ label, value, tone = 'muted' }: { label: string; value: number; tone?: 'muted' | 'good' | 'warn' | 'accent' }) {
+function Stat({ label, value, tone = 'muted' }: { label: string; value: number; tone?: 'muted' | 'good' | 'warn' | 'accent' | 'violet' }) {
   const cls =
     tone === 'good'
       ? 'bg-emerald-100 text-emerald-800'
       : tone === 'warn'
         ? 'bg-amber-100 text-amber-900'
-        : tone === 'accent'
-          ? 'bg-[color:var(--color-accent)]/40 text-[color:var(--color-text-primary)]'
-          : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'
+        : tone === 'violet'
+          ? 'bg-violet-100 text-violet-800'
+          : tone === 'accent'
+            ? 'bg-[color:var(--color-accent)]/40 text-[color:var(--color-text-primary)]'
+            : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${cls}`}>
       <span className="tabular-nums">{value}</span> {label}
@@ -577,28 +615,34 @@ function Stat({ label, value, tone = 'muted' }: { label: string; value: number; 
 
 function LeadCard({
   lead,
-  inList,
+  hearted,
   sentVia,
-  onToggleList,
+  onToggleHeart,
   onEmail,
   onSms,
 }: {
   lead: Lead
-  inList: boolean
+  hearted: boolean
   sentVia: 'email' | 'sms' | null
-  onToggleList: () => void
+  onToggleHeart: () => void
   onEmail: () => void
   onSms: () => void
 }) {
-  const chip = verdictChip(lead.verdict, lead.fetchError, lead.enriched, lead.skipped)
+  const rel = relevanceChip(lead.relevance)
+  const kind = kindChip(lead)
   const c = lead.contacts
   const hasEmail = !!c?.emails.length
   const hasPhone = !!c?.phones.length
+  const dim = lead.relevance === 'off_topic' || lead.skipped
   const [iconFailed, setIconFailed] = useState(false)
   return (
     <article
       data-demo-card
-      className="flex flex-col gap-3 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4"
+      className={[
+        'flex flex-col gap-3 rounded-xl border bg-[color:var(--color-bg-primary)] p-4',
+        hearted ? 'border-rose-300 ring-1 ring-rose-200' : 'border-[color:var(--color-border)]',
+        dim ? 'opacity-70' : '',
+      ].join(' ')}
     >
       <div className="flex items-start gap-3">
         {iconFailed ? (
@@ -634,10 +678,50 @@ function LeadCard({
           </div>
           <p className="truncate text-[12px] text-[color:var(--color-text-secondary)]">{lead.domain}</p>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.cls}`}>{chip.label}</span>
+        <button
+          type="button"
+          onClick={onToggleHeart}
+          aria-pressed={hearted}
+          aria-label={hearted ? 'Remove from relevant list' : 'Add to relevant list'}
+          title={hearted ? 'In your relevant list' : 'Add to your relevant list'}
+          className={[
+            'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+            hearted
+              ? 'border-rose-300 bg-rose-50 text-rose-600'
+              : 'border-[color:var(--color-border)] text-[color:var(--color-text-secondary)] hover:border-rose-300 hover:text-rose-600',
+          ].join(' ')}
+        >
+          <Heart className={`h-4 w-4 ${hearted ? 'fill-rose-500 text-rose-500' : ''}`} />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {rel && <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${rel.cls}`}>{rel.label}</span>}
+        {kind && <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${kind.cls}`}>{kind.label}</span>}
       </div>
 
       {lead.snippet && <p className="line-clamp-2 text-[12.5px] leading-relaxed text-[color:var(--color-text-secondary)]">{lead.snippet}</p>}
+
+      {/* brands endorsed + CTA links */}
+      {lead.enriched && !lead.fetchError && (lead.brands.length > 0 || lead.ctaLinks > 0) && (
+        <div className="rounded-md bg-[color:var(--color-bg-secondary)] px-2.5 py-2 text-[12px]">
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="inline-flex items-center gap-1 font-medium text-[color:var(--color-text-primary)]">
+              <Link2 className="h-3.5 w-3.5" /> {lead.kind === 'affiliate' ? 'Endorses' : 'Mentions'}
+            </span>
+            {lead.brands.length === 0 && <span className="text-[color:var(--color-text-secondary)]">no brand we could resolve</span>}
+            {lead.brands.map(b => (
+              <span key={b.host} title={b.host} className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-2 py-0.5">
+                {b.name}
+                {b.links > 1 && <span className="ml-1 text-[color:var(--color-text-secondary)]">×{b.links}</span>}
+              </span>
+            ))}
+            <span className="ml-auto text-[color:var(--color-text-secondary)]">
+              {lead.ctaLinks} CTA link{lead.ctaLinks === 1 ? '' : 's'}
+            </span>
+          </p>
+        </div>
+      )}
 
       {lead.indicators.length > 0 && (
         <ul className="flex flex-wrap gap-1">
@@ -682,13 +766,15 @@ function LeadCard({
             <ExternalLink className="h-3 w-3" /> Contact page
           </a>
         )}
-        {lead.enriched && !lead.fetchError && c && !c.emails.length && !c.phones.length && !c.socials.length && !c.contactPage && (
+        {lead.enriched && !lead.fetchError && c && !hasContact(lead) && (
           <span className="text-[color:var(--color-text-secondary)]">No public contact found on the first pages.</span>
         )}
-        {(!lead.enriched || lead.skipped) && (
-          <span className="text-[color:var(--color-text-secondary)]">
-            {lead.skipped ? 'A platform, not a site to pitch.' : 'Opened in the full product.'}
-          </span>
+        {lead.relevance === 'off_topic' && !lead.skipped && (
+          <span className="text-[color:var(--color-text-secondary)]">Not about the keyword, so we did not open it.</span>
+        )}
+        {lead.skipped && <span className="text-[color:var(--color-text-secondary)]">A platform, not a site to pitch.</span>}
+        {!lead.enriched && !lead.skipped && lead.relevance !== 'off_topic' && (
+          <span className="text-[color:var(--color-text-secondary)]">Opened in the full product.</span>
         )}
       </div>
 
@@ -711,20 +797,6 @@ function LeadCard({
           className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[color:var(--color-border-strong)] px-3 text-[12.5px] font-semibold disabled:opacity-30"
         >
           <MessageSquareText className="h-3.5 w-3.5" /> SMS
-        </button>
-        <button
-          type="button"
-          onClick={onToggleList}
-          aria-pressed={inList}
-          className={[
-            'inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium',
-            inList
-              ? 'border-[color:var(--color-accent-hover)] bg-[color:var(--color-accent)]/25'
-              : 'border-[color:var(--color-border)] hover:bg-[color:var(--color-bg-secondary)]',
-          ].join(' ')}
-        >
-          {inList ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          {inList ? 'In list' : 'Add to list'}
         </button>
         {sentVia && (
           <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-emerald-700">
@@ -766,7 +838,7 @@ function ComposeView({
         {channel === 'email' ? 'Email' : 'SMS'} to {siteName(lead)}
       </h4>
       <p className="mt-1 text-[12.5px] text-[color:var(--color-text-secondary)]">
-        Drafted from the scrape: the site, the keyword it ranks for and the market. Edit anything.
+        Drafted from the scrape: the site, the keyword it ranks for, the market{lead.brands.length > 0 ? ' and the brands it already endorses' : ''}. Edit anything.
       </p>
       <div className="mt-4 flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">

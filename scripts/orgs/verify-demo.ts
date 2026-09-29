@@ -48,7 +48,15 @@ async function main() {
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/demo-form.png`, fullPage: false })
 
     await page.locator('button:has-text("Run demo scrape")').click()
-    await page.locator('text=Searching Google').waitFor({ timeout: 15_000 })
+    const started = await Promise.race([
+      page.locator('text=Searching Google').waitFor({ timeout: 20_000 }).then(() => 'ok' as const),
+      page.locator('#demo p.text-amber-900').waitFor({ timeout: 20_000 }).then(() => 'error' as const),
+    ]).catch(() => 'timeout' as const)
+    if (started !== 'ok') {
+      const msg = started === 'error' ? await page.locator('#demo p.text-amber-900').first().textContent() : 'no progress panel within 20 s'
+      check('progress panel appears', false, msg ?? started)
+      throw new Error(`demo did not start: ${msg ?? started}`)
+    }
     check('progress panel appears', true)
 
     const dialog = page.locator('[role="dialog"]')
@@ -58,8 +66,16 @@ async function main() {
 
     const cards = await page.locator('[data-demo-card]').count()
     check('result cards render', cards >= 5, `${cards} cards`)
-    const affiliateChips = await page.locator('[data-demo-card] >> text=/^(Affiliate|Possible affiliate|Publisher)/').count()
-    check('verdict chips are present', affiliateChips >= 1, `${affiliateChips}`)
+    const kindChips = await page.locator('[data-demo-card] >> text=/^(Affiliate|Operator|Publisher)/').count()
+    check('affiliate / operator / publisher chips are present', kindChips >= 1, `${kindChips}`)
+    const relevantChips = await page.locator('[data-demo-card] >> text=/^Relevant$/').count()
+    check('relevance chips are present', relevantChips >= 1, `${relevantChips}`)
+    const brandBlocks = await page.locator('[data-demo-card] >> text=/Endorses|Mentions/').count()
+    check('brands endorsed / CTA links shown on at least one site', brandBlocks >= 1, `${brandBlocks}`)
+    const hearts = await page.locator('[data-demo-card] button[aria-label="Add to relevant list"]').count()
+    check('heart toggle on every card', hearts === cards, `${hearts}/${cards}`)
+    await page.locator('[data-demo-card] button[aria-label="Add to relevant list"]').first().click()
+    check('hearting a site counts it in the list', (await page.locator('text=/1 in your list|1 in your relevant list/').count()) >= 1)
     const contactChips = await page.locator('[data-demo-card] span:has-text("@"), [data-demo-card] a:has-text("Contact page")').count()
     check('contacts were found on at least one site', contactChips >= 1, `${contactChips}`)
 
