@@ -8,7 +8,7 @@ import { PROPERTY_MODULE_ENABLED, isPropertyRoute } from '@/lib/modules'
  *   /auth/portal-callback   — cross-dashboard SSO landing; authenticates via a
  *                             portal-signed JWT and CREATES the session, so it
  *                             necessarily arrives without one
- *   /, /pricing            — the public marketing site (landing + pricing)
+ *   /, /pricing, /privacy, /terms — the public marketing site
  *   /signup, /invite/<token> — public auth pages (signup + invite acceptance)
  *   /api/scheduler/tick     — Vercel cron authenticates via Bearer CRON_SECRET
  *   /api/proxy/bandwidth/refresh — Vercel cron authenticates via Bearer CRON_SECRET
@@ -47,6 +47,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/demo/') || // public landing-page demo; rate-limited inside the route
     pathname === '/' ||
     pathname.startsWith('/pricing') ||
+    pathname.startsWith('/privacy') ||
+    pathname.startsWith('/terms') ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
     pathname.startsWith('/invite/')

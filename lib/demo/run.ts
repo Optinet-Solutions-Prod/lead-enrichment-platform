@@ -68,6 +68,9 @@ export const DEMO_ENRICH_LIMIT = 8
 const ENRICH_BATCH = 4
 const LEAD_DEADLINE_MS = 42_000
 const SEARCH_STALE_MS = 5 * 60 * 1000
+/** Demo rows hold third-party contact details from public pages: keep them a day, no longer.
+ *  The DB cron job purge-demo-runs deletes hourly; this is the in-app belt to that brace. */
+export const DEMO_RETENTION_MS = 24 * 60 * 60 * 1000
 const MAX_CTA_UNMASK = 6
 const AI_AUDIT_TIMEOUT_MS = 32_000
 
@@ -176,6 +179,8 @@ export async function startDemoRun(input: {
     return { ok: false, error: 'The live demo is paused right now — create a free account to run a scrape.', status: 503 }
   }
 
+  await purgeExpiredDemoRuns(svc).catch(() => {})
+
   // Abuse limits: per visitor per hour, and for everyone per day.
   const perIp = asInt(await setting(svc, 'demo_per_ip_per_hour'), 3)
   const perDay = asInt(await setting(svc, 'demo_per_day'), 120)
@@ -272,7 +277,18 @@ function publicView(row: Row): DemoRun {
 
 async function loadRow(svc: Svc, id: string): Promise<Row | null> {
   const { data } = await svc.from('demo_runs').select(FULL_COLS).eq('id', id).maybeSingle()
-  return (data as unknown as Row | null) ?? null
+  const row = (data as unknown as Row | null) ?? null
+  if (row && Date.now() - Date.parse(row.created_at) > DEMO_RETENTION_MS) {
+    await svc.from('demo_runs').delete().eq('id', id)
+    return null
+  }
+  return row
+}
+
+/** Delete runs past retention. Cheap (indexed on created_at); called on every start. */
+export async function purgeExpiredDemoRuns(svc: Svc): Promise<void> {
+  const cutoff = new Date(Date.now() - DEMO_RETENTION_MS).toISOString()
+  await svc.from('demo_runs').delete().lt('created_at', cutoff)
 }
 
 /** Hosts that are never a partner to contact — search engines' own

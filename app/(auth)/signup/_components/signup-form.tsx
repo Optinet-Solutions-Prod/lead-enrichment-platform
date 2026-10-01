@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authButtonCls, authInputCls } from '../../_components/auth-shell'
@@ -105,6 +106,18 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
           {state.notice}
         </p>
       )}
+
+      <p className="text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
+        By creating an account you agree to the{' '}
+        <Link href="/terms" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
+          terms of service
+        </Link>{' '}
+        and{' '}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
+          privacy policy
+        </Link>
+        .
+      </p>
 
       <button type="submit" disabled={pending} className={authButtonCls}>
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}

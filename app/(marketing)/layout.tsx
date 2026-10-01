@@ -42,6 +42,8 @@ export default async function MarketingLayout({ children }: { children: React.Re
             <a href="mailto:admin@optinetsolutions.com" className="hover:text-[color:var(--color-text-primary)]">
               Contact
             </a>
+            <Link href="/privacy" className="hover:text-[color:var(--color-text-primary)]">Privacy policy</Link>
+            <Link href="/terms" className="hover:text-[color:var(--color-text-primary)]">Terms of service</Link>
           </nav>
         </div>
         <p className="border-t border-[color:var(--color-border)] px-5 py-4 text-center text-[11px] text-[color:var(--color-text-secondary)]">

@@ -425,6 +425,19 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   path:** `lib/scrape/serper.ts` — when `SERPER_API_KEY` is set (google.serper.dev, ~1–2 s, free
   2,500 queries) the demo searches through Serper inside `/api/demo/start` and skips the
   searching stage; Apify remains the fallback and the workspace engine. ⚠ Not set on Vercel yet.
+- ✅ **Demo data retention + legal pages (2026-10-01, migration `20261001090000` applied live):**
+  demo runs hold third-party emails/phones from public pages, so they now live 24 h:
+  `public.purge_demo_runs()` runs hourly via pg_cron job `purge-demo-runs` (`23 * * * *`;
+  the project already had `release-stale-scrape-locks`), `startDemoRun` sweeps expired rows on
+  every start, and `loadRow` treats a row older than `DEMO_RETENTION_MS` as gone (deletes it,
+  poll → 404). New public pages `/privacy` and `/terms` (`app/(marketing)/{privacy,terms}`,
+  shell in `_components/legal.tsx`; allowlisted in proxy.ts), linked from the footer, from a
+  note under the demo form ("deleted after 24 hours and nothing is sent") and from a consent
+  line above the signup button. Contact address is admin@optinetsolutions.com; governing law
+  is written as "the country in which Optinet Solutions is established" — ⚠ owner should set
+  the registered entity name + jurisdiction. Processors named: Supabase, Vercel, Apify, Serper,
+  OpenAI, Stripe. The removal promise (suppression list, 30 days) has no tooling yet — handle
+  by hand until a suppression table exists.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

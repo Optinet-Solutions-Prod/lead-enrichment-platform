@@ -398,6 +398,13 @@ export function LiveDemo() {
             </div>
           </form>
 
+          <p className="mt-3 text-[12px] text-[color:var(--color-text-secondary)]">
+            Results show what each site publishes on its own pages. Demo runs are deleted after 24 hours and nothing is sent.{' '}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
+              Privacy policy
+            </Link>
+          </p>
+
           {error && (
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{error}</p>
           )}
