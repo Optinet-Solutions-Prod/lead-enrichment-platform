@@ -304,7 +304,7 @@ export function LiveDemo() {
             <Sparkles className="h-3.5 w-3.5" /> Live demo
           </p>
           <h2 className="mt-3 text-[34px] font-bold leading-[1.15] md:text-[48px]">
-            Run a real scrape. <span className="dg-gradient-text">No account.</span>
+            Go on, try it. <span className="dg-gradient-text">Your keyword, live.</span>
           </h2>
           <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--color-text-secondary)] md:text-[18px]">
             One page of Google for your keyword. An AI judge checks every result against the keyword, the relevant
