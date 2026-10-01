@@ -82,3 +82,186 @@ html {
   scrollbar-width: thin;
   scrollbar-color: rgba(107, 107, 107, 0.15) transparent;
 }
+
+/* ------------------------------------------------------------------ */
+/* Public site + sign-in theme (.theme-dg): near-black canvas, white   */
+/* type, green→blue accent, Inter text with Manrope display headings.  */
+/* Scoped to a wrapper so the workspace stays on the light palette.    */
+/* ------------------------------------------------------------------ */
+@layer base {
+  .theme-dg {
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #a9a9ad;
+    --color-bg-primary: #0b0b0c;
+    --color-bg-secondary: #101014;
+    --color-card: #1a1a1f;
+    --color-accent: #13ef93;
+    --color-accent-hover: #38edac;
+    --color-blue: #149afb;
+    --color-link: #79affa;
+    --color-border: rgba(255, 255, 255, 0.1);
+    --color-border-strong: rgba(255, 255, 255, 0.2);
+    --font-display: var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    color-scheme: dark;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .theme-dg h1,
+  .theme-dg h2,
+  .theme-dg h3,
+  .theme-dg .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  .theme-dg ::selection {
+    background: rgba(19, 239, 147, 0.35);
+  }
+}
+
+.theme-dg *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@layer components {
+  /* Buttons. Primary is white on black (as the reference site); the glow
+     variant draws its border with a green→blue gradient. */
+  .dg-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0 1.25rem;
+    border-radius: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      color 0.15s,
+      box-shadow 0.15s,
+      opacity 0.15s;
+  }
+  .dg-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .dg-btn-primary {
+    background: #ffffff;
+    color: #0b0b0c;
+  }
+  .dg-btn-primary:hover:not(:disabled) {
+    background: #e1e1e5;
+  }
+  .dg-btn-secondary {
+    background: #0b0b0d;
+    color: #ffffff;
+    border: 1px solid #88888c;
+  }
+  .dg-btn-secondary:hover:not(:disabled) {
+    border-color: #ffffff;
+  }
+  .dg-btn-ghost {
+    background: transparent;
+    color: #ffffff;
+  }
+  .dg-btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .dg-btn-glow {
+    position: relative;
+    color: #ffffff;
+    border: 1px solid transparent;
+    background:
+      linear-gradient(#0b0b0d, #0b0b0d) padding-box,
+      linear-gradient(90deg, #008fc1, #00f099) border-box;
+    box-shadow: 0 0 18px rgba(0, 240, 153, 0.22);
+  }
+  .dg-btn-glow:hover:not(:disabled) {
+    box-shadow: 0 0 26px rgba(0, 240, 153, 0.38);
+  }
+
+  /* Text with the green→blue gradient, for one or two words in a heading. */
+  .dg-gradient-text {
+    background: linear-gradient(90deg, #13ef93 0%, #38afea 55%, #149afb 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Cards and panels. */
+  .dg-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+  }
+  .dg-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 10px;
+    color: #0b0b0c;
+    background: linear-gradient(135deg, #13ef93, #149afb);
+  }
+  .dg-rule {
+    height: 1px;
+    flex: 1 1 0;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  /* Hero canvas: beams of blue and violet with a green edge, pure CSS. */
+  .dg-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background:
+      radial-gradient(60% 80% at 15% 40%, rgba(20, 154, 251, 0.55), transparent 60%),
+      radial-gradient(45% 70% at 85% 65%, rgba(19, 239, 147, 0.32), transparent 60%),
+      radial-gradient(70% 60% at 50% 110%, rgba(127, 57, 255, 0.45), transparent 60%),
+      linear-gradient(180deg, #0b0b0c 0%, #141252 38%, #3b23d6 62%, #0b0b0c 100%);
+  }
+  .dg-hero::before,
+  .dg-hero::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    width: 70vw;
+    height: 70vw;
+    max-width: 900px;
+    max-height: 900px;
+    border-radius: 9999px;
+    filter: blur(80px);
+    opacity: 0.55;
+  }
+  .dg-hero::before {
+    left: -25vw;
+    top: -20vw;
+    background: conic-gradient(from 200deg, #13ef93, #149afb, #7f39ff, #13ef93);
+  }
+  .dg-hero::after {
+    right: -25vw;
+    bottom: -30vw;
+    background: conic-gradient(from 20deg, #149afb, #ffadd8, #13ef93, #149afb);
+  }
+
+  /* Sign-in submit reads as inactive until the fields are filled, like the
+     reference console; it stays clickable so browser autofill never traps it. */
+  .auth-form:has(input:not([type='hidden']):placeholder-shown) .auth-submit {
+    background: #4e4e52;
+    color: #a9a9ad;
+  }
+}
+
+/* No white flash on overscroll around the dark public pages. */
+html:has(.theme-dg),
+html:has(.theme-dg) body {
+  background: #0b0b0c;
+}

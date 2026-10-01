@@ -438,6 +438,23 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   the registered entity name + jurisdiction. Processors named: Supabase, Vercel, Apify, Serper,
   OpenAI, Stripe. The removal promise (suppression list, 30 days) has no tooling yet — handle
   by hand until a suppression table exists.
+- ✅ **Public site + sign-in redesigned after deepgram.com (2026-10-01, owner's request):** the
+  landing, /pricing, /privacy, /terms, /login and /signup use a dark theme scoped to the
+  `.theme-dg` wrapper (`app/globals.css`, base + components layers so Tailwind utilities still
+  win); the workspace keeps its light palette. Tokens: canvas #0b0b0c, cards #1a1a1f, text
+  #a9a9ad, accent #13ef93 → #149afb, link #79affa; buttons `dg-btn-{primary,secondary,glow}`
+  (white-on-black primary, gradient-bordered glow). Fonts: Inter for text (same as the
+  reference) and **Manrope** for headings as the free stand-in for Deepgram's licensed Roobert
+  (`app/layout.tsx`; swap in Roobert if the owner buys a licence). Our own wordmark
+  (`_components/logo.tsx`), copy and CSS-only hero beams; no Deepgram assets, logos or text.
+  Landing order now mirrors the reference: centred hero (headline fixed, sub-line rotates, Try it
+  now + Sign up free) → industries grid (in place of a logo wall) → live demo → "Our platform"
+  5 gradient tiles → "A single pipeline" step list + example profile JSON
+  (`_components/pipeline-explorer.tsx`) → "Choose how you get started" 3 cards → features →
+  pricing → FAQ → gradient CTA → 6-column footer. Login is the console layout: centred 416px
+  column, "Need an account? Sign up →" over a hairline, terms line, fields, submit greys out
+  while a field is empty (CSS `:has`, still clickable). No social-login buttons or "remember me"
+  (not configured; would be dead UI). Demo error box now has `data-demo-error` (test hook).
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

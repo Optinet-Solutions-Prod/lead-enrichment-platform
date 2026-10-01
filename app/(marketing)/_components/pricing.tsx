@@ -17,7 +17,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <div className="inline-flex overflow-hidden rounded-md border border-[color:var(--color-border)]">
+        <div className="inline-flex overflow-hidden rounded-[4px] border border-white/20">
           {(['EUR', 'USD'] as const).map(c => (
             <button
               key={c}
@@ -25,16 +25,14 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
               onClick={() => setCurrency(c)}
               className={[
                 'min-h-10 px-3.5 text-[13px] font-medium transition-colors',
-                currency === c
-                  ? 'bg-[color:var(--color-accent)] text-[color:var(--color-text-primary)]'
-                  : 'bg-[color:var(--color-bg-primary)] text-[color:var(--color-text-secondary)]',
+                currency === c ? 'bg-white text-[#0b0b0c]' : 'bg-transparent text-[color:var(--color-text-secondary)] hover:text-white',
               ].join(' ')}
             >
               {c === 'EUR' ? '€ EUR' : '$ USD'}
             </button>
           ))}
         </div>
-        <div className="inline-flex overflow-hidden rounded-md border border-[color:var(--color-border)]">
+        <div className="inline-flex overflow-hidden rounded-[4px] border border-white/20">
           {[
             { v: false, label: 'Monthly' },
             { v: true, label: 'Yearly · save 20%' },
@@ -45,9 +43,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
               onClick={() => setYearly(o.v)}
               className={[
                 'min-h-10 px-3.5 text-[13px] font-medium transition-colors',
-                yearly === o.v
-                  ? 'bg-[color:var(--color-accent)] text-[color:var(--color-text-primary)]'
-                  : 'bg-[color:var(--color-bg-primary)] text-[color:var(--color-text-secondary)]',
+                yearly === o.v ? 'bg-white text-[#0b0b0c]' : 'bg-transparent text-[color:var(--color-text-secondary)] hover:text-white',
               ].join(' ')}
             >
               {o.label}
@@ -64,22 +60,22 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
             <div
               key={p.key}
               className={[
-                'relative flex flex-col rounded-xl border bg-[color:var(--color-bg-primary)] p-5',
+                'relative flex flex-col rounded-xl border bg-[#1a1a1f] p-6',
                 p.popular
-                  ? 'border-[color:var(--color-accent-hover)] shadow-[0_20px_50px_-30px_rgba(255,154,133,0.9)] ring-1 ring-[color:var(--color-accent-hover)]'
-                  : 'border-[color:var(--color-border)]',
+                  ? 'border-[color:var(--color-accent)] shadow-[0_0_50px_-12px_rgba(19,239,147,0.45)]'
+                  : 'border-white/10',
               ].join(' ')}
             >
               {p.popular && (
-                <span className="absolute -top-3 left-4 inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                <span className="absolute -top-3 left-4 inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0b0b0c]">
                   <Sparkles className="h-3 w-3" />
                   Most popular
                 </span>
               )}
-              <p className="text-[15px] font-semibold">{p.name}</p>
+              <p className="font-display text-[18px] font-bold">{p.name}</p>
               <p className="mt-0.5 min-h-[2.5em] text-[12px] text-[color:var(--color-text-secondary)]">{p.tagline}</p>
               <p className="mt-3 flex items-baseline gap-1">
-                <span className="text-[30px] font-semibold tabular-nums leading-none">{money(amount, currency)}</span>
+                <span className="font-display text-[34px] font-bold tabular-nums leading-none">{money(amount, currency)}</span>
                 {amount > 0 && <span className="text-[12px] text-[color:var(--color-text-secondary)]">/ month</span>}
               </p>
               <p className="mt-1 text-[11px] text-[color:var(--color-text-secondary)]">
@@ -89,7 +85,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
               <ul className="mt-4 flex flex-1 flex-col gap-1.5">
                 {p.features.map(f => (
                   <li key={f} className="flex items-start gap-2 text-[12px] leading-snug">
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--color-accent)]" />
                     {f}
                   </li>
                 ))}
@@ -97,10 +93,8 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
               <Link
                 href={p.key === 'scale' ? 'mailto:admin@optinetsolutions.com?subject=Lead%20Engine%20Scale' : `/signup?plan=${p.key}`}
                 className={[
-                  'mt-5 inline-flex min-h-11 items-center justify-center rounded-md px-3 text-[13px] font-medium transition-colors',
-                  p.popular
-                    ? 'bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)]'
-                    : 'border border-[color:var(--color-border-strong)] hover:bg-[color:var(--color-bg-secondary)]',
+                  'dg-btn mt-6 min-h-11 text-[14px]',
+                  p.popular ? 'dg-btn-primary' : 'dg-btn-secondary',
                 ].join(' ')}
               >
                 {p.cta}
@@ -112,14 +106,14 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
 
       {!compact && (
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+          <div className="dg-card p-6">
             <p className="text-[14px] font-semibold">Need more this month? Top up.</p>
             <p className="mt-1 text-[12px] text-[color:var(--color-text-secondary)]">
               Plan credits reset monthly; top-up credits never expire and work on every plan, Free included.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               {CREDIT_PACKS.map(pk => (
-                <div key={pk.key} className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-3">
+                <div key={pk.key} className="rounded-lg border border-white/10 bg-[#0b0b0c] p-3">
                   <p className="text-[18px] font-semibold tabular-nums leading-none">{money(currency === 'EUR' ? pk.eur : pk.usd, currency)}</p>
                   <p className="mt-1 text-[12px]">{pk.credits.toLocaleString()} credits</p>
                   <p className="text-[10px] text-[color:var(--color-text-secondary)]">~€{pk.perCreditEur} per credit</p>
@@ -127,7 +121,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
               ))}
             </div>
           </div>
-          <div className="rounded-xl border border-[color:var(--color-border)] p-5">
+          <div className="dg-card p-6">
             <p className="text-[14px] font-semibold">What a credit buys</p>
             <table className="mt-2 w-full text-[12px]">
               <tbody className="divide-y divide-[color:var(--color-border)]">

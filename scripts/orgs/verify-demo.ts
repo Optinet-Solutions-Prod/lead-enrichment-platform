@@ -35,7 +35,7 @@ async function main() {
     })
 
     await page.goto(`${APP}/`, { waitUntil: 'load' })
-    check('landing page renders the carousel', (await page.locator('text=Try it now').count()) >= 1)
+    check('landing page renders the hero', (await page.locator('text=Try it now').count()) >= 1)
     await page.locator('button:has-text("Try it now")').first().click()
     await page.waitForTimeout(900)
     const demoTop = await page.locator('#demo').evaluate(el => el.getBoundingClientRect().top)
@@ -50,10 +50,10 @@ async function main() {
     await page.locator('button:has-text("Run demo scrape")').click()
     const started = await Promise.race([
       page.locator('text=Searching Google').waitFor({ timeout: 20_000 }).then(() => 'ok' as const),
-      page.locator('#demo p.text-amber-900').waitFor({ timeout: 20_000 }).then(() => 'error' as const),
+      page.locator('#demo [data-demo-error]').waitFor({ timeout: 20_000 }).then(() => 'error' as const),
     ]).catch(() => 'timeout' as const)
     if (started !== 'ok') {
-      const msg = started === 'error' ? await page.locator('#demo p.text-amber-900').first().textContent() : 'no progress panel within 20 s'
+      const msg = started === 'error' ? await page.locator('#demo [data-demo-error]').first().textContent() : 'no progress panel within 20 s'
       check('progress panel appears', false, msg ?? started)
       throw new Error(`demo did not start: ${msg ?? started}`)
     }

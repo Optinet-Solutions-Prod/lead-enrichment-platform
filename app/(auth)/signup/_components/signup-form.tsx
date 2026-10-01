@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authButtonCls, authInputCls } from '../../_components/auth-shell'
@@ -37,10 +36,10 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
   const s = strength(pw)
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form action={formAction} className="auth-form flex flex-col gap-5">
       {inviteToken && <input type="hidden" name="invite" value={inviteToken} />}
 
-      <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+      <label className="flex flex-col gap-2 text-[15px] font-medium text-white">
         Work email
         <input
           name="email"
@@ -55,7 +54,7 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
         />
       </label>
 
-      <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+      <label className="flex flex-col gap-2 text-[15px] font-medium text-white">
         Password
         <span className="relative">
           <input
@@ -64,6 +63,7 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
             autoComplete="new-password"
             required
             minLength={12}
+            placeholder="Password"
             onChange={e => setPw(e.currentTarget.value)}
             className={`${authInputCls} pr-11`}
           />
@@ -84,7 +84,7 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
         </span>
       </label>
 
-      <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+      <label className="flex flex-col gap-2 text-[15px] font-medium text-white">
         Confirm password
         <input
           name="confirm"
@@ -92,32 +92,21 @@ export function SignupForm({ inviteToken, inviteEmail }: Props) {
           autoComplete="new-password"
           required
           minLength={12}
+          placeholder="Repeat password"
           className={authInputCls}
         />
       </label>
 
       {state?.error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-700">
+        <p role="alert" className="rounded-[4px] border border-red-400/30 bg-red-400/10 px-3 py-2 text-[14px] text-red-200">
           {state.error}
         </p>
       )}
       {state?.notice && (
-        <p role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+        <p role="status" className="rounded-[4px] border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[14px] text-amber-200">
           {state.notice}
         </p>
       )}
-
-      <p className="text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
-        By creating an account you agree to the{' '}
-        <Link href="/terms" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
-          terms of service
-        </Link>{' '}
-        and{' '}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-[color:var(--color-text-primary)]">
-          privacy policy
-        </Link>
-        .
-      </p>
 
       <button type="submit" disabled={pending} className={authButtonCls}>
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}

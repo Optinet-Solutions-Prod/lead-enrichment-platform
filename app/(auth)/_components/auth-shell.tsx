@@ -1,77 +1,58 @@
 import Link from 'next/link'
-import { CheckCircle2, Radar } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
+import { Logo } from '../../(marketing)/_components/logo'
 
 /**
- * Shared two-column frame for sign-in and sign-up: the brand panel says
- * what you are signing into (and why), the card holds the form. On phones
- * the panel collapses to a one-line header so the form is above the fold.
+ * Sign-in and sign-up frame: one narrow centred column on the dark canvas.
+ * Wordmark on top, the "other page" prompt right-aligned above a hairline,
+ * then the title, the terms line and the form.
  */
 export function AuthShell({
   title,
   subtitle,
   children,
-  footer,
+  switchPrompt,
+  legalVerb = 'continuing',
 }: {
   title: string
-  subtitle: string
+  subtitle?: string
   children: React.ReactNode
-  footer: React.ReactNode
+  switchPrompt: { text: string; label: string; href: string }
+  /** Completes "By … you agree to the …" — e.g. "logging in", "signing up". */
+  legalVerb?: string
 }) {
   return (
-    <div className="grid min-h-screen bg-[color:var(--color-bg-primary)] lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-[color:var(--color-bg-secondary)] p-10 lg:flex">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[color:var(--color-accent)]/40 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-[color:var(--color-accent)]/25 blur-3xl"
-        />
-        <Link href="/" className="relative flex items-center gap-2 text-[15px] font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[color:var(--color-accent)]">
-            <Radar className="h-4 w-4" />
-          </span>
-          Lead Engine
+    <div className="theme-dg min-h-screen">
+      <main className="mx-auto flex w-full max-w-[416px] flex-col px-5 pb-16 pt-12">
+        <Link href="/" aria-label="Lead Engine home" className="self-center">
+          <Logo size="lg" />
         </Link>
 
-        <div className="relative max-w-md">
-          <h2 className="text-[30px] font-semibold leading-tight tracking-tight">
-            Every affiliate ranking in your market, with a contact, in minutes.
-          </h2>
-          <ul className="mt-6 flex flex-col gap-3 text-[14px]">
-            {[
-              '100 free credits — a full pilot batch, no card needed',
-              'One profile per website: relevance, brands promoted, emails and socials — with the source',
-              'Outreach status and follow-up reminders on every row; workflows rerun weekly',
-            ].map(t => (
-              <li key={t} className="flex items-start gap-2.5">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                <span>{t}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="relative text-[12px] text-[color:var(--color-text-secondary)]">
-          85k+ search results profiled · 9 engines &amp; platforms · email, phone and 7 social channels per
-          site. Your market is next.
+        <p className="mt-6 flex items-center justify-end gap-2 border-b border-white/15 pb-3 text-[15px] font-semibold text-white/85">
+          {switchPrompt.text}
+          <Link href={switchPrompt.href} className="inline-flex items-center gap-1.5 text-[color:var(--color-link)] hover:underline">
+            {switchPrompt.label}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </p>
-      </aside>
 
-      <main className="flex flex-col px-5 py-8 sm:px-8 lg:justify-center lg:px-14">
-        <Link href="/" className="mb-8 flex items-center gap-2 text-[15px] font-semibold lg:hidden">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[color:var(--color-accent)]">
-            <Radar className="h-4 w-4" />
-          </span>
-          Lead Engine
-        </Link>
-        <div className="mx-auto w-full max-w-md">
-          <h1 className="text-[24px] font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 text-[13px] text-[color:var(--color-text-secondary)]">{subtitle}</p>
-          <div className="mt-6">{children}</div>
-          <div className="mt-6 text-[13px] text-[color:var(--color-text-secondary)]">{footer}</div>
-        </div>
+        <h1 className="mt-10 text-[30px] font-normal text-white" style={{ fontFamily: 'var(--font-inter), ui-sans-serif, system-ui, sans-serif', letterSpacing: '-0.01em' }}>
+          {title}
+        </h1>
+        {subtitle && <p className="mt-2 text-[15px] text-[color:var(--color-text-secondary)]">{subtitle}</p>}
+        <p className="mt-4 text-[14px] leading-relaxed text-white/85">
+          By {legalVerb}, you agree to the Lead Engine{' '}
+          <Link href="/terms" className="font-semibold underline underline-offset-2">
+            Terms of Service
+          </Link>{' '}
+          and have read our{' '}
+          <Link href="/privacy" className="font-semibold underline underline-offset-2">
+            Privacy Policy
+          </Link>
+          .
+        </p>
+
+        <div className="mt-8">{children}</div>
       </main>
     </div>
   )
@@ -79,7 +60,7 @@ export function AuthShell({
 
 /** Inputs share one look; kept here so both forms stay identical. */
 export const authInputCls =
-  'min-h-11 w-full rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-bg-primary)] px-3.5 text-[14px] text-[color:var(--color-text-primary)] placeholder:text-[color:var(--color-text-secondary)]/70 read-only:opacity-70 focus:border-[color:var(--color-accent-hover)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-accent)]/60'
+  'min-h-[42px] w-full rounded-[4px] border border-[#4e4e52] bg-[#0b0b0c] px-4 text-[16px] font-normal text-white placeholder:text-[#88888c] read-only:opacity-70 focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)]'
 
-export const authButtonCls =
-  'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[color:var(--color-accent)] px-4 text-[14px] font-semibold text-[color:var(--color-text-primary)] transition-colors hover:bg-[color:var(--color-accent-hover)] disabled:opacity-50'
+/** Greys out while any field still shows its placeholder (see .auth-form in globals.css); always clickable. */
+export const authButtonCls = 'dg-btn dg-btn-primary auth-submit min-h-12 w-full text-[16px]'

@@ -17,6 +17,7 @@ import {
 import { Faq } from './_components/faq'
 import { HeroCarousel } from './_components/hero-carousel'
 import { LiveDemo } from './_components/live-demo'
+import { PipelineExplorer } from './_components/pipeline-explorer'
 import { Pricing } from './_components/pricing'
 
 export const metadata: Metadata = {
@@ -25,230 +26,281 @@ export const metadata: Metadata = {
     'Run a real Google scrape without an account: the sites ranking for your keyword in any of 32 countries, which ones are affiliates, their contact details and a first outreach draft — in about a minute.',
 }
 
-const JOURNEY = [
+const CONTACT = 'mailto:admin@optinetsolutions.com?subject=Lead%20Engine'
+
+const INDUSTRIES = [
+  'VPN & privacy',
+  'Web hosting',
+  'B2B SaaS',
+  'Fintech & brokers',
+  'Cybersecurity',
+  'E-commerce & DTC',
+  'Online education',
+  'Travel & booking',
+  'Insurance & loans',
+  'Fitness & supplements',
+]
+
+const PLATFORM = [
   {
     icon: Search,
-    stage: 'Scrape',
-    title: 'Every site and creator ranking for your keywords',
-    body: 'Paste a keyword list, pick a country and language, choose Google or a creator platform. Desktop and mobile results, organic and paid, land as one profile per website — never counted twice.',
+    title: 'Find',
+    body: 'Every site ranking for your keywords, in the country you pick. Organic and paid, desktop and mobile, one profile per website.',
   },
   {
     icon: Brain,
-    stage: 'Classify',
-    title: 'Relevant? An affiliate? Promoting whom?',
-    body: 'Each site is read and scored: on-keyword or noise, affiliate or brand, and which programmes it already promotes through its tracking links. Platforms and known non-affiliates drop out automatically.',
+    title: 'Classify',
+    body: 'Relevant or noise, affiliate or operator, and the brands each site already promotes, resolved from its own links.',
   },
   {
     icon: AtSign,
-    stage: 'Contacts',
-    title: 'The person behind the site, with provenance',
-    body: 'Emails, phone numbers, contact forms, Telegram, WhatsApp, Discord, X, LinkedIn, Instagram and Facebook — each with the page it was found on and a confidence score.',
+    title: 'Contacts',
+    body: 'Emails, phones, contact forms and socials from the site itself, each with the page it was found on.',
   },
   {
     icon: Send,
-    stage: 'Outreach',
-    title: 'Status, note and next step on every row',
-    body: 'Mark a site contacted, replied, won or not now, keep the note beside the contact, and share one list with the team. No spreadsheet, no double-contacting.',
+    title: 'Outreach',
+    body: 'A first draft per site, then a status, a note and a follow-up date on every lead, shared with the team.',
   },
   {
     icon: CalendarClock,
-    stage: 'Monitor',
-    title: 'Know when to follow up and what changed',
-    body: 'Follow-up reminders on the day. Workflows that rerun your keywords weekly and merge only what is new. Verdicts and contact checks that expire and re-run themselves.',
+    title: 'Monitor',
+    body: 'Keywords rerun on a schedule, new sites merge in, and verdicts re-check themselves before they go stale.',
   },
 ]
 
-const INDUSTRIES = [
-  { name: 'VPN & privacy', find: '“best VPN for…” reviewers, streaming-unblock guides and privacy YouTubers in each country' },
-  { name: 'Web hosting & domains', find: 'hosting comparisons, WordPress tutorial blogs and speed-test publishers' },
-  { name: 'B2B SaaS & productivity', find: 'software directories, alternatives pages, newsletter writers and tool reviewers' },
-  { name: 'Fintech, brokers & exchanges', find: 'comparison sites, finance educators, calculators and trading channels' },
-  { name: 'Cybersecurity & antivirus', find: 'security blogs, IT communities and “is it safe” pages by market' },
-  { name: 'E-commerce & DTC brands', find: 'product reviewers, gift guides, coupon publishers and TikTok creators' },
-  { name: 'Online education & courses', find: 'course reviewers, study blogs and career-change communities' },
-  { name: 'Travel & booking', find: 'destination guides, itinerary blogs and local-experience publishers' },
-  { name: 'Insurance & loan comparison', find: 'finance publishers and local advisors ranking for quote keywords' },
-  { name: 'Health, fitness & supplements', find: 'fitness creators, nutrition blogs and product comparison sites' },
+const JOURNEYS = [
+  {
+    eyebrow: 'Self-serve',
+    title: 'Start with 100 free credits.',
+    body: 'For growth and partnership teams who want the list today. Every page unlocked, no card needed.',
+    cta: { label: 'Sign up free', href: '/signup' },
+    art: 'from-[#13ef93]/30 to-[#149afb]/10',
+    icon: Radar,
+  },
+  {
+    eyebrow: 'Bring your own keys',
+    title: 'Run at your own cost.',
+    body: 'Connect your Apify and OpenAI keys for cheaper, heavier runs that bill straight to your accounts.',
+    cta: { label: 'Connect your keys', href: '/signup' },
+    art: 'from-[#149afb]/30 to-[#7f39ff]/10',
+    icon: KeyRound,
+  },
+  {
+    eyebrow: 'Done with you',
+    title: 'Markets mapped for you.',
+    body: 'For brands entering several countries at once. We set up the keywords, sources and follow-up rhythm with you.',
+    cta: { label: 'Talk to us', href: CONTACT },
+    art: 'from-[#ffadd8]/25 to-[#7f39ff]/10',
+    icon: Users,
+  },
 ]
 
 const SERVICES = [
   {
     icon: Radar,
     title: 'Affiliate & publisher discovery',
-    body: 'Keyword × country × engine, in one batch. Every ranking website becomes a profile with its keywords, positions, countries and how often it appears — the map of who owns your search results.',
+    body: 'Keyword × country × engine in one batch. The map of who owns your search results, with positions and frequency.',
   },
   {
     icon: Brain,
-    title: 'Classification',
-    body: 'Relevance to the keyword, affiliate-or-not with the reason, and the brands a site already promotes, resolved from its outbound tracking links. Verdicts expire on a schedule so the picture stays current.',
+    title: 'Classification with evidence',
+    body: 'Relevance, affiliate-or-not with the reason, and the brands each site promotes. Verdicts expire on a schedule.',
   },
   {
     icon: AtSign,
     title: 'Contact enrichment',
-    body: 'Emails, phones, contact forms and socials pulled from the site itself, each with source page and confidence. Filter to “has contacts” and your outreach list is ready.',
+    body: 'Filter to “has contacts” and your outreach list is ready, every detail traceable to its source page.',
   },
   {
-    icon: Users,
-    title: 'Creator & channel discovery',
-    body: 'The same search on YouTube, TikTok, Twitch, Kick, Snapchat and Telegram, plus Facebook’s Ad Library to see who is already advertising in your niche. Scored, with contacts.',
+    icon: Workflow,
+    title: 'Our work, not yours',
+    body: 'Proxies, CAPTCHAs, mobile-versus-desktop result sets and de-duplication across batches. You paste keywords.',
   },
   {
-    icon: Send,
-    title: 'Outreach tracking & monitoring',
-    body: 'Status, note and follow-up date on every site. A pulse of contacted, replied, won and due-today on your home page. Workflows rerun weekly and merge only what is new.',
+    icon: Coins,
+    title: 'Predictable cost',
+    body: 'Runs are priced in credits before they start. Outreach tracking is free on every plan.',
   },
   {
-    icon: KeyRound,
-    title: 'Your keys, your team, your workspaces',
-    body: 'Connect your own API keys for cheaper runs. Invite teammates, set roles, transfer ownership. Run more than one brand? Separate workspaces; data never crosses.',
+    icon: ShieldCheck,
+    title: 'Sustainable outreach',
+    body: 'Public business data only, personal messages from your own accounts, never bulk automation on gated platforms.',
   },
 ]
+
+function SectionTitle({ lead, accent, sub, ruled = false }: { lead: string; accent: string; sub?: string; ruled?: boolean }) {
+  return (
+    <div className="mx-auto max-w-3xl text-center">
+      <div className="flex items-center justify-center gap-6">
+        {ruled && <span aria-hidden className="dg-rule hidden max-w-[260px] md:block" />}
+        <h2 className="text-[34px] font-bold leading-[1.15] text-white md:text-[48px]">
+          {lead} <span className="dg-gradient-text">{accent}</span>
+        </h2>
+        {ruled && <span aria-hidden className="dg-rule hidden max-w-[260px] md:block" />}
+      </div>
+      {sub && <p className="mt-4 text-[16px] leading-relaxed text-white/85 md:text-[18px]">{sub}</p>}
+    </div>
+  )
+}
 
 export default function LandingPage() {
   return (
     <>
       <HeroCarousel />
 
-      <LiveDemo />
-
-      {/* The journey */}
-      <section id="how" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">What it is</p>
-        <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">
-          Not a scraper. The whole road from a search result to a partner you are talking to.
-        </h2>
-        <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-          Affiliate networks show you who applied. Discovery tools stop at a list of domains.
-          Outreach tools start from a list you already have. Lead Engine is the five steps in
-          between — the demo above is the first three of them, live.
-        </p>
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {JOURNEY.map((j, i) => (
-            <div key={j.stage} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-5">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--color-accent)]">
-                  <j.icon className="h-4 w-4" />
-                </span>
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
-                  {i + 1} · {j.stage}
-                </span>
-              </div>
-              <p className="mt-3 text-[15px] font-semibold leading-snug">{j.title}</p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[color:var(--color-text-secondary)]">{j.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Who it's for */}
-      <section id="industries" className="scroll-mt-16 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto max-w-6xl px-5 py-16">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Who it’s for</p>
-          <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">
-            Any brand that grows through partners, publishers and creators.
-          </h2>
-          <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-[color:var(--color-text-secondary)]">
-            If your competitors are being reviewed, compared and recommended on websites and
-            channels you have never contacted, those are your next affiliates. Ten markets where
-            that is the whole game:
+      {/* Industries strip, in the place of a customer logo wall */}
+      <section id="industries" className="scroll-mt-16 border-b border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-14">
+          <p className="text-center text-[18px] font-semibold text-[#828180] md:text-[20px]">
+            Built for brands that grow through partners, publishers and creators
           </p>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {INDUSTRIES.map(ind => (
-              <div key={ind.name} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4">
-                <p className="text-[13px] font-semibold leading-snug">{ind.name}</p>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
-                  <span className="font-medium text-[color:var(--color-text-primary)]">Find:</span> {ind.find}
-                </p>
+          <div className="mt-8 grid grid-cols-2 border-l border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5">
+            {INDUSTRIES.map(name => (
+              <div
+                key={name}
+                className="flex min-h-[84px] items-center justify-center border-b border-r border-white/10 px-3 text-center font-display text-[15px] font-semibold text-white/80 md:text-[17px]"
+              >
+                {name}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Services */}
-      <section id="services" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Services</p>
-        <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight">Everything between “who is ranking for this?” and “when do I follow up?”</h2>
-        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {SERVICES.map(s => (
-            <div key={s.title} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-5">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[color:var(--color-accent)]/40">
-                <s.icon className="h-4.5 w-4.5" />
-              </span>
-              <p className="mt-3 text-[15px] font-semibold">{s.title}</p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[color:var(--color-text-secondary)]">{s.body}</p>
-            </div>
-          ))}
-        </div>
+      <LiveDemo />
 
-        <div className="mt-8 grid gap-4 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5 md:grid-cols-3">
-          <div className="flex items-start gap-3">
-            <Workflow className="mt-0.5 h-5 w-5 shrink-0" />
-            <p className="text-[13px] leading-relaxed">
-              <strong>Our work, not yours:</strong> proxies, CAPTCHAs, mobile-vs-desktop result sets,
-              dedupe across batches, and verdicts that re-check themselves. You paste keywords.
-            </p>
+      {/* Platform: one tile per step of the journey */}
+      <section id="platform" className="scroll-mt-16">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <SectionTitle lead="Our" accent="platform" sub="One workspace from a search result to a partner you are talking to." ruled />
+          <div className="mt-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-8">
+            {PLATFORM.map(p => (
+              <div key={p.title} className="flex flex-col items-center text-center lg:items-start lg:text-left">
+                <span className="dg-tile">
+                  <p.icon className="h-6 w-6" strokeWidth={2.2} />
+                </span>
+                <h3 className="mt-5 text-[20px] font-bold text-white">{p.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[color:var(--color-text-secondary)]">{p.body}</p>
+              </div>
+            ))}
           </div>
-          <div className="flex items-start gap-3">
-            <Coins className="mt-0.5 h-5 w-5 shrink-0" />
-            <p className="text-[13px] leading-relaxed">
-              <strong>Predictable cost:</strong> keyword searches are metered by a daily quota, source
-              runs are priced in credits before they start, and outreach tracking is free on every plan.
-            </p>
+        </div>
+      </section>
+
+      {/* The pipeline, step by step */}
+      <section id="how" className="scroll-mt-16 border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <SectionTitle
+            lead="A single pipeline from"
+            accent="keyword to partner"
+            sub="Instead of stitching a scraper, a spreadsheet, an enrichment tool and an inbox together, Lead Engine runs the whole road in one place, and the demo above runs the first six steps live."
+          />
+          <PipelineExplorer />
+        </div>
+      </section>
+
+      {/* Three ways in */}
+      <section className="border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <SectionTitle lead="Choose how you" accent="get started" sub="Pick the path that fits your team and your volume." />
+          <div className="mt-14 grid gap-6 md:grid-cols-3">
+            {JOURNEYS.map(j => (
+              <div key={j.eyebrow} className="dg-card flex flex-col overflow-hidden bg-[#101014]">
+                <div className={`flex h-40 items-center justify-center bg-gradient-to-br ${j.art}`}>
+                  <span className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-[#0b0b0c]/70 shadow-[0_0_40px_rgba(19,239,147,0.15)]">
+                    <j.icon className="h-8 w-8 text-white" />
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col p-8">
+                  <p className="text-[17px] font-bold text-white">{j.eyebrow}</p>
+                  <p className="mt-2 text-[17px] font-bold text-white">{j.title}</p>
+                  <p className="mt-3 flex-1 text-[16px] leading-relaxed text-white/80">{j.body}</p>
+                  <div className="mt-8">
+                    {j.cta.href.startsWith('mailto:') ? (
+                      <a href={j.cta.href} className="dg-btn dg-btn-primary min-h-12 px-5">
+                        {j.cta.label}
+                      </a>
+                    ) : (
+                      <Link href={j.cta.href} className="dg-btn dg-btn-primary min-h-12 px-5">
+                        {j.cta.label}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-            <p className="text-[13px] leading-relaxed">
-              <strong>Sustainable outreach:</strong> public data only, personal messages from your own
-              accounts, and never a bulk automation against login-gated platforms.
-            </p>
+        </div>
+      </section>
+
+      {/* Everything in the workspace */}
+      <section id="services" className="scroll-mt-16 border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <div className="grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
+            <div>
+              <h2 className="text-[34px] font-bold leading-[1.15] text-white md:text-[48px]">
+                Everything that <span className="dg-gradient-text">scales</span> with you
+              </h2>
+              <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--color-text-secondary)] md:text-[18px]">
+                From the first keyword to a team working several markets: the same workspace, the same profiles, no data crossing between brands.
+              </p>
+              <Link href="/signup" className="dg-btn dg-btn-glow mt-8 min-h-12 px-6 text-[16px]">
+                Open a workspace <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {SERVICES.map(s => (
+                <div key={s.title} className="dg-card p-6">
+                  <s.icon className="h-6 w-6 text-[color:var(--color-accent)]" />
+                  <h3 className="mt-4 text-[18px] font-bold text-white">{s.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[color:var(--color-text-secondary)]">{s.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="scroll-mt-16 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto max-w-6xl px-5 py-16">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Pricing</p>
-            <h2 className="mt-2 text-[26px] font-semibold leading-tight">Start free. Pay for the runs you make.</h2>
-            <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
-              A monthly plan that includes credits, and top-ups that never expire. Outreach tracking
-              is free on every plan. Switch currency any time.
-            </p>
-          </div>
-          <div className="mt-8">
+      <section id="pricing" className="scroll-mt-16 border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <SectionTitle
+            lead="Start free."
+            accent="Pay for the runs you make."
+            sub="A monthly plan that includes credits, and top-ups that never expire. Outreach tracking is free on every plan."
+          />
+          <div className="mt-12">
             <Pricing />
           </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-16">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">FAQ</p>
-          <h2 className="mt-2 text-[26px] font-semibold leading-tight">Questions we get before the first scrape.</h2>
-        </div>
-        <div className="mt-8">
-          <Faq />
+      <section id="faq" className="scroll-mt-16 border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+          <SectionTitle lead="Questions before the" accent="first scrape" />
+          <div className="mt-12">
+            <Faq />
+          </div>
         </div>
       </section>
 
       {/* Closing CTA */}
-      <section className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-5 py-16 text-center">
-          <h2 className="text-[28px] font-semibold leading-tight">Liked the demo? The real thing keeps the list.</h2>
-          <p className="max-w-xl text-[14px] text-[color:var(--color-text-secondary)]">
-            Create a workspace with 100 free credits, run more pages in 32 countries, and send the
-            outreach for real — with a status and a follow-up date on every lead.
+      <section className="dg-hero border-t border-white/10">
+        <div className="mx-auto flex max-w-4xl flex-col items-center px-5 py-24 text-center">
+          <h2 className="text-[32px] font-bold leading-[1.15] text-white md:text-[44px]">Find your next partners with one keyword</h2>
+          <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-white/85 md:text-[18px]">
+            Create a workspace with 100 free credits, run more pages in 32 countries, and keep every lead with a status and a follow-up date.
           </p>
-          <Link
-            href="/signup"
-            className="inline-flex min-h-12 items-center gap-2 rounded-md bg-[color:var(--color-accent)] px-6 text-[14px] font-semibold transition-colors hover:bg-[color:var(--color-accent-hover)]"
-          >
-            Create your free account
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <Link href="/signup" className="dg-btn dg-btn-primary min-h-12 px-6 text-[16px]">
+              Sign up for free
+            </Link>
+            <a href={CONTACT} className="dg-btn dg-btn-secondary min-h-12 px-6 text-[16px]">
+              Get a walkthrough
+            </a>
+          </div>
         </div>
       </section>
     </>

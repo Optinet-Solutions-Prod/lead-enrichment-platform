@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { AuthShell } from '../_components/auth-shell'
@@ -37,24 +36,18 @@ export default async function LoginPage({ searchParams }: Props) {
 
   return (
     <AuthShell
-      title="Welcome back"
-      subtitle="Sign in to your workspace."
-      footer={
-        <p>
-          New here?{' '}
-          <Link href="/signup" className="font-medium text-[color:var(--color-text-primary)] underline underline-offset-2">
-            Create a free account
-          </Link>
-        </p>
-      }
+      title="Log in"
+      subtitle="Welcome back. Log in to your workspace."
+      legalVerb="logging in"
+      switchPrompt={{ text: 'Need an account?', label: 'Sign up', href: '/signup' }}
     >
       {reason === 'session_expired' && (
-        <div role="status" className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+        <div role="status" className="mb-5 rounded-[4px] border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[14px] text-amber-200">
           Your session expired. Please sign in again.
         </div>
       )}
       {reason === 'network' && (
-        <div role="status" className="mb-4 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-2 text-[13px]">
+        <div role="status" className="mb-5 rounded-[4px] border border-white/15 bg-white/5 px-3 py-2 text-[14px]">
           We couldn&apos;t reach the sign-in service for a moment. Try again.
         </div>
       )}

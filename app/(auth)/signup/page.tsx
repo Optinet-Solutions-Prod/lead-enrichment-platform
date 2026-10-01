@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { PLANS } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/server'
@@ -47,20 +46,15 @@ export default async function SignupPage({ searchParams }: Props) {
           ? "You've been invited — set a password and you're in."
           : '100 credits, every page unlocked, and a 60-second tour when your workspace opens. No card needed.'
       }
-      footer={
-        <p>
-          Already have an account?{' '}
-          <Link
-            href={inviteToken ? `/login?from=/invite/${inviteToken}` : '/login'}
-            className="font-medium text-[color:var(--color-text-primary)] underline underline-offset-2"
-          >
-            Sign in
-          </Link>
-        </p>
-      }
+      legalVerb="signing up"
+      switchPrompt={{
+        text: 'Already have an account?',
+        label: 'Log in',
+        href: inviteToken ? `/login?from=/invite/${inviteToken}` : '/login',
+      }}
     >
       {plan && (
-        <div className="mb-4 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-2 text-[13px]">
+        <div className="mb-5 rounded-[4px] border border-white/15 bg-white/5 px-3 py-2 text-[14px]">
           <span className="font-medium">{plan.name} plan selected.</span>{' '}
           <span className="text-[color:var(--color-text-secondary)]">
             Everyone starts on Free — upgrade from Billing &amp; Credits once your workspace is set up.
@@ -68,7 +62,7 @@ export default async function SignupPage({ searchParams }: Props) {
         </div>
       )}
       <SignupForm inviteToken={inviteToken} inviteEmail={inviteEmail} />
-      <p className="mt-4 text-[11px] leading-relaxed text-[color:var(--color-text-secondary)]">
+      <p className="mt-5 text-[12px] leading-relaxed text-[color:var(--color-text-secondary)]">
         By creating an account you agree that you are responsible for how you contact the people you
         find, in line with GDPR and the platforms&apos; terms.
       </p>

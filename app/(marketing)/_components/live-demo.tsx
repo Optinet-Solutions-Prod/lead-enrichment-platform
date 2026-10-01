@@ -124,7 +124,7 @@ function evidenceLabel(indicator: string): string {
 
 function relevanceChip(r: Relevance) {
   if (r === 'off_topic') return { label: 'Off-topic · not opened', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
-  if (r === 'relevant') return { label: 'Relevant', cls: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' }
+  if (r === 'relevant') return { label: 'Relevant', cls: 'bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/30' }
   return null
 }
 
@@ -132,14 +132,14 @@ function kindChip(lead: Lead) {
   if (lead.skipped) return { label: 'Platform · not a partner', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
   if (lead.relevance === 'off_topic') return null
   if (!lead.enriched) return { label: 'Not opened in the demo', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
-  if (lead.fetchError) return { label: 'Site blocked the visit', cls: 'bg-amber-100 text-amber-900' }
+  if (lead.fetchError) return { label: 'Site blocked the visit', cls: 'bg-amber-400/15 text-amber-200' }
   switch (lead.kind) {
     case 'affiliate':
-      return { label: 'Affiliate', cls: 'bg-emerald-100 text-emerald-800' }
+      return { label: 'Affiliate', cls: 'bg-emerald-400/15 text-emerald-300' }
     case 'operator':
-      return { label: 'Operator · a brand’s own site', cls: 'bg-violet-100 text-violet-800' }
+      return { label: 'Operator · a brand’s own site', cls: 'bg-violet-400/15 text-violet-300' }
     case 'publisher':
-      return { label: 'Publisher', cls: 'bg-sky-100 text-sky-800' }
+      return { label: 'Publisher', cls: 'bg-sky-400/15 text-sky-300' }
     default:
       return { label: 'Unclear', cls: 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]' }
   }
@@ -297,21 +297,23 @@ export function LiveDemo() {
     : []
 
   return (
-    <section id="demo" className="scroll-mt-14 border-b border-[color:var(--color-border)]">
-      <div className="mx-auto max-w-6xl px-5 py-14">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
+    <section id="demo" className="scroll-mt-16">
+      <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="inline-flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wider text-[color:var(--color-accent)]">
             <Sparkles className="h-3.5 w-3.5" /> Live demo
           </p>
-          <h2 className="mt-2 text-[28px] font-semibold leading-tight">Run a real scrape. No account, about a minute.</h2>
-          <p className="mt-2 text-[14px] text-[color:var(--color-text-secondary)]">
+          <h2 className="mt-3 text-[34px] font-bold leading-[1.15] md:text-[48px]">
+            Run a real scrape. <span className="dg-gradient-text">No account.</span>
+          </h2>
+          <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--color-text-secondary)] md:text-[18px]">
             One page of Google for your keyword. An AI judge checks every result against the keyword, the relevant
             sites are opened and classified as affiliate, operator or publisher, the brands they endorse and their
             contacts are pulled, and an outreach draft is ready. Nothing is sent from the demo.
           </p>
         </div>
 
-        <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-[color:var(--color-border-strong)] bg-[color:var(--color-bg-primary)] p-4 shadow-[0_30px_80px_-40px_rgba(26,26,26,0.35)] sm:p-6">
+        <div className="dg-card mx-auto mt-10 max-w-4xl p-4 shadow-[0_0_80px_-20px_rgba(20,154,251,0.35)] sm:p-6">
           {/* presets */}
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">Start from an example</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -330,7 +332,7 @@ export function LiveDemo() {
                   className={[
                     'rounded-lg border px-3 py-2 text-left transition-colors',
                     on
-                      ? 'border-[color:var(--color-accent-hover)] bg-[color:var(--color-accent)]/20'
+                      ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent)]/10'
                       : 'border-[color:var(--color-border)] hover:bg-[color:var(--color-bg-secondary)]',
                   ].join(' ')}
                 >
@@ -390,7 +392,7 @@ export function LiveDemo() {
               <button
                 type="submit"
                 disabled={starting || active || keyword.trim().length < 2}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-[color:var(--color-text-primary)] px-5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 sm:w-auto"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md dg-btn dg-btn-primary px-5 text-[14px] sm:w-auto"
               >
                 {starting || active ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {starting ? 'Starting…' : active ? 'Running…' : 'Run demo scrape'}
@@ -406,7 +408,7 @@ export function LiveDemo() {
           </p>
 
           {error && (
-            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{error}</p>
+            <p data-demo-error className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[13px] text-amber-200">{error}</p>
           )}
 
           {/* progress */}
@@ -420,7 +422,7 @@ export function LiveDemo() {
                   <button
                     type="button"
                     onClick={() => setModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-accent)] px-3 py-1.5 text-[13px] font-semibold hover:bg-[color:var(--color-accent-hover)]"
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--color-accent)] px-3 py-1.5 text-[13px] font-semibold text-[#0b0b0c] hover:bg-[color:var(--color-accent-hover)]"
                   >
                     View results <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -443,7 +445,7 @@ export function LiveDemo() {
                 ))}
               </ol>
               {run.status === 'failed' && (
-                <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">
+                <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-[13px] text-red-300">
                   {run.error ?? 'The demo did not finish.'}
                 </p>
               )}
@@ -518,12 +520,12 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
     })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="presentation">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="presentation">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Results for ${run.keyword}`}
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[color:var(--color-bg-primary)] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-[color:var(--color-border-strong)] sm:shadow-2xl"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[color:var(--color-bg-secondary)] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-[color:var(--color-border-strong)] sm:shadow-2xl"
       >
         {/* header */}
         <div className="flex items-start justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
@@ -662,7 +664,7 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
           </p>
           <Link
             href="/signup"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[color:var(--color-text-primary)] px-4 text-[13px] font-semibold text-white hover:opacity-90"
+            className="inline-flex min-h-10 items-center gap-2 dg-btn dg-btn-primary px-4 text-[13px]"
           >
             Create a free account
             <ArrowRight className="h-4 w-4" />
@@ -716,7 +718,7 @@ function Group({ title, hint, count, tone, children }: { title: string; hint: st
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
         <h4 className="text-[13px] font-semibold">
           {title}{' '}
-          <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${tone === 'good' ? 'bg-emerald-100 text-emerald-800' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'}`}>
+          <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${tone === 'good' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'}`}>
             {count}
           </span>
         </h4>
@@ -730,13 +732,13 @@ function Group({ title, hint, count, tone, children }: { title: string; hint: st
 function Stat({ label, value, tone = 'muted' }: { label: string; value: number; tone?: 'muted' | 'good' | 'warn' | 'accent' | 'violet' }) {
   const cls =
     tone === 'good'
-      ? 'bg-emerald-100 text-emerald-800'
+      ? 'bg-emerald-400/15 text-emerald-300'
       : tone === 'warn'
-        ? 'bg-amber-100 text-amber-900'
+        ? 'bg-amber-400/15 text-amber-200'
         : tone === 'violet'
-          ? 'bg-violet-100 text-violet-800'
+          ? 'bg-violet-400/15 text-violet-300'
           : tone === 'accent'
-            ? 'bg-[color:var(--color-accent)]/40 text-[color:var(--color-text-primary)]'
+            ? 'bg-[color:var(--color-accent)]/15 text-[color:var(--color-accent)]'
             : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-secondary)]'
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${cls}`}>
@@ -772,13 +774,13 @@ function LeadCard({
       data-demo-card
       className={[
         'flex flex-col gap-3 rounded-xl border bg-[color:var(--color-bg-primary)] p-4',
-        hearted ? 'border-rose-300 ring-1 ring-rose-200' : 'border-[color:var(--color-border)]',
+        hearted ? 'border-rose-400/40 ring-1 ring-rose-400/30' : 'border-[color:var(--color-border)]',
         dim ? 'opacity-70' : '',
       ].join(' ')}
     >
       <div className="flex items-start gap-3">
         {iconFailed ? (
-          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[color:var(--color-accent)]/40 text-[13px] font-semibold uppercase">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[color:var(--color-accent)]/15 text-[13px] font-semibold uppercase text-[color:var(--color-accent)]">
             {lead.domain.charAt(0)}
           </span>
         ) : (
@@ -827,8 +829,8 @@ function LeadCard({
           className={[
             'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
             hearted
-              ? 'border-rose-300 bg-rose-50 text-rose-600'
-              : 'border-[color:var(--color-border)] text-[color:var(--color-text-secondary)] hover:border-rose-300 hover:text-rose-600',
+              ? 'border-rose-400/40 bg-rose-400/10 text-rose-300'
+              : 'border-[color:var(--color-border)] text-[color:var(--color-text-secondary)] hover:border-rose-400/40 hover:text-rose-300',
           ].join(' ')}
         >
           <Heart className={`h-4 w-4 ${hearted ? 'fill-rose-500 text-rose-500' : ''}`} />
@@ -925,7 +927,7 @@ function LeadCard({
           onClick={onEmail}
           disabled={!hasEmail}
           title={hasEmail ? 'Draft an email' : 'No email found'}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[color:var(--color-text-primary)] px-3 text-[12.5px] font-semibold text-white disabled:opacity-30"
+          className="inline-flex min-h-9 items-center gap-1.5 dg-btn dg-btn-primary min-h-9 px-3 text-[12.5px]"
         >
           <Mail className="h-3.5 w-3.5" /> Email
         </button>
@@ -939,7 +941,7 @@ function LeadCard({
           <MessageSquareText className="h-3.5 w-3.5" /> SMS
         </button>
         {sentVia && (
-          <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-emerald-700">
+          <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-emerald-300">
             <BadgeCheck className="h-3.5 w-3.5" /> {sentVia === 'email' ? 'Email drafted' : 'SMS drafted'}
           </span>
         )}
@@ -1020,7 +1022,7 @@ function ComposeView({
             type="button"
             onClick={() => onSend(to)}
             disabled={!to.trim() || !body.trim()}
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[color:var(--color-text-primary)] px-4 text-[13px] font-semibold text-white disabled:opacity-40"
+            className="inline-flex min-h-10 items-center gap-2 dg-btn dg-btn-primary px-4 text-[13px]"
           >
             <Send className="h-4 w-4" /> Send {channel === 'email' ? 'email' : 'SMS'}
           </button>
@@ -1033,7 +1035,7 @@ function ComposeView({
 function Confirmation({ lead, channel, to, onBack }: { lead: Lead; channel: 'email' | 'sms'; to: string; onBack: () => void }) {
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center gap-3 py-8 text-center">
-      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300">
         <BadgeCheck className="h-6 w-6" />
       </span>
       <h4 className="text-[20px] font-semibold">{channel === 'email' ? 'Email' : 'SMS'} drafted for {siteName(lead)}</h4>
@@ -1046,7 +1048,7 @@ function Confirmation({ lead, channel, to, onBack }: { lead: Lead; channel: 'ema
         <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[color:var(--color-border-strong)] px-4 text-[13px] font-medium">
           <ArrowLeft className="h-3.5 w-3.5" /> Back to results
         </button>
-        <Link href="/signup" className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[color:var(--color-text-primary)] px-4 text-[13px] font-semibold text-white hover:opacity-90">
+        <Link href="/signup" className="inline-flex min-h-10 items-center gap-2 dg-btn dg-btn-primary px-4 text-[13px]">
           Send for real — create a free account <ArrowRight className="h-4 w-4" />
         </Link>
       </div>

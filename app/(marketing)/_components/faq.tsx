@@ -31,14 +31,14 @@ const FAQ = [
 
 export function Faq() {
   return (
-    <div className="mx-auto max-w-3xl divide-y divide-[color:var(--color-border)] rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)]">
+    <div className="mx-auto max-w-3xl divide-y divide-white/10 border-y border-white/10">
       {FAQ.map(item => (
-        <details key={item.q} className="group px-5 py-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[14px] font-medium [&::-webkit-details-marker]:hidden">
+        <details key={item.q} className="group py-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-semibold text-white [&::-webkit-details-marker]:hidden">
             {item.q}
-            <span className="text-[color:var(--color-text-secondary)] transition-transform group-open:rotate-45">+</span>
+            <span className="text-[22px] font-light leading-none text-[color:var(--color-accent)] transition-transform group-open:rotate-45">+</span>
           </summary>
-          <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--color-text-secondary)]">{item.a}</p>
+          <p className="mt-3 text-[15px] leading-relaxed text-[color:var(--color-text-secondary)]">{item.a}</p>
         </details>
       ))}
     </div>
