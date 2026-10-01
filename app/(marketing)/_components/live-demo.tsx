@@ -95,7 +95,7 @@ const COUNTRIES = [
 
 const PRESETS = [
   { key: 'vpn', label: 'VPN brand', keyword: 'best vpn for streaming', country: 'GB', blurb: 'Who reviews VPNs in the UK' },
-  { key: 'casino', label: 'Casino brand', keyword: 'best online casinos', country: 'GB', blurb: 'Review and bonus sites an operator recruits' },
+  { key: 'casino', label: 'Casino brand', keyword: 'online casino', country: 'DE', blurb: 'Review and bonus sites an operator recruits' },
   { key: 'hosting', label: 'Web hosting', keyword: 'best web hosting for small business', country: 'US', blurb: 'Hosting comparison publishers' },
   { key: 'saas', label: 'B2B SaaS', keyword: 'best crm for small business', country: 'US', blurb: 'Software reviewers and directories' },
   { key: 'fitness', label: 'Fitness & supplements', keyword: 'best protein powder', country: 'GB', blurb: 'Fitness creators and comparison sites' },
@@ -542,6 +542,13 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
               <Stat label="with contacts" value={withContacts} tone="good" />
               {hearts.size > 0 && <Stat label="in your list" value={hearts.size} tone="accent" />}
             </div>
+            {leads.length > 0 && leads.length < 8 && (
+              <p className="mt-2 max-w-2xl text-[12px] leading-relaxed text-amber-200">
+                Google showed only {leads.length} result{leads.length === 1 ? '' : 's'} on page one for this search in {countryName(run.country_code)}.
+                Some topics, gambling above all, are filtered hard by Google in many countries. A broader phrase, or the local
+                language, usually returns a full page.
+              </p>
+            )}
           </div>
           <button
             ref={firstButton}
