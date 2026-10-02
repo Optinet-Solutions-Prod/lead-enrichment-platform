@@ -101,7 +101,7 @@ export async function requireLeadsAccess(leadIds: number[]): Promise<LeadAccessC
 
   const { data: jobs, error: jobsErr } = await svc
     .from('scrape_queue')
-    .select('id, created_by_email, created_by_is_shadow')
+    .select('id, created_by_email, created_by_is_shadow, org_id')
     .in('id', Array.from(jobIds))
   if (jobsErr) {
     console.error('[requireLeadsAccess] jobs lookup', jobsErr)
@@ -114,7 +114,11 @@ export async function requireLeadsAccess(leadIds: number[]): Promise<LeadAccessC
     id: string
     created_by_email: string | null
     created_by_is_shadow: boolean | null
+    org_id: string | null
   }>) {
+    if (!ctx.orgId || job.org_id !== ctx.orgId) {
+      return { ok: false, error: 'One or more selected leads belong to another workspace.' }
+    }
     const ownerEmail = job.created_by_email?.toLowerCase() ?? null
     const ownerIsShadow = job.created_by_is_shadow === true
 
@@ -147,7 +151,7 @@ async function checkJobOwnership(
 ): Promise<LeadAccessCheck> {
   const { data: job, error: jobErr } = await svc
     .from('scrape_queue')
-    .select('created_by_email, created_by_is_shadow')
+    .select('created_by_email, created_by_is_shadow, org_id')
     .eq('id', jobId)
     .maybeSingle()
   if (jobErr) {
@@ -166,6 +170,9 @@ async function checkJobOwnership(
   }
 
   const ctx = await getShadowContext()
+  if (!ctx.orgId || (job as { org_id: string | null }).org_id !== ctx.orgId) {
+    return { ok: false, error: 'This lead belongs to another workspace.' }
+  }
   const ownerEmail = (job as { created_by_email: string | null }).created_by_email?.toLowerCase() ?? null
   const ownerIsShadow = (job as { created_by_is_shadow: boolean | null }).created_by_is_shadow === true
   const callerEmail = userEmail?.toLowerCase() ?? null

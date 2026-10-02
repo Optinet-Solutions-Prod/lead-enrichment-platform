@@ -1,5 +1,7 @@
 'use server'
 
+import { getOrgContext } from '@/lib/orgs/context'
+import { GAMBLING_RE } from '@/lib/keywords/suggest'
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -100,7 +102,10 @@ export async function enqueueScrape(
         .filter(s => s === 'affiliate' || s === 'contact'),
     ),
   )
-  const withEnrichment = autoStages.length > 0 ? autoStages.includes('affiliate') : withEnrichmentRaw
+  // "Organic results only": the Google list without ads, and no site visits.
+  const organicOnly = formData.get('results_mode') === 'organic'
+  if (organicOnly) autoStages.length = 0
+  const withEnrichment = organicOnly ? false : autoStages.length > 0 ? autoStages.includes('affiliate') : withEnrichmentRaw
   const languageRaw = String(formData.get('language') ?? '').trim().toLowerCase()
   // Allow only 2-letter ISO 639-1 codes; default to English.
   const language = /^[a-z]{2}$/.test(languageRaw) ? languageRaw : 'en'
@@ -194,6 +199,21 @@ export async function enqueueScrape(
   )
 
   if (keywords.length === 0) return { status: 'error', error: 'Enter at least one keyword.' }
+  {
+    // Workspaces without gambling switched on never queue casino searches.
+    const orgCtx = await getOrgContext()
+    if (orgCtx) {
+      const { data: os } = await createServiceClient()
+        .from('org_settings')
+        .select('gambling_enabled')
+        .eq('org_id', orgCtx.orgId)
+        .maybeSingle()
+      const blocked = (os as { gambling_enabled?: boolean } | null)?.gambling_enabled === true ? [] : keywords.filter(k => GAMBLING_RE.test(k))
+      if (blocked.length > 0) {
+        return { status: 'error', error: `Gambling keywords are switched off for this workspace: ${blocked.slice(0, 3).map(k => `“${k}”`).join(', ')}.` }
+      }
+    }
+  }
   // Cap per-submit volume so a 10k-keyword paste can't flood scrape_queue
   // in a single round-trip (and 2× when engine=both). 200 is well above
   // any realistic batch but well below "DoS the workers" territory.
@@ -279,6 +299,7 @@ export async function enqueueScrape(
       search_engine: engine,
       view_mode: viewMode,
       auto_stages: autoStages.length > 0 ? autoStages : null,
+      ...(organicOnly ? { result_type_filter: 'Organic' as const } : {}),
       // Only stamp on engines whose scraper honours the cap today
       // (twitch / youtube / kick / snapchat — each has a size metric
       // available at search time). TikTok and X return no follower

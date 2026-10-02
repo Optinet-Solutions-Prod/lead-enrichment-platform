@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { getOrgContext } from '@/lib/orgs/context'
 import { QuotaStatus } from '../new/_components/quota-status'
 import { RemoveFromQueueButton } from './_components/remove-from-queue-button'
 import { Flag } from '../../_components/flag'
@@ -54,6 +55,7 @@ export default async function TodayScrapesPage() {
   } = await supabase.auth.getUser()
   const email = (user?.email ?? '').toLowerCase()
   const svc = createServiceClient()
+  const orgId = (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000'
 
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
@@ -71,6 +73,7 @@ export default async function TodayScrapesPage() {
             'id, keyword, keyword_en, country_code, language, pages, view_mode, with_enrichment, auto_stages, search_engine, status, scheduled_at, created_at, started_at, result_type_filter, batch_group_id, scrape_source',
           )
           .eq('created_by_email', email)
+          .eq('org_id', orgId)
           .is('parent_scrape_job_id', null)
           .or(`created_at.gte.${todayIso},scheduled_at.gte.${todayIso}`)
           .order('created_at', { ascending: false })

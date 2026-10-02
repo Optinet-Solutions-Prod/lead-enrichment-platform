@@ -33,9 +33,16 @@ export async function setOutreachAction(_prev: OutreachState, fd: FormData): Pro
   const svc = createServiceClient()
   const table = kind === 'lead' ? 'property_leads' : 'website_profiles'
 
-  let current = svc.from(table).select('id, contacted_at').eq('id', id)
-  if (kind === 'lead') current = current.eq('org_id', ctx.orgId)
-  const { data: row } = await current.maybeSingle()
+  // Websites: outreach is per workspace (org_website_profiles), never on the
+  // shared site record.
+  const target = kind === 'lead' ? table : 'org_website_profiles'
+  const idCol = kind === 'lead' ? 'id' : 'profile_id'
+  const { data: row } = await svc
+    .from(target)
+    .select('contacted_at')
+    .eq(idCol, id)
+    .eq('org_id', ctx.orgId)
+    .maybeSingle()
   if (!row) return { error: 'Not found.' }
 
   const now = new Date().toISOString()
@@ -50,9 +57,7 @@ export async function setOutreachAction(_prev: OutreachState, fd: FormData): Pro
     ...(startsContact && !(row as { contacted_at: string | null }).contacted_at ? { contacted_at: now } : {}),
     ...(status === 'new' ? { contacted_at: null } : {}),
   }
-  let q = svc.from(table).update(update).eq('id', id)
-  if (kind === 'lead') q = q.eq('org_id', ctx.orgId)
-  const { error } = await q
+  const { error } = await svc.from(target).update(update).eq(idCol, id).eq('org_id', ctx.orgId)
   if (error) return { error: error.message }
 
   await logActivity({

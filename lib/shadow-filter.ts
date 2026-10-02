@@ -1,9 +1,11 @@
 import 'server-only'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { getOrgContext } from '@/lib/orgs/context'
 
 /**
- * Shadow-user visibility context for the current request.
+ * Visibility context for the current request: the active workspace, plus
+ * shadow-user isolation inside it.
  *
  * Bidirectional isolation:
  *   - non-shadow viewer (default everyone) should NOT see rows that
@@ -22,6 +24,9 @@ export type ShadowContext = {
   email: string | null
   /** True when the viewer's user_profiles.is_shadow = true. */
   isShadow: boolean
+  /** The viewer's active workspace. Every scrape job and result belongs to
+   *  exactly one organization; lists only ever show the active one's. */
+  orgId: string | null
 }
 
 /** Resolves the current request's shadow context. Cheap — uses the
@@ -31,10 +36,13 @@ export async function getShadowContext(): Promise<ShadowContext> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { email: null, isShadow: false }
+  if (!user) return { email: null, isShadow: false, orgId: null }
 
   const svc = createServiceClient()
-  const { data, error } = await svc.rpc('is_shadow_user', { p_user_id: user.id })
+  const [{ data, error }, org] = await Promise.all([
+    svc.rpc('is_shadow_user', { p_user_id: user.id }),
+    getOrgContext(),
+  ])
   if (error) {
     // FAIL CLOSED. Defaulting a failed shadow check to isShadow=false would
     // treat a shadow user as a normal viewer and leak every non-shadow row
@@ -46,6 +54,7 @@ export async function getShadowContext(): Promise<ShadowContext> {
   return {
     email: (user.email ?? '').toLowerCase() || null,
     isShadow: data === true,
+    orgId: org?.orgId ?? null,
   }
 }
 
@@ -67,10 +76,14 @@ export function applyShadowFilter<Q extends QueryWithFilters>(
     emailColumn?: string
     /** Shadow-flag column on this table. Default: 'created_by_is_shadow'. */
     shadowColumn?: string
+    /** Organization column on this table. Default: 'org_id'. */
+    orgColumn?: string
   },
 ): Q {
   const emailColumn = opts?.emailColumn ?? 'created_by_email'
   const shadowColumn = opts?.shadowColumn ?? 'created_by_is_shadow'
+  // Workspace isolation first. FAIL CLOSED: no active org → nothing matches.
+  query = query.eq(opts?.orgColumn ?? 'org_id', ctx.orgId ?? '00000000-0000-0000-0000-000000000000') as Q
 
   if (ctx.isShadow) {
     // Shadow viewer: only their own rows. The owner-email match is

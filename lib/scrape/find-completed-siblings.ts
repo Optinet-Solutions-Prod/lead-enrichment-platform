@@ -1,3 +1,4 @@
+import { getOrgContext } from '@/lib/orgs/context'
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ClonableRow } from './filter-in-flight'
@@ -38,9 +39,13 @@ export const siblingRowKey = (r: ClonableRow) =>
 export async function findCompletedSiblings<T extends ClonableRow>(
   svc: SupabaseClient,
   rows: T[],
+  /** Only this workspace's history counts (and is named). Defaults to the caller's active org. */
+  orgId?: string | null,
 ): Promise<Map<string, CompletedSibling>> {
   const result = new Map<string, CompletedSibling>()
   if (rows.length === 0) return result
+  const org = orgId ?? (await getOrgContext())?.orgId ?? null
+  if (!org) return result
 
   const uniqueKeywords = Array.from(new Set(rows.map(r => r.keyword)))
   const wanted = new Set(rows.map(siblingRowKey))
@@ -53,6 +58,7 @@ export async function findCompletedSiblings<T extends ClonableRow>(
       .select('keyword, country_code, search_engine, completed_at, created_by_display, created_by_username, created_by_email')
       .in('keyword', chunk)
       .eq('status', 'completed')
+      .eq('org_id', org)
       .is('parent_scrape_job_id', null)
     if (error) throw error
     for (const r of ((data ?? []) as Array<{

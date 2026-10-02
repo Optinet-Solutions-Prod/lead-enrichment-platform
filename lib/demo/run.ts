@@ -64,7 +64,9 @@ export const DEMO_COUNTRIES: ReadonlyArray<{ code: string; name: string; lang: s
 ]
 
 /** How many relevant results get opened. The rest are shown from the SERP only. */
-export const DEMO_ENRICH_LIMIT = 8
+export const DEMO_ENRICH_LIMIT = 10
+/** Up to this many keywords per demo run, searched together. */
+export const DEMO_MAX_KEYWORDS = 3
 const ENRICH_BATCH = 4
 const LEAD_DEADLINE_MS = 42_000
 const SEARCH_STALE_MS = 5 * 60 * 1000
@@ -96,6 +98,8 @@ export type DemoLead = {
   snippet: string | null
   type: 'Organic' | 'PPC'
   position: number
+  /** The keyword this site ranked for (the first, when it ranked for several). */
+  keyword: string
   /** Judged against the keyword before anything is opened. */
   relevance: DemoRelevance
   relevanceReason: string | null
@@ -125,7 +129,9 @@ export type DemoRun = {
   /** True when the OpenAI judges are on for this deployment. */
   ai: boolean
   status: 'searching' | 'enriching' | 'done' | 'failed'
+  /** First keyword, kept for older clients. */
   keyword: string
+  keywords: string[]
   country_code: string
   language: string
   results: DemoLead[]
@@ -137,7 +143,7 @@ export type DemoRun = {
 
 type Svc = ReturnType<typeof createServiceClient>
 
-const RUN_COLS = 'id, status, keyword, country_code, language, results, total, enriched, error, created_at'
+const RUN_COLS = 'id, status, keyword, keywords, country_code, language, results, total, enriched, error, created_at'
 const FULL_COLS = `${RUN_COLS}, apify_run_id, dataset_id, lock_until`
 
 type Row = DemoRun & { apify_run_id: string | null; dataset_id: string | null; lock_until: string | null }
@@ -157,6 +163,18 @@ function asInt(v: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback
 }
 
+/** One to three cleaned, de-duplicated keywords from a list or a single string. */
+export function cleanKeywords(raw: unknown, single?: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [single ?? raw]
+  const out: string[] = []
+  for (const k of list) {
+    const c = cleanKeyword(k)
+    if (c && !out.some(o => o.toLowerCase() === c.toLowerCase())) out.push(c)
+    if (out.length >= DEMO_MAX_KEYWORDS) break
+  }
+  return out
+}
+
 export function cleanKeyword(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const k = raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -165,12 +183,14 @@ export function cleanKeyword(raw: unknown): string | null {
 }
 
 export async function startDemoRun(input: {
-  keyword: unknown
+  keyword?: unknown
+  keywords?: unknown
   country: unknown
   ipHash: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string; status: number }> {
-  const keyword = cleanKeyword(input.keyword)
-  if (!keyword) return { ok: false, error: 'Enter a keyword between 2 and 80 characters.', status: 400 }
+  const keywords = cleanKeywords(input.keywords, input.keyword)
+  if (keywords.length === 0) return { ok: false, error: 'Enter a keyword between 2 and 80 characters.', status: 400 }
+  const keyword = keywords[0]!
   const country = DEMO_COUNTRIES.find(c => c.code === String(input.country ?? '').toUpperCase())
   if (!country) return { ok: false, error: 'Pick one of the listed countries.', status: 400 }
 
@@ -202,15 +222,18 @@ export async function startDemoRun(input: {
   const serper = serperKey()
   if (serper) {
     try {
-      const rows = await searchSerper(serper, { keyword, countryCode: country.code, language: country.lang })
-      const leads = toLeads(rows, keyword)
-      await judgeRelevanceWithAi(svc, keyword, leads)
+      const perKeyword = await Promise.all(
+        keywords.map(k => searchSerper(serper, { keyword: k, countryCode: country.code, language: country.lang })),
+      )
+      const leads = toLeads(mergeByKeyword(perKeyword))
+      await judgeRelevanceWithAi(svc, leads)
       const status = crawlable(leads).length === 0 ? 'done' : 'enriching'
       const { data: inserted, error: insErr } = await svc
         .from('demo_runs')
         .insert({
           ip_hash: input.ipHash,
           keyword,
+          keywords,
           country_code: country.code,
           language: country.lang,
           status,
@@ -232,7 +255,7 @@ export async function startDemoRun(input: {
 
   const { data: inserted, error: insErr } = await svc
     .from('demo_runs')
-    .insert({ ip_hash: input.ipHash, keyword, country_code: country.code, language: country.lang, status: 'searching' })
+    .insert({ ip_hash: input.ipHash, keyword, keywords, country_code: country.code, language: country.lang, status: 'searching' })
     .select('id')
     .single()
   if (insErr || !inserted) return { ok: false, error: 'Could not start the demo. Try again in a moment.', status: 500 }
@@ -240,7 +263,7 @@ export async function startDemoRun(input: {
 
   try {
     const run = await startRun(apify.token, {
-      queries: keyword,
+      queries: keywords.join('\n'),
       countryCode: country.code.toLowerCase(),
       languageCode: country.lang,
       maxPagesPerQuery: 1,
@@ -265,6 +288,7 @@ function publicView(row: Row): DemoRun {
     ai: Boolean((process.env.OPENAI_API_KEY ?? '').trim()),
     status: row.status,
     keyword: row.keyword,
+    keywords: Array.isArray(row.keywords) && row.keywords.length ? row.keywords : [row.keyword],
     country_code: row.country_code,
     language: row.language,
     results: Array.isArray(row.results) ? (row.results as DemoLead[]) : [],
@@ -316,13 +340,49 @@ export function judgeRelevanceHeuristic(keyword: string, lead: Pick<DemoLead, 't
   return hits >= Math.max(1, Math.ceil(words.length / 2)) ? 'relevant' : 'off_topic'
 }
 
-function toLeads(results: ResultRow[], keyword: string): DemoLead[] {
-  return results.slice(0, 12).map((r, i) => {
+/** Several keywords' result lists → one list: take each keyword's results in
+ *  turn (1st of each, then 2nd of each…) so every keyword is represented, and
+ *  keep a site only the first time it appears. */
+function mergeByKeyword(lists: ResultRow[][]): ResultRow[] {
+  const out: ResultRow[] = []
+  const seen = new Set<string>()
+  const longest = Math.max(0, ...lists.map(l => l.length))
+  for (let i = 0; i < longest; i++) {
+    for (const list of lists) {
+      const r = list[i]
+      if (!r) continue
+      const host = hostOf(r.url) || r.url
+      if (seen.has(host)) continue
+      seen.add(host)
+      out.push(r)
+    }
+  }
+  return out
+}
+
+/** Apify returns one dataset item per keyword and page; split them back out. */
+function resultsPerKeyword(items: unknown[], runId: string, keywords: string[]): ResultRow[][] {
+  const byTerm = new Map<string, unknown[]>()
+  for (const it of items) {
+    const term = String((it as { searchQuery?: { term?: string } })?.searchQuery?.term ?? keywords[0] ?? '')
+    const key = keywords.find(k => k.toLowerCase() === term.toLowerCase()) ?? term
+    byTerm.set(key, [...(byTerm.get(key) ?? []), it])
+  }
+  const ordered = [...keywords.filter(k => byTerm.has(k)), ...[...byTerm.keys()].filter(k => !keywords.includes(k))]
+  return ordered.map(k => mapItemsToResults(byTerm.get(k) ?? [], { keyword: k, view_mode: 'desktop' }, { runId }).results)
+}
+
+const MAX_DEMO_LEADS = 20
+
+function toLeads(results: ResultRow[]): DemoLead[] {
+  return results.slice(0, MAX_DEMO_LEADS).map((r, i) => {
+    const keyword = r.keyword
     const domain = hostOf(r.url) || r.url
     const skipped = shouldSkipDomain(domain) || PLATFORM_HOSTS.test(domain)
     const base = { title: r.title || domain, snippet: r.description, url: r.url, domain }
     return {
       id: i + 1,
+      keyword,
       domain,
       url: r.url,
       title: r.title || domain,
@@ -504,7 +564,7 @@ async function aiConfig(svc: Svc): Promise<AiConfig | null> {
 
 /** The same relevance judge the workspace uses, over the SERP rows. Any
  *  failure leaves the heuristic verdicts in place. */
-async function judgeRelevanceWithAi(svc: Svc, keyword: string, leads: DemoLead[]): Promise<void> {
+async function judgeRelevanceWithAi(svc: Svc, leads: DemoLead[]): Promise<void> {
   const ai = await aiConfig(svc)
   if (!ai || leads.length === 0) return
   try {
@@ -514,7 +574,7 @@ async function judgeRelevanceWithAi(svc: Svc, keyword: string, leads: DemoLead[]
       leads.map(l => ({
         lead_id: l.id,
         profile_id: null,
-        keyword,
+        keyword: l.keyword,
         serp_title: l.title,
         serp_description: l.snippet,
         domain: l.domain,
@@ -649,8 +709,9 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
     if (run.status === 'SUCCEEDED') {
       const datasetId = row.dataset_id ?? run.datasetId
       const items = datasetId ? await getDatasetItems(apify.token, datasetId).catch(() => []) : []
-      const leads = toLeads(mapItemsToResults(items, { keyword: row.keyword, view_mode: 'desktop' }, { runId: row.apify_run_id }).results, row.keyword)
-      await judgeRelevanceWithAi(svc, row.keyword, leads)
+      const kws = Array.isArray(row.keywords) && row.keywords.length ? row.keywords : [row.keyword]
+      const leads = toLeads(mergeByKeyword(resultsPerKeyword(items, row.apify_run_id, kws)))
+      await judgeRelevanceWithAi(svc, leads)
       const next = crawlable(leads).length === 0 ? 'done' : 'enriching'
       const { data: updated } = await svc
         .from('demo_runs')
@@ -692,7 +753,7 @@ export async function advanceDemoRun(id: string): Promise<DemoRun | null> {
     const ai = await aiConfig(svc)
     const done = await Promise.all(
       todo.map(l =>
-        withDeadline(enrichLead(l, fresh.keyword, fresh.country_code, ai), LEAD_DEADLINE_MS, {
+        withDeadline(enrichLead(l, l.keyword || fresh.keyword, fresh.country_code, ai), LEAD_DEADLINE_MS, {
           ...l,
           enriched: true,
           fetchError: 'Timed out',

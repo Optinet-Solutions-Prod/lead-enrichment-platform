@@ -233,7 +233,9 @@ export function mapItemsToResults(
   for (const { item, page } of pages) {
     // Ads sit above the organic list on the page, so they take the first
     // overall positions — same order scraper.py reads the DOM in.
-    for (const r of item.paidResults ?? []) {
+    // "Organic results only" scrapes leave the ads out entirely.
+    const paid = (job as { result_type_filter?: string | null }).result_type_filter === 'Organic' ? [] : item.paidResults ?? []
+    for (const r of paid) {
       const dest = r.directUrl && !isGoogleRedirect(r.directUrl) ? r.directUrl : r.url ?? ''
       if (!dest || isGoogleRedirect(dest)) continue
       const origin = originOf(dest)

@@ -1,3 +1,4 @@
+import { getOrgContext } from '@/lib/orgs/context'
 import 'server-only'
 import { createServiceClient } from '@/lib/supabase/service'
 import { parseDateRange } from './date-range'
@@ -26,6 +27,7 @@ export type DailyReport = {
 
 export async function loadDailyReport(day: DailyReportDay): Promise<DailyReport> {
   const svc = createServiceClient()
+  const orgId = (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000'
   const range = parseDateRange(day) // 'today' | 'yesterday' → UTC window
   const since = range.since
   const until = range.until
@@ -35,6 +37,7 @@ export async function loadDailyReport(day: DailyReportDay): Promise<DailyReport>
   const { data: batchRows } = await svc
     .from('scrape_queue')
     .select('batch_id')
+    .eq('org_id', orgId)
     .is('parent_scrape_job_id', null)
     .not('batch_id', 'is', null)
     .gte('created_at', since)
@@ -46,6 +49,7 @@ export async function loadDailyReport(day: DailyReportDay): Promise<DailyReport>
   const { count: scrapesCompleted } = await svc
     .from('scrape_queue')
     .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
     .is('parent_scrape_job_id', null)
     .eq('status', 'completed')
     .gte('completed_at', since)
@@ -55,6 +59,7 @@ export async function loadDailyReport(day: DailyReportDay): Promise<DailyReport>
   const { count: leadsFound } = await svc
     .from('google_lead_gen_table')
     .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
     .gte('created_at', since)
     .lte('created_at', until)
 

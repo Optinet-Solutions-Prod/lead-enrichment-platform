@@ -1,3 +1,4 @@
+import { getOrgContext } from '@/lib/orgs/context'
 import 'server-only'
 import { cache } from 'react'
 import { getShadowContext } from '@/lib/shadow-filter'
@@ -166,7 +167,21 @@ export async function loadWebsiteSummary(rawDomain: string): Promise<WebsiteSumm
 
   const profileRes = await profileP
   if (profileRes.error) throw new Error(profileRes.error.message)
-  const profileRow = (profileRes.data as unknown as WebsiteProfile | null) ?? null
+  const sharedRow = (profileRes.data as unknown as WebsiteProfile | null) ?? null
+
+  // The shared row holds public facts about the site. Whether this workspace
+  // has found it, and its own outreach on it, live in org_website_profiles —
+  // a site another workspace found reads as not found here.
+  let profileRow: WebsiteProfile | null = null
+  if (sharedRow && shadowCtx.orgId) {
+    const { data: link } = await svc
+      .from('org_website_profiles')
+      .select('first_seen_at, last_seen_at, appearance_count, outreach_status, contacted_at, next_follow_up_at, outreach_note')
+      .eq('org_id', shadowCtx.orgId)
+      .eq('profile_id', sharedRow.id)
+      .maybeSingle()
+    if (link) profileRow = { ...sharedRow, ...(link as Partial<WebsiteProfile>) }
+  }
 
   // Appearances hang off profile_id, NOT the lead's own `domain` column —
   // that one stores the full origin ("https://www.example.com"), so
@@ -263,6 +278,7 @@ export async function domainForLead(leadId: number): Promise<string | null> {
     .from('google_lead_gen_table')
     .select('domain, url')
     .eq('id', leadId)
+    .eq('org_id', (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000')
     .maybeSingle()
   const row = data as { domain: string | null; url: string | null } | null
   const raw = row?.domain || row?.url || ''

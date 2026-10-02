@@ -6,6 +6,7 @@ import { parseFilters, parseSorts } from '@/lib/filters/serialize'
 import type { ColumnDef } from '@/lib/filters/types'
 import { clampPageSize } from '@/lib/page-size'
 import { createServiceClient } from '@/lib/supabase/service'
+import { getOrgContext } from '@/lib/orgs/context'
 import { getUserPreferences } from '@/lib/user-preferences'
 import { parseRecencyBands, type RecencyBands } from '@/lib/website-profiles/recency'
 import { domainForLead } from '../websites/_lib/query'
@@ -22,9 +23,11 @@ import {
 /** Rows hidden from the default view: marked not relevant OR system-flagged. */
 async function countHidden(): Promise<number> {
   const svc = createServiceClient()
+  const orgId = (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000'
   const { count } = await svc
     .from('google_lead_gen_table')
     .select('id', { head: true, count: 'exact' })
+    .eq('org_id', orgId)
     .or('is_not_relevant.eq.true,system_flag.not.is.null')
   return count ?? 0
 }

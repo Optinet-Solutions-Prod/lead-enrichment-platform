@@ -38,6 +38,8 @@ type Kind = 'affiliate' | 'operator' | 'publisher' | 'unknown'
 type Brand = { name: string; host: string; links: number }
 type Lead = {
   id: number
+  /** The keyword this site ranked for. */
+  keyword?: string
   domain: string
   url: string
   title: string
@@ -71,6 +73,7 @@ type Run = {
   ai: boolean
   status: 'searching' | 'enriching' | 'done' | 'failed'
   keyword: string
+  keywords?: string[]
   country_code: string
   results: Lead[]
   total: number
@@ -94,11 +97,11 @@ const COUNTRIES = [
 ]
 
 const PRESETS = [
-  { key: 'vpn', label: 'VPN brand', keyword: 'best vpn for streaming', country: 'GB', blurb: 'Who reviews VPNs in the UK' },
-  { key: 'casino', label: 'Casino brand', keyword: 'online casino', country: 'DE', blurb: 'Review and bonus sites an operator recruits' },
-  { key: 'hosting', label: 'Web hosting', keyword: 'best web hosting for small business', country: 'US', blurb: 'Hosting comparison publishers' },
-  { key: 'saas', label: 'B2B SaaS', keyword: 'best crm for small business', country: 'US', blurb: 'Software reviewers and directories' },
-  { key: 'fitness', label: 'Fitness & supplements', keyword: 'best protein powder', country: 'GB', blurb: 'Fitness creators and comparison sites' },
+  { key: 'vpn', label: 'VPN brand', keywords: ['best vpn for streaming', 'best vpn 2026', 'vpn deals'], country: 'GB', blurb: 'Who reviews VPNs in the UK' },
+  { key: 'casino', label: 'Casino brand', keywords: ['online casino', 'beste online casinos', 'casino bonus'], country: 'DE', blurb: 'Review and bonus sites an operator recruits' },
+  { key: 'hosting', label: 'Web hosting', keywords: ['best web hosting for small business', 'best wordpress hosting', 'web hosting comparison'], country: 'US', blurb: 'Hosting comparison publishers' },
+  { key: 'saas', label: 'B2B SaaS', keywords: ['best crm for small business', 'best project management software', 'hubspot alternatives'], country: 'US', blurb: 'Software reviewers and directories' },
+  { key: 'fitness', label: 'Fitness & supplements', keywords: ['best protein powder', 'best creatine', 'protein powder review'], country: 'GB', blurb: 'Fitness creators and comparison sites' },
 ]
 
 const POLL_MS = 3000
@@ -145,6 +148,12 @@ function kindChip(lead: Lead) {
   }
 }
 
+/** “one”, “two” and “three” — the run's keywords for headings. */
+function kwLabel(run: Pick<Run, 'keyword' | 'keywords'>): string {
+  const ks = (run.keywords && run.keywords.length ? run.keywords : [run.keyword]).map(k => `“${k}”`)
+  return ks.length <= 1 ? ks.join('') : `${ks.slice(0, -1).join(', ')} and ${ks[ks.length - 1]}`
+}
+
 function emailDraft(lead: Lead, keyword: string, country: string) {
   const name = siteName(lead)
   const kind = lead.kind === 'affiliate' ? 'partner site' : 'publication'
@@ -169,7 +178,9 @@ const hasContact = (l: Lead) =>
   !!l.contacts && (l.contacts.emails.length > 0 || l.contacts.phones.length > 0 || l.contacts.socials.length > 0 || !!l.contacts.contactPage)
 
 export function LiveDemo() {
-  const [keyword, setKeyword] = useState(PRESETS[0]!.keyword)
+  const [keywords, setKeywords] = useState<string[]>([...PRESETS[0]!.keywords])
+  const setKeywordAt = (i: number, v: string) => setKeywords(prev => prev.map((k, j) => (j === i ? v : k)))
+  const usableKeywords = keywords.map(k => k.trim()).filter(k => k.length >= 2)
   const [country, setCountry] = useState(PRESETS[0]!.country)
   const [preset, setPreset] = useState<string | null>(PRESETS[0]!.key)
   const [run, setRun] = useState<Run | null>(null)
@@ -236,7 +247,7 @@ export function LiveDemo() {
       const res = await fetch('/api/demo/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword, country }),
+        body: JSON.stringify({ keywords: usableKeywords, country }),
       })
       const body = (await res.json()) as { id?: string; error?: string }
       if (!res.ok || !body.id) {
@@ -245,7 +256,7 @@ export function LiveDemo() {
       }
       setStartedAt(Date.now())
       setElapsed(0)
-      setRun({ id: body.id, ai: false, status: 'searching', keyword, country_code: country, results: [], total: 0, enriched: 0, error: null })
+      setRun({ id: body.id, ai: false, status: 'searching', keyword: usableKeywords[0] ?? '', keywords: usableKeywords, country_code: country, results: [], total: 0, enriched: 0, error: null })
       pollRef.current = setTimeout(() => void poll(body.id!), 1500)
     } catch {
       setError('Could not reach the server. Check your connection and try again.')
@@ -275,8 +286,8 @@ export function LiveDemo() {
         {
           label:
             run.status === 'searching'
-              ? `${run.ai ? 'AI is checking' : 'Checking'} which results are about “${run.keyword}”`
-              : `${relevant.length} of ${run.total} results are about “${run.keyword}”${run.ai ? ' (AI judged)' : ''}`,
+              ? `${run.ai ? 'AI is checking' : 'Checking'} which results are about ${kwLabel(run)}`
+              : `${relevant.length} of ${run.total} results are about ${kwLabel(run)}${run.ai ? ' (AI judged)' : ''}`,
           state: run.status === 'searching' ? 'todo' : 'done',
         },
         {
@@ -307,7 +318,7 @@ export function LiveDemo() {
             Go on, try it. <span className="dg-gradient-text">Your keyword, live.</span>
           </h2>
           <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--color-text-secondary)] md:text-[18px]">
-            One page of Google for your keyword. An AI judge checks every result against the keyword, the relevant
+            One page of Google for each of your three keywords. An AI judge checks every result against its keyword, the relevant
             sites are opened and classified as affiliate, operator or publisher, the brands they endorse and their
             contacts are pulled, and an outreach draft is ready. Nothing is sent from the demo.
           </p>
@@ -325,7 +336,7 @@ export function LiveDemo() {
                   type="button"
                   onClick={() => {
                     setPreset(p.key)
-                    setKeyword(p.keyword)
+                    setKeywords([...p.keywords])
                     setCountry(p.country)
                   }}
                   aria-pressed={on}
@@ -351,23 +362,32 @@ export function LiveDemo() {
               if (!starting && !active) void start()
             }}
           >
-            <label className="flex flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
-              Keyword
-              <span className="flex items-center gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 focus-within:border-[color:var(--color-accent-hover)]">
-                <Search className="h-4 w-4 shrink-0" />
-                <input
-                  ref={inputRef}
-                  value={keyword}
-                  onChange={e => {
-                    setKeyword(e.target.value)
-                    setPreset(null)
-                  }}
-                  maxLength={80}
-                  placeholder="e.g. best vpn for streaming"
-                  className="min-h-11 w-full bg-transparent text-[14px] text-[color:var(--color-text-primary)] outline-none placeholder:text-[color:var(--color-text-secondary)]"
-                />
-              </span>
-            </label>
+            <fieldset className="col-span-full flex flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
+              <legend className="mb-1">Keywords · up to three, searched together</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {keywords.map((k, i) => (
+                  <span
+                    key={i}
+                    className="flex items-center gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 focus-within:border-[color:var(--color-accent-hover)]"
+                  >
+                    <Search className="h-4 w-4 shrink-0" />
+                    <input
+                      ref={i === 0 ? inputRef : undefined}
+                      value={k}
+                      onChange={e => {
+                        setKeywordAt(i, e.target.value)
+                        setPreset(null)
+                      }}
+                      maxLength={80}
+                      aria-label={`Keyword ${i + 1}`}
+                      placeholder={i === 0 ? 'e.g. best vpn for streaming' : 'optional'}
+                      className="min-h-11 w-full bg-transparent text-[14px] text-[color:var(--color-text-primary)] outline-none placeholder:text-[color:var(--color-text-secondary)]"
+                    />
+                  </span>
+                ))}
+              </div>
+            </fieldset>
+            <span className="hidden sm:block" />
             <label className="flex flex-col gap-1 text-[12px] text-[color:var(--color-text-secondary)]">
               Country
               <span className="flex items-center gap-2 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3">
@@ -391,7 +411,7 @@ export function LiveDemo() {
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={starting || active || keyword.trim().length < 2}
+                disabled={starting || active || usableKeywords.length === 0}
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md dg-btn dg-btn-primary px-5 text-[14px] sm:w-auto"
               >
                 {starting || active ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -416,7 +436,7 @@ export function LiveDemo() {
             <div className="mt-5 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[13px] font-semibold">
-                  “{run.keyword}” · {countryName(run.country_code)}
+                  {kwLabel(run)} · {countryName(run.country_code)}
                 </p>
                 {run.status === 'done' && (
                   <button
@@ -459,7 +479,7 @@ export function LiveDemo() {
           )}
 
           <p className="mt-4 text-[11.5px] text-[color:var(--color-text-secondary)]">
-            The demo runs one page per keyword and opens up to 8 relevant sites. In your workspace: more pages, 32
+            The demo runs one page per keyword and opens up to 10 relevant sites. In your workspace: more pages, 32
             countries, AI relevance and brand checks, weekly reruns and outreach that actually sends.
           </p>
         </div>
@@ -524,7 +544,7 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Results for ${run.keyword}`}
+        aria-label={`Results for ${(run.keywords ?? [run.keyword]).join(', ')}`}
         className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[color:var(--color-bg-secondary)] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-2xl sm:border sm:border-[color:var(--color-border-strong)] sm:shadow-2xl"
       >
         {/* header */}
@@ -533,7 +553,7 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               Live results · page one of Google · {countryName(run.country_code)}
             </p>
-            <h3 className="mt-0.5 truncate text-[20px] font-semibold leading-tight">“{run.keyword}”</h3>
+            <h3 className="mt-0.5 truncate text-[20px] font-semibold leading-tight">{kwLabel(run)}</h3>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
               <Stat label="results" value={leads.length} />
               <Stat label="relevant" value={relevant} tone="good" />
@@ -574,7 +594,7 @@ function ResultsModal({ run, onClose }: { run: Run; onClose: () => void }) {
             <ComposeView
               lead={compose.lead}
               channel={compose.channel}
-              keyword={run.keyword}
+              keyword={compose.lead.keyword || run.keyword}
               country={run.country_code}
               onBack={() => setCompose(null)}
               onSend={to => {
@@ -815,6 +835,7 @@ function LeadCard({
             </a>
             <span className="rounded-full bg-[color:var(--color-bg-secondary)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--color-text-secondary)]">
               {lead.type === 'PPC' ? 'Ad' : `#${lead.position}`}
+              {lead.keyword ? ` · ${lead.keyword}` : ''}
             </span>
           </div>
           <p className="truncate text-[12px] text-[color:var(--color-text-secondary)]">

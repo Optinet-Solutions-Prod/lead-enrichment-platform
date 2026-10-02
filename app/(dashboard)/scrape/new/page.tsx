@@ -1,5 +1,6 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { getOrgContext } from '@/lib/orgs/context'
 import { getFleetQueueSnapshot, listActiveProfiles } from '../_lib/queries'
 import type { QueueEstimate } from './_components/queue-ticket'
 import { NewScrapeWizard } from './_components/new-scrape-wizard'
@@ -84,6 +85,13 @@ export default async function NewScrapePage({ searchParams }: { searchParams: Pr
       : Promise.resolve(null),
   ])
 
+  // Casino presets and gambling keyword ideas only where the workspace allows them.
+  const org = await getOrgContext()
+  const { data: orgSettings } = org
+    ? await svc.from('org_settings').select('gambling_enabled').eq('org_id', org.orgId).maybeSingle()
+    : { data: null }
+  const gamblingEnabled = (orgSettings as { gambling_enabled?: boolean } | null)?.gambling_enabled === true
+
   // ----- quota preview (shown even to exempt users so the UI can be tested) -----
   const capNum = typeof capRaw === 'number' ? capRaw : typeof capRaw === 'string' ? Number(capRaw) : DEFAULT_CAP
   const cap = Number.isFinite(capNum) && capNum > 0 ? Math.floor(capNum) : null
@@ -167,6 +175,7 @@ export default async function NewScrapePage({ searchParams }: { searchParams: Pr
       prefill={prefill}
       queueByCountry={queueByCountry}
       totalPending={fleet.totalPending}
+      gamblingEnabled={gamblingEnabled}
       maxPages={maxPages}
       demoKey={demoKey}
     />

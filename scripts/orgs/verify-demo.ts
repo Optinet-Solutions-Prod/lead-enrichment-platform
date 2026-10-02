@@ -44,7 +44,7 @@ async function main() {
     check('the keyword field takes focus', focused)
 
     await page.locator('button:has-text("VPN brand")').click()
-    check('preset fills the keyword', (await page.inputValue('#demo input')) === 'best vpn for streaming')
+    check('preset fills three keywords', (await page.inputValue('#demo input[aria-label="Keyword 1"]')) === 'best vpn for streaming' && (await page.inputValue('#demo input[aria-label="Keyword 3"]')).length > 2)
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/demo-form.png`, fullPage: false })
 
     await page.locator('button:has-text("Run demo scrape")').click()
@@ -92,7 +92,7 @@ async function main() {
       await (hasEmail ? emailBtn : smsBtn).click()
       await page.locator('textarea').waitFor({ timeout: 5000 })
       const body = await page.inputValue('textarea')
-      check('the draft names the site and the keyword', /best vpn for streaming/i.test(body))
+      check('the draft names the site and the keyword', /best vpn for streaming|best vpn 2026|vpn deals/i.test(body))
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/demo-compose.png`, fullPage: false })
       await page.locator('button:has-text("Send")').last().click()
       await page.locator('text=Nothing was sent').waitFor({ timeout: 5000 })

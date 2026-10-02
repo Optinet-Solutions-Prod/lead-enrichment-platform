@@ -455,6 +455,49 @@ made **vertical-neutral** — "any niche, scrape → enrich → reach."
   column, "Need an account? Sign up →" over a hairline, terms line, fields, submit greys out
   while a field is empty (CSS `:has`, still clickable). No social-login buttons or "remember me"
   (not configured; would be dead UI). Demo error box now has `data-demo-error` (test hook).
+- ✅ **Affiliate data is per workspace (2026-10-02, migrations `20261002090000`, `…091000`,
+  `…092000` applied live):** `scrape_queue`, `google_lead_gen_table` and `enrichment_fetch_queue`
+  have `org_id`, filled by BEFORE INSERT triggers (job: parent → batch sibling → creator's
+  active org; lead: its job; enrichment: its lead), so every insert path is covered. Existing
+  rows belong to Optinet Discovery. `lib/shadow-filter.ts` adds `org_id = active org` (fail
+  closed) to every shadow-filtered list; job page, lead detail, cohort siblings, lead-access
+  guard, duplicate checks (`find-completed-siblings`, `filter-in-flight`), today page, daily
+  report and hidden-count also check the org. `website_profiles` stays the shared public record;
+  **`org_website_profiles`** (org_id, profile_id) says which org found a site and holds that
+  org's outreach (status, follow-up, note) — the outreach action writes there, the website page
+  reads it and 404s a site the org never found, Partners (AI) joins through it. The shared
+  not-relevant flag is only touched when no other org has the site. ⚠ `website_profiles`
+  aggregates (appearance_count) and `website_cta_links` are still shared public facts.
+  `org_settings.gambling_enabled` (default false): casino preset + gambling keyword ideas only
+  when on, and the enqueue action refuses gambling keywords when off. **Demo orgs** (seed
+  `supabase/seed/demo_orgs.sql`, idempotent; owner admin@optinetsolutions.com): "Demo Org"
+  (gambling off; VPN + hosting copies: 6 jobs, 84 results) and "Full Demo Org" (gambling on;
+  8 jobs, 111 results). Test: `scripts/orgs/verify-org-data.ts`.
+- ✅ **New scrape (2026-10-02):** three default keywords; presets have three keywords each (VPN,
+  hosting, B2B SaaS; casino only with gambling on, now DE); the enrichment step is "Organic
+  results only" (sets `result_type_filter='Organic'` → Apify importer drops ads, no stages) vs
+  "With enrichment" (default, both stages). **Keyword generator** (`lib/keywords/suggest.ts`,
+  `scrape/new/keyword-actions.ts`): OpenAI when the key exists, local-language patterns
+  otherwise; never suggests a keyword in the org's `scrape_queue` (demo_runs don't count) or in
+  the current list.
+- ✅ **Landing demo takes three keywords (2026-10-02):** one Apify run (`queries` newline-joined)
+  or three Serper calls; `resultsPerKeyword` + `mergeByKeyword` interleave and de-duplicate by
+  host (≤20 leads, ≤10 crawled); each lead carries its `keyword` (judge, crawl, draft use it);
+  `demo_runs.keywords text[]`.
+- ✅ **Labs · potential features (`/labs`, sidebar under Tools, 2026-10-02)** — after a study of
+  snov.io's suite. Built and testable: domain search (≤10 sites: home + 3 contact pages →
+  emails with MX verdict, phones, socials), email verifier (≤50; syntax, MX/A, disposable, role,
+  webmail — no SMTP probe), email pattern finder (detects the house pattern from published named
+  addresses), tech & affiliate-network lookup (Impact, CJ, Awin, Rakuten, PartnerStack, Amazon,
+  Skimlinks, cloaked /go/ links, ad stacks, CMS, pixels), sender check (MX, SPF, DMARC, DKIM
+  common selectors), AI email/SMS writer (template without a key). All fetches go through
+  `lib/labs/safe-fetch.ts` (public IPs only, manual redirects, timeouts); DNS falls back to
+  Cloudflare DoH when the system resolver times out. Roadmap cards list what the rest needs
+  (sequences, tracking, warm-up, SMS, CRM sync, people data, phone data, inbox placement, API).
+  Test: `scripts/orgs/verify-labs.ts`.
+- ⚠ **Property code still in the repo:** deleting the property routes/libs was refused by the
+  session's permission guard (bulk folder delete). Everything stays gated and invisible (checked
+  page by page as a member); the owner can approve the removal.
 - ⬜ Not started: SMTP/Resend (Phase C — needs owner DNS; signup email confirmation still
   has no sender), full Milestone C (org_id + RLS on the legacy affiliate tables +
   tenant-client migration), E (source/country toggles), outreach tracker, repointing

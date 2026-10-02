@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   FlaskConical,
   ListPlus,
+  Loader2,
+  Wand2,
   Monitor,
   Pencil,
   Plus,
@@ -29,11 +31,13 @@ import {
   X,
 } from 'lucide-react'
 import { enqueueScrape, type DuplicateHit } from '../../actions'
+import { suggestKeywordsAction } from '../keyword-actions'
 import { DuplicateWarning } from '../../_components/duplicate-warning'
 import { Modal } from '../../../_components/modal'
 import {
   ALL_STAGE_KEYS,
   BING_DISABLED_COUNTRIES,
+  DEFAULT_KEYWORDS,
   DEFAULT_ENGINE,
   DEMO_PRESETS,
   ENGINES,
@@ -90,6 +94,8 @@ type Props = {
   maxPages: number
   /** `?demo=<key>` applies that preset on open. */
   demoKey: string | null
+  /** Casino presets and gambling keyword ideas only when the workspace allows them. */
+  gamblingEnabled: boolean
 }
 
 type StepKey =
@@ -134,9 +140,9 @@ function defaultDraft(): WizardDraft {
     language: 'en',
     pages: 1,
     viewMode: 'desktop',
-    keywords: [],
-    enrichChoice: 'none',
-    stages: [],
+    keywords: [...DEFAULT_KEYWORDS],
+    enrichChoice: 'stages',
+    stages: [...ALL_STAGE_KEYS],
     topChoice: null,
     topN: 25,
     runAnyway: false,
@@ -259,7 +265,7 @@ function EngineMono({ engine, size = 'md' }: { engine: EngineKey; size?: 'sm' | 
 
 // ---------------------------------------------------------------- wizard ----
 
-export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCountry, totalPending, maxPages, demoKey }: Props) {
+export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCountry, totalPending, maxPages, demoKey, gamblingEnabled }: Props) {
   const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false)
   const isDesktop = useSyncExternalStore(
     subscribeDesktop,
@@ -281,7 +287,7 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
   )
 
   const base = defaultDraft()
-  const demo = demoKey ? DEMO_PRESETS.find(d => d.key === demoKey) ?? null : null
+  const demo = demoKey ? DEMO_PRESETS.find(d => d.key === demoKey && (gamblingEnabled || !d.gambling)) ?? null : null
   const start: WizardDraft = restored ?? {
     ...base,
     ...(prefill
@@ -505,7 +511,7 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
         return { ok: true }
       }
       case 'enrichment':
-        if (enrichChoice === 'stages' && stages.length === 0) return { ok: false, message: 'Pick at least one stage, or choose no enrichment.' }
+        if (enrichChoice === 'stages' && stages.length === 0) return { ok: false, message: 'Pick at least one enrichment step, or choose organic results only.' }
         return { ok: true }
       case 'topn':
         if (!topChoice) return { ok: false, message: 'Choose how many to keep.' }
@@ -562,6 +568,7 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
     fd.set('view_mode', draft.view_mode)
     if (draft.with_enrichment) fd.set('with_enrichment', 'on')
     fd.set('enrichment_stages', draft.enrichment_stages.join(','))
+    fd.set('results_mode', draft.enrichment_stages.length > 0 ? 'enriched' : 'organic')
     if (draft.scheduled_at) fd.set('scheduled_at', draft.scheduled_at)
     if (draft.top_n_by_follower !== null) fd.set('top_n_by_follower', String(draft.top_n_by_follower))
     if (override) fd.set('duplicate_override', '1')
@@ -654,8 +661,8 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
 
   // Presets only offer countries this deployment can search.
   const demos = useMemo(
-    () => DEMO_PRESETS.filter(d => profiles.some(p => p.country_code === d.country_code)),
-    [profiles],
+    () => DEMO_PRESETS.filter(d => (gamblingEnabled || !d.gambling) && profiles.some(p => p.country_code === d.country_code)),
+    [profiles, gamblingEnabled],
   )
 
   // Server pass and first hydration render the frame only, so the restored
@@ -718,10 +725,10 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
             <Sparkles className="h-4 w-4" /> Try a demo in one click
           </h2>
           <span className="text-[11.5px] text-[color:var(--color-text-secondary)]">
-            Two keywords, {Math.min(2, maxPages)} page{Math.min(2, maxPages) === 1 ? '' : 's'} each, enrichment on — about five minutes end to end.
+            Three keywords, {Math.min(2, maxPages)} page{Math.min(2, maxPages) === 1 ? '' : 's'} each, enrichment on — about five minutes end to end.
           </span>
         </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className={`mt-3 grid gap-2 sm:grid-cols-2 ${demos.length >= 4 ? 'xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
           {demos.map(d => {
             const active = demoApplied === d.key
             return (
@@ -865,7 +872,7 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
                       <span>
                         {savedConfig.with_enrichment
                           ? savedConfig.enrichment_stages.map(k => ENRICHMENT_STAGES.find(s => s.key === k)?.label ?? k).join(', ')
-                          : 'no enrichment'}
+                          : 'organic results only'}
                       </span>
                     </div>
                   </div>
@@ -1044,6 +1051,12 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
                     </li>
                   ))}
                 </ul>
+                <KeywordIdeas
+                  current={keywords}
+                  country={country}
+                  language={language}
+                  onAdd={k => setKeywords(prev => (prev.some(x => x.toLowerCase() === k.toLowerCase()) ? prev : [...prev, k].slice(0, MAX_KEYWORDS)))}
+                />
                 {remaining !== null && distinctKeywords > 0 && (
                   <div className="mt-3">
                     <Note tone={distinctKeywords > remaining && !quota.exempt ? 'error' : 'info'}>
@@ -1056,21 +1069,21 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
 
   const renderEnrichment = (ans: boolean) => (
               <>
-                <StepHeading title="What should run on the results?">
-                  Enrichment opens each lead&rsquo;s website after the scrape and runs inside the app. Every stage costs time,
-                  so pick only what you need. Stages you choose are remembered for your next scrape.
+                <StepHeading title="What do you want back?">
+                  Organic results only is the Google list itself, without the ads, and finishes fastest. With enrichment we also
+                  open every site: affiliate or not, the brands it endorses with their links, and its contact details.
                 </StepHeading>
                 <div className="grid gap-2.5 sm:grid-cols-2">
-                  <Tile selected={ans && enrichChoice === 'none'} isDefault onClick={() => choose(() => { setEnrichChoice('none'); setStages([]) })}>
-                    <X className="h-5 w-5" />
-                    <span className="text-[13.5px] font-medium">No enrichment</span>
-                    <span className="text-[11.5px] text-[color:var(--color-text-secondary)]">Just the results list</span>
+                  <Tile selected={ans && enrichChoice === 'none'} onClick={() => choose(() => { setEnrichChoice('none'); setStages([]) })}>
+                    <Search className="h-5 w-5" />
+                    <span className="text-[13.5px] font-medium">Organic results only</span>
+                    <span className="text-[11.5px] text-[color:var(--color-text-secondary)]">The ranking list, no ads, no site visits</span>
                   </Tile>
-                  <Tile selected={ans && enrichChoice === 'stages'} onClick={() => choose(() => setEnrichChoice('stages'))}>
+                  <Tile selected={ans && enrichChoice === 'stages'} isDefault onClick={() => choose(() => { setEnrichChoice('stages'); setStages(prev => (prev.length ? prev : [...ALL_STAGE_KEYS])) })}>
                     <FlaskConical className="h-5 w-5" />
-                    <span className="text-[13.5px] font-medium">Choose stages</span>
+                    <span className="text-[13.5px] font-medium">With enrichment</span>
                     <span className="text-[11.5px] text-[color:var(--color-text-secondary)]">
-                      {stages.length > 0 ? `${stages.length} selected` : 'Pick from the list'}
+                      Affiliate check, brands and contacts{stages.length > 0 && stages.length < ALL_STAGE_KEYS.length ? ` · ${stages.length} of ${ALL_STAGE_KEYS.length} steps` : ''}
                     </span>
                   </Tile>
                 </div>
@@ -1182,7 +1195,7 @@ export function NewScrapeWizard({ profiles, quota, userKey, prefill, queueByCoun
                       <span>
                         {enrichChoice === 'stages' && stages.length > 0
                           ? stages.map(k => ENRICHMENT_STAGES.find(s => s.key === k)?.label ?? k).join(', ')
-                          : 'no enrichment'}
+                          : 'organic results only'}
                       </span>
                     )}
                     {isSocial && <span>{topChoice === 'all' ? 'keep all' : `top ${topN} by followers`}</span>}
@@ -1444,7 +1457,7 @@ function SummaryList({
   if (def?.kind === 'serp') {
     rows.push([
       'Enrichment',
-      draft.enrichment_stages.length > 0 ? draft.enrichment_stages.map(k => ENRICHMENT_STAGES.find(s => s.key === k)?.label ?? k).join(', ') : 'None',
+      draft.enrichment_stages.length > 0 ? draft.enrichment_stages.map(k => ENRICHMENT_STAGES.find(s => s.key === k)?.label ?? k).join(', ') : 'Organic results only',
       'enrichment',
     ])
   }
@@ -1506,6 +1519,121 @@ function SummaryCard({
           </ul>
         </details>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Keyword ideas for a niche or brand. Never offers a keyword this workspace
+ * has already scraped (landing-page demo runs don't count) or one already in
+ * the list above.
+ */
+function KeywordIdeas({
+  current,
+  country,
+  language,
+  onAdd,
+}: {
+  current: string[]
+  country: string | null
+  language: string
+  onAdd: (keyword: string) => void
+}) {
+  const [seed, setSeed] = useState('')
+  const [ideas, setIdeas] = useState<Array<{ keyword: string; angle: string }>>([])
+  const [note, setNote] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function generate() {
+    setError(null)
+    startTransition(async () => {
+      const res = await suggestKeywordsAction({ seed, countryCode: country, language, current })
+      if (!res.ok) {
+        setIdeas([])
+        setNote(null)
+        setError(res.error)
+        return
+      }
+      setIdeas(res.ideas)
+      setNote(
+        [
+          res.source === 'ai' ? 'Ideas from AI' : 'Ideas from common search patterns',
+          res.hiddenUsed > 0 ? `${res.hiddenUsed} you already scraped are hidden` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      )
+    })
+  }
+
+  const shown = ideas.filter(i => !current.some(c => c.toLowerCase() === i.keyword))
+
+  return (
+    <div className="mt-4 rounded-lg border border-dashed border-[color:var(--color-border-strong)] p-3" data-keyword-ideas>
+      <p className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[color:var(--color-text-primary)]">
+        <Wand2 className="h-4 w-4" /> Keyword generator
+      </p>
+      <p className="mt-0.5 text-[11.5px] text-[color:var(--color-text-secondary)]">
+        Type your niche or brand and get searches that affiliate and review sites rank for. Keywords this workspace already scraped are never suggested.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={seed}
+          onChange={e => setSeed(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              if (!pending) generate()
+            }
+          }}
+          placeholder="e.g. vpn, web hosting, crm software"
+          maxLength={60}
+          aria-label="Niche or brand"
+          className="min-w-0 flex-1 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] focus:border-[color:var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-accent)]"
+        />
+        <button
+          type="button"
+          onClick={generate}
+          disabled={pending || seed.trim().length < 2}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-border-strong)] bg-[color:var(--color-bg-primary)] px-3 py-2 text-[13px] font-medium disabled:opacity-40"
+        >
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Suggest
+        </button>
+      </div>
+      {error && <p className="mt-2 text-[12px] text-rose-700">{error}</p>}
+      {shown.length > 0 && (
+        <>
+          <ul className="mt-2.5 flex flex-wrap gap-1.5">
+            {shown.map(i => (
+              <li key={i.keyword}>
+                <button
+                  type="button"
+                  onClick={() => onAdd(i.keyword)}
+                  title={i.angle}
+                  className="inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] py-1 pl-2 pr-3 text-[12.5px] hover:border-[color:var(--color-accent-hover)] hover:bg-[color:var(--color-accent)]/15"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {i.keyword}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => shown.slice(0, 10).forEach(i => onAdd(i.keyword))}
+            className="mt-2 text-[12px] underline text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text-primary)]"
+          >
+            Add all
+          </button>
+        </>
+      )}
+      {ideas.length > 0 && shown.length === 0 && !error && (
+        <p className="mt-2 text-[12px] text-[color:var(--color-text-secondary)]">Every idea is already in your list.</p>
+      )}
+      {note && <p className="mt-2 text-[11px] text-[color:var(--color-text-secondary)]">{note}</p>}
     </div>
   )
 }

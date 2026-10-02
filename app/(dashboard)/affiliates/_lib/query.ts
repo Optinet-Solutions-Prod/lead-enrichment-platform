@@ -1,3 +1,4 @@
+import { getOrgContext } from '@/lib/orgs/context'
 import 'server-only'
 import { createServiceClient } from '@/lib/supabase/service'
 import { parseRecencyBands, type RecencyBands } from '@/lib/website-profiles/recency'
@@ -65,9 +66,20 @@ export type AffiliateSummary = {
   roosterSites: number
 }
 
+/** The active workspace; a missing one matches nothing (fail closed). */
+async function activeOrg(): Promise<string> {
+  return (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000'
+}
+
 export async function loadSummary(): Promise<AffiliateSummary> {
   const svc = createServiceClient()
-  const profiles = () => svc.from('website_profiles').select('id', { count: 'exact', head: true })
+  const orgId = await activeOrg()
+  // Only the sites this workspace has found (org_website_profiles link).
+  const profiles = () =>
+    svc
+      .from('website_profiles')
+      .select('id, org_website_profiles!inner(org_id)', { count: 'exact', head: true })
+      .eq('org_website_profiles.org_id', orgId)
 
   const [screened, audited, affiliates, stagPending, roosterSites, ctaLinks] = await Promise.all([
     profiles().not('ai_screened_at', 'is', null),
@@ -75,7 +87,10 @@ export async function loadSummary(): Promise<AffiliateSummary> {
     profiles().eq('ai_is_affiliate', true),
     profiles().eq('manual_stag_status', 'pending'),
     profiles().eq('ai_is_affiliate', true).neq('ai_rooster_brands', '[]'),
-    svc.from('website_cta_links').select('id', { count: 'exact', head: true }),
+    svc
+      .from('website_cta_links')
+      .select('id, website_profiles!inner(org_website_profiles!inner(org_id))', { count: 'exact', head: true })
+      .eq('website_profiles.org_website_profiles.org_id', orgId),
   ])
 
   return {
@@ -104,6 +119,7 @@ export type AffiliateQuery = {
 
 export async function queryAffiliates(opts: AffiliateQuery): Promise<{ rows: AffiliateRow[]; total: number }> {
   const svc = createServiceClient()
+  const orgId = await activeOrg()
 
   let query = svc
     .from('website_profiles')
@@ -113,9 +129,11 @@ export async function queryAffiliates(opts: AffiliateQuery): Promise<{ rows: Aff
         'ai_brand_count, ai_cta_count, ai_brands, ai_rooster_brands, ai_new_brands',
         'ai_emails, ai_phones, ai_contact_page_url, ai_crawl_at, ai_crawl_status',
         'manual_stag_status, last_seen_at, appearance_count',
+        'org_website_profiles!inner(org_id)',
       ].join(', '),
       { count: 'exact' },
     )
+    .eq('org_website_profiles.org_id', orgId)
 
   switch (opts.filter) {
     case 'affiliates':
@@ -150,7 +168,7 @@ export async function queryAffiliates(opts: AffiliateQuery): Promise<{ rows: Aff
   // Country (from the first lead) + CTA link stats, in two batched queries
   // rather than per row.
   const [{ data: leadRows }, { data: ctaRows }] = await Promise.all([
-    svc.from('google_lead_gen_table').select('profile_id, country_code').in('profile_id', ids),
+    svc.from('google_lead_gen_table').select('profile_id, country_code').in('profile_id', ids).eq('org_id', orgId),
     svc.from('website_cta_links').select('profile_id, is_rooster_tracker, stag_checked_at').in('profile_id', ids),
   ])
 

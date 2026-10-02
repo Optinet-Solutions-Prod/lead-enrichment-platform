@@ -1,5 +1,6 @@
 'use server'
 
+import { getOrgContext } from '@/lib/orgs/context'
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -82,8 +83,20 @@ export async function setWebsiteNotRelevantAction(
     .in('id', leadIds)
   if (updErr) return { status: 'error', error: 'Failed to update the appearances.' }
 
-  // The profile is what the next scrape consults, so keep it in step.
-  if (domain) {
+  // The profile is what the next scrape consults, so keep it in step — but
+  // it is shared, so only while no other workspace has found this site.
+  const orgId = (await getOrgContext())?.orgId ?? null
+  const { data: profRow } = domain
+    ? await svc.from('website_profiles').select('id').eq('normalized_domain', domain).maybeSingle()
+    : { data: null }
+  const { count: otherOrgs } = profRow && orgId
+    ? await svc
+        .from('org_website_profiles')
+        .select('org_id', { count: 'exact', head: true })
+        .eq('profile_id', (profRow as { id: number }).id)
+        .neq('org_id', orgId)
+    : { count: 1 }
+  if (domain && orgId && (otherOrgs ?? 0) === 0) {
     await svc
       .from('website_profiles')
       .update(

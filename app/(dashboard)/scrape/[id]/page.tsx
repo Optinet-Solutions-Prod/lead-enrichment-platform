@@ -157,7 +157,7 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
   const { data: jobRaw, error: jobError } = await svc
     .from('scrape_queue')
     .select(
-      'id, keyword, keyword_en, country_code, pages, status, attempts, batch_id, claimed_by, started_at, completed_at, error_message, result_summary, search_engine, view_mode, language, created_at, created_by_is_shadow, created_by_email, batch_group_id',
+      'id, keyword, keyword_en, country_code, pages, status, attempts, batch_id, claimed_by, started_at, completed_at, error_message, result_summary, search_engine, view_mode, language, created_at, created_by_is_shadow, created_by_email, batch_group_id, org_id',
     )
     .eq('id', id)
     .maybeSingle()
@@ -177,8 +177,10 @@ export default async function ScrapeJobPage({ params, searchParams }: Props) {
   // Shadow-isolation gate. Direct URL access to a job belonging to a
   // shadow user (or vice versa) is treated as not-found so we never
   // leak even an existence signal.
-  const gate = jobRaw as { created_by_is_shadow?: boolean | null; created_by_email?: string | null }
+  const gate = jobRaw as { created_by_is_shadow?: boolean | null; created_by_email?: string | null; org_id?: string | null }
   const shadowCtx = await getShadowContext()
+  // Another workspace's job reads as not-found.
+  if (!shadowCtx.orgId || gate.org_id !== shadowCtx.orgId) notFound()
   const targetIsShadow = gate.created_by_is_shadow === true
   const targetEmail = (gate.created_by_email ?? '').toLowerCase()
   const allowed = shadowCtx.isShadow

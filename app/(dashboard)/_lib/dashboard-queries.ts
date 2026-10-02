@@ -23,6 +23,8 @@ function shadowFilter(
 ): any {
   const emailColumn = opts?.emailColumn ?? 'created_by_email'
   const shadowColumn = opts?.shadowColumn ?? 'created_by_is_shadow'
+  // Workspace isolation first; no active org matches nothing.
+  q = q.eq('org_id', ctx.orgId ?? '00000000-0000-0000-0000-000000000000')
   if (ctx.isShadow) {
     return q.eq(emailColumn, ctx.email ?? '__shadow_no_email__')
   }

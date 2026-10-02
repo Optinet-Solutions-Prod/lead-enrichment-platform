@@ -207,7 +207,7 @@ export const ENRICHMENT_STAGES: ReadonlyArray<{ key: string; label: string; hint
 
 export const ALL_STAGE_KEYS: ReadonlyArray<string> = ENRICHMENT_STAGES.map(s => s.key)
 
-/** One-click setups for a live demonstration. Two keywords, two pages, both
+/** One-click setups for a live demonstration. Three keywords, two pages, both
  *  enrichment stages — enough to show the whole journey in a few minutes. */
 export type DemoPreset = {
   key: string
@@ -219,20 +219,11 @@ export type DemoPreset = {
   pages: number
   keywords: string[]
   stages: string[]
+  /** Only offered in workspaces with gambling switched on. */
+  gambling?: boolean
 }
 
 export const DEMO_PRESETS: ReadonlyArray<DemoPreset> = [
-  {
-    key: 'casino',
-    title: 'Casino affiliates',
-    blurb: 'Review and bonus sites ranking for casino keywords in the UK — the partner sites an operator recruits.',
-    search_engine: 'google',
-    country_code: 'GB',
-    language: 'en',
-    pages: 2,
-    keywords: ['best online casinos', 'new online casinos 2026'],
-    stages: ['affiliate', 'contact'],
-  },
   {
     key: 'vpn',
     title: 'VPN affiliates',
@@ -241,7 +232,7 @@ export const DEMO_PRESETS: ReadonlyArray<DemoPreset> = [
     country_code: 'GB',
     language: 'en',
     pages: 2,
-    keywords: ['best vpn for streaming', 'best vpn 2026'],
+    keywords: ['best vpn for streaming', 'best vpn 2026', 'vpn deals'],
     stages: ['affiliate', 'contact'],
   },
   {
@@ -252,10 +243,36 @@ export const DEMO_PRESETS: ReadonlyArray<DemoPreset> = [
     country_code: 'US',
     language: 'en',
     pages: 2,
-    keywords: ['best web hosting for small business', 'best wordpress hosting 2026'],
+    keywords: ['best web hosting for small business', 'best wordpress hosting 2026', 'web hosting comparison'],
     stages: ['affiliate', 'contact'],
   },
+  {
+    key: 'saas',
+    title: 'B2B SaaS',
+    blurb: 'Software directories, alternatives pages and tool reviewers in the US — who a SaaS brand partners with.',
+    search_engine: 'google',
+    country_code: 'US',
+    language: 'en',
+    pages: 2,
+    keywords: ['best crm for small business', 'best project management software', 'hubspot alternatives'],
+    stages: ['affiliate', 'contact'],
+  },
+  {
+    key: 'casino',
+    title: 'Casino affiliates',
+    blurb: 'Review and bonus sites ranking for casino keywords in Germany — the partner sites an operator recruits.',
+    search_engine: 'google',
+    country_code: 'DE',
+    language: 'de',
+    pages: 2,
+    keywords: ['online casino', 'beste online casinos', 'casino bonus ohne einzahlung'],
+    stages: ['affiliate', 'contact'],
+    gambling: true,
+  },
 ]
+
+/** The three keywords a fresh scrape starts with. */
+export const DEFAULT_KEYWORDS: ReadonlyArray<string> = DEMO_PRESETS[0]!.keywords
 
 export const SCHEDULE_TIMEZONES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'Europe/Malta', label: 'Malta (CET/CEST)' },

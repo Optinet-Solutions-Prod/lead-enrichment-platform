@@ -128,7 +128,7 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
       .select(
         [
           'id, url, domain, keyword, country, country_code, result_type, batch_id, created_at, seen_on',
-          'scrape_job_id',
+          'scrape_job_id, org_id',
           'is_affiliate, affiliate_score, affiliate_casino_score, affiliate_confidence',
           'affiliate_external_links, affiliate_indicators',
           'affiliate_source',
@@ -177,10 +177,11 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
   // other people's leads. Reporting "not found" matches what we'd
   // surface for a genuinely-deleted lead — no information leakage.
   const rawForGate = leadRes.data as
-    | { created_by_is_shadow?: boolean | null; created_by_email?: string | null }
+    | { created_by_is_shadow?: boolean | null; created_by_email?: string | null; org_id?: string | null }
     | null
   if (rawForGate) {
     const shadowCtx = await getShadowContext()
+    if (!shadowCtx.orgId || rawForGate.org_id !== shadowCtx.orgId) throw new Error('Lead not found.')
     const targetIsShadow = rawForGate.created_by_is_shadow === true
     const targetEmail = (rawForGate.created_by_email ?? '').toLowerCase()
     const allowed = shadowCtx.isShadow
@@ -308,8 +309,14 @@ export async function loadLeadDetail(leadId: number): Promise<LeadDetail> {
               .replace(/\.+$/, '')
           : `#${sib.lead_id}`
       }
+      // Siblings from other workspaces never show.
+      const sibIds = ((cohortRows ?? []) as CohortSibling[]).map(r => r.lead_id)
+      const { data: sameOrg } = sibIds.length
+        ? await svc.from('google_lead_gen_table').select('id').in('id', sibIds).eq('org_id', shadowCtx.orgId ?? '')
+        : { data: [] as Array<{ id: number }> }
+      const allowedIds = new Set(((sameOrg ?? []) as Array<{ id: number }>).map(r => String(r.id)))
       const byHost = new Map<string, CohortSibling>()
-      for (const sib of ((cohortRows ?? []) as CohortSibling[])
+      for (const sib of ((cohortRows ?? []) as CohortSibling[]).filter(r => allowedIds.has(String(r.lead_id)))
         .slice()
         .sort((a, b) => (b.shared_count ?? 0) - (a.shared_count ?? 0))) {
         const key = hostKey(sib)

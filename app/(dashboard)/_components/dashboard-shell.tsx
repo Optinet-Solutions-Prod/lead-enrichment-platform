@@ -10,11 +10,11 @@ import {
   BookOpen,
   Building2,
   ChevronLeft,
-  MapPinned,
   Clock,
   Cpu,
   CreditCard,
   DollarSign,
+  FlaskConical,
   Gauge,
   Globe,
   Hand,
@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MapPinned,
   Menu,
   MessageCircle,
   Plug,
@@ -183,6 +184,15 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Sparkles,
         match: (p: string) => p.startsWith('/affiliates'),
         tourId: 'nav-affiliates',
+      },
+      {
+        // Potential features under trial: domain search, verifier, pattern
+        // finder, tech / affiliate-network lookup, sender check, AI writer.
+        label: 'Labs',
+        module: 'affiliate',
+        href: '/labs',
+        icon: FlaskConical,
+        match: (p: string) => p.startsWith('/labs'),
       },
       {
         // Open to all signed-in users so the whole ops team can clear

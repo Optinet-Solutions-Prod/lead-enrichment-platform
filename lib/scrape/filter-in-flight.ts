@@ -1,3 +1,4 @@
+import { getOrgContext } from '@/lib/orgs/context'
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -29,8 +30,11 @@ const ACTIVE_STATUSES = ['pending', 'running', 'needs_human'] as const
 export async function filterOutInFlight<T extends ClonableRow>(
   svc: SupabaseClient,
   rows: T[],
+  /** Only this workspace's in-flight jobs block a run. Defaults to the caller's active org. */
+  orgId?: string | null,
 ): Promise<{ safe: T[]; skipped: T[]; skippedKeys: string[] }> {
   if (rows.length === 0) return { safe: [], skipped: [], skippedKeys: [] }
+  const org = orgId ?? (await getOrgContext())?.orgId ?? '00000000-0000-0000-0000-000000000000'
 
   const normalizeEngine = (e: string | null) => e ?? 'google'
   const rowKey = (r: ClonableRow) =>
@@ -50,6 +54,7 @@ export async function filterOutInFlight<T extends ClonableRow>(
       .select('keyword, country_code, search_engine')
       .in('keyword', chunk)
       .in('status', ACTIVE_STATUSES as unknown as string[])
+      .eq('org_id', org)
       .is('parent_scrape_job_id', null)
     if (error) throw error
     for (const r of ((data ?? []) as ClonableRow[])) {
